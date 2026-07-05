@@ -264,34 +264,20 @@ export class RecordingsService {
 
     const steps: TransactionStep[] = [
       {
-        name: 'insert-batch-links',
+        name: 'insert-batch-links-and-curriculum',
         execute: async () => {
-          const batchRecords = dto.batchIds.map((batchId) => ({
-            recording_id: recordingId,
-            batch_id: batchId,
-          }));
-
-          const { error: linkError } = await this.supabaseService.client
-            .from(TABLES.RECORDING_BATCHES)
-            .upsert(batchRecords, { onConflict: 'recording_id,batch_id' });
-
-          if (linkError) {
-            throw new BadRequestException(`Failed to link recording to batches: ${linkError.message}`);
-          }
+          await this.createBatchLinksAndCurriculum(recordingId, dto.batchIds, {
+            categoryName: dto.categoryName,
+            moduleName: dto.moduleName,
+            isPublished: dto.isPublished,
+            titleOverride: dto.titleOverride,
+          });
         },
         rollback: async () => {
           await this.supabaseService.client
             .from(TABLES.RECORDING_BATCHES)
             .delete()
             .eq('recording_id', recordingId);
-        },
-      },
-      {
-        name: 'insert-curriculum',
-        execute: async () => {
-          await this.autoCreateCurriculumEntries(recordingId, dto);
-        },
-        rollback: async () => {
           await this.supabaseService.client
             .from(TABLES.BATCH_RECORDING_CURRICULUM)
             .delete()
@@ -369,15 +355,6 @@ export class RecordingsService {
       batch_id: batchId,
     }));
 
-    const { error } = await this.supabaseService.client
-      .from(TABLES.RECORDING_BATCHES)
-      .upsert(records, { onConflict: 'recording_id,batch_id' });
-
-    if (error) {
-      this.logger.error(`Failed to assign recording to batches: ${error.message}`);
-      throw new BadRequestException('Failed to assign recording to batches');
-    }
-
     const curriculumEntries = batchIds.map((batchId) => ({
       batch_id: batchId,
       content_id: recordingId,
@@ -389,26 +366,64 @@ export class RecordingsService {
       is_published: true,
     }));
 
-    this.logger.log(
-      `[Curriculum UPSERT] BEGIN | recordingId=${recordingId} | batchIds=${JSON.stringify(batchIds)} | entries=${JSON.stringify(curriculumEntries)} | table=${TABLES.BATCH_RECORDING_CURRICULUM} | ts=${new Date().toISOString()}`,
-    );
+    const steps: TransactionStep[] = [
+      {
+        name: 'upsert-recording-batches',
+        execute: async () => {
+          const { error } = await this.supabaseService.client
+            .from(TABLES.RECORDING_BATCHES)
+            .upsert(records, { onConflict: 'recording_id,batch_id' });
+          if (error) {
+            this.logger.error(`Failed to assign recording to batches: ${error.message}`);
+            throw new BadRequestException('Failed to assign recording to batches');
+          }
+        },
+        rollback: async () => {
+          await this.supabaseService.client
+            .from(TABLES.RECORDING_BATCHES)
+            .delete()
+            .eq('recording_id', recordingId)
+            .in('batch_id', batchIds);
+        },
+      },
+      {
+        name: 'upsert-curriculum-entries',
+        execute: async () => {
+          this.logger.log(
+            `[Curriculum UPSERT] BEGIN | recordingId=${recordingId} | batchIds=${JSON.stringify(batchIds)} | table=${TABLES.BATCH_RECORDING_CURRICULUM} | ts=${new Date().toISOString()}`,
+          );
+          const { error, status, count } = await this.supabaseService.client
+            .from(TABLES.BATCH_RECORDING_CURRICULUM)
+            .upsert(curriculumEntries, { onConflict: 'batch_id,content_id,content_type' });
+          if (error) {
+            this.logger.error(
+              `[Curriculum UPSERT] FAILED | recordingId=${recordingId} | batchIds=${JSON.stringify(batchIds)} | error=${JSON.stringify(error)} | status=${status} | count=${count} | ts=${new Date().toISOString()}`,
+            );
+            throw new BadRequestException(
+              `Failed to create curriculum entries for recording ${recordingId}. Supabase Error [${error.code}]: ${error.message}${error.details ? ` | Details: ${error.details}` : ''}${error.hint ? ` | Hint: ${error.hint}` : ''}`,
+            );
+          }
+          this.logger.debug(
+            `[Curriculum UPSERT] SUCCEEDED | recordingId=${recordingId} | batchIds=${JSON.stringify(batchIds)} | status=${status} | count=${count} | ts=${new Date().toISOString()}`,
+          );
+        },
+        rollback: async () => {
+          try {
+            await this.supabaseService.client
+              .from(TABLES.BATCH_RECORDING_CURRICULUM)
+              .delete()
+              .eq('content_id', recordingId)
+              .eq('content_type', 'recording')
+              .in('batch_id', batchIds);
+          } catch {
+            // Rollback failure is non-fatal; logged by Transaction
+          }
+        },
+      },
+    ];
 
-    const { data, error: curriculumError, status, count } = await this.supabaseService.client
-      .from(TABLES.BATCH_RECORDING_CURRICULUM)
-      .upsert(curriculumEntries, { onConflict: 'batch_id,content_id,content_type' });
-
-    if (curriculumError) {
-      this.logger.error(
-        `[Curriculum UPSERT] FAILED | recordingId=${recordingId} | batchIds=${JSON.stringify(batchIds)} | error=${JSON.stringify(curriculumError)} | status=${status} | count=${count} | ts=${new Date().toISOString()}`,
-      );
-      throw new BadRequestException(
-        `Failed to create curriculum entries for recording ${recordingId}. Supabase Error [${curriculumError.code}]: ${curriculumError.message}${curriculumError.details ? ` | Details: ${curriculumError.details}` : ''}${curriculumError.hint ? ` | Hint: ${curriculumError.hint}` : ''}`,
-      );
-    }
-
-    this.logger.debug(
-      `[Curriculum UPSERT] SUCCEEDED | recordingId=${recordingId} | batchIds=${JSON.stringify(batchIds)} | status=${status} | count=${count} | ts=${new Date().toISOString()}`,
-    );
+    const tx = new Transaction();
+    await tx.run(steps);
 
     await this.redisCache.invalidateRecordingsCache();
 
@@ -679,6 +694,7 @@ export class RecordingsService {
     if (dto.title !== undefined) updateData.title = dto.title;
     if (dto.description !== undefined) updateData.description = dto.description;
     if (dto.topicId !== undefined) updateData.topic_id = dto.topicId;
+    if (dto.status !== undefined) updateData.status = dto.status;
 
     if (Object.keys(updateData).length === 0) {
       throw new BadRequestException('No fields to update');
@@ -695,6 +711,8 @@ export class RecordingsService {
       this.logger.error(`Failed to update recording ${id}: ${error?.message}`);
       throw new BadRequestException('Failed to update recording');
     }
+
+    await this.redisCache.invalidateRecordingsCache();
 
     return data;
   }
@@ -1348,6 +1366,63 @@ export class RecordingsService {
           `Invalid batch ID format in curriculum operation: "${batchId}". Expected a valid UUID.`,
         );
       }
+    }
+  }
+
+  /**
+   * Create batch links (recording_batches) and curriculum entries for a recording.
+   * Shared between requestUploadUrl() and createRecordingWithUpload() transaction.
+   * @throws BadRequestException on any DB failure.
+   */
+  private async createBatchLinksAndCurriculum(
+    recordingId: string,
+    batchIds: string[],
+    options?: {
+      categoryName?: string;
+      moduleName?: string;
+      isPublished?: boolean;
+      titleOverride?: string;
+    },
+  ): Promise<void> {
+    this.validateCurriculumPayload(recordingId, batchIds);
+
+    const records = batchIds.map((batchId) => ({
+      recording_id: recordingId,
+      batch_id: batchId,
+    }));
+
+    const { error: linkError } = await this.supabaseService.client
+      .from(TABLES.RECORDING_BATCHES)
+      .upsert(records, { onConflict: 'recording_id,batch_id' });
+
+    if (linkError) {
+      throw new BadRequestException(`Failed to link recording to batches: ${linkError.message}`);
+    }
+
+    const categoryName = options?.categoryName || 'General';
+    const moduleName = options?.moduleName || null;
+    const isPublished = options?.isPublished ?? true;
+    const titleOverride = options?.titleOverride ?? null;
+
+    const entries = batchIds.map((batchId) => ({
+      batch_id: batchId,
+      content_id: recordingId,
+      content_type: 'recording',
+      category_name: categoryName,
+      module_name: moduleName,
+      title_override: titleOverride,
+      sort_order: 0,
+      is_published: isPublished,
+    }));
+
+    const { error: curriculumError } = await this.supabaseService.client
+      .from(TABLES.BATCH_RECORDING_CURRICULUM)
+      .upsert(entries, { onConflict: 'batch_id,content_id,content_type' });
+
+    if (curriculumError) {
+      throw new BadRequestException(
+        `Failed to create curriculum entries for recording ${recordingId}: ${curriculumError.message}`,
+      );
     }
   }
 

@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsUUID, MinLength } from 'class-validator';
+import { IsString, IsOptional, IsUUID, MinLength, IsIn } from 'class-validator';
 
 export class UpdateRecordingDto {
   @IsString()
@@ -13,4 +13,9 @@ export class UpdateRecordingDto {
   @IsUUID('4')
   @IsOptional()
   topicId?: string | null;
+
+  @IsString()
+  @IsIn(['ready', 'error'])
+  @IsOptional()
+  status?: string;
 }

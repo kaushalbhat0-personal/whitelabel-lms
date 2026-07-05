@@ -640,4 +640,101 @@ describe('RecordingsService', () => {
       expect(muxService.deleteAsset).not.toHaveBeenCalled();
     });
   });
+
+  // ── requestUploadUrl ──────────────────────────────────────
+
+  describe('requestUploadUrl - creates recording (title-only)', () => {
+    const validRecId = '550e8400-e29b-41d4-a716-446655449990';
+
+    it('should create a recording with just a title (no batch assignment)', async () => {
+      const mockRecording = { id: validRecId, title: 'Test Upload', status: 'processing', created_at: '2026-01-01T00:00:00Z' };
+
+      chain.from.mockImplementation(() => {
+        const q = mockChain(null);
+        q.single.mockResolvedValue({ data: mockRecording, error: null });
+        return q;
+      });
+
+      muxService.createDirectUploadUrl = jest.fn().mockResolvedValue({
+        uploadUrl: 'https://example.com/upload',
+        uploadId: 'upload-1',
+      });
+
+      const result = await service.requestUploadUrl({
+        title: 'Test Upload',
+      });
+
+      expect(result.uploadUrl).toBe('https://example.com/upload');
+      expect(result.recording).toEqual(mockRecording);
+    });
+  });
+
+  // ── fetchRecordingsForStudent ─────────────────────────────
+
+  describe('fetchRecordingsForStudent - respects recording_batches', () => {
+    it('should return recordings linked via recording_batches', async () => {
+      const studentId = 'student-1';
+      const batchId = '550e8400-e29b-41d4-a716-446655440001';
+      const recordingId = '550e8400-e29b-41d4-a716-446655449991';
+
+      let callIndex = 0;
+      chain.from.mockImplementation(() => {
+        const q = mockChain(null);
+        const idx = callIndex++;
+
+        if (idx === 0) {
+          q.eq.mockResolvedValue({ data: [{ batch_id: batchId }], error: null });
+        } else if (idx === 1) {
+          q.in.mockResolvedValue({ data: [{ recording_id: recordingId }], error: null });
+        } else if (idx === 2) {
+          const eqMock = jest.fn().mockReturnThis();
+          const orderMock = jest.fn().mockResolvedValue({
+            data: [{
+              id: recordingId, title: 'Test Recording', description: null,
+              topic_id: null, sort_order: 0, status: 'ready',
+              created_at: '2026-01-01T00:00:00Z', topics: null,
+            }],
+            error: null,
+          });
+          q.in.mockReturnValue({ eq: eqMock });
+          eqMock.mockReturnValue({ order: orderMock });
+        } else if (idx === 3) {
+          q.in.mockReturnValue({ eq: jest.fn().mockResolvedValue({ data: [], error: null }) });
+        } else {
+          q.in.mockResolvedValue({ data: [], error: null });
+        }
+        return q;
+      });
+
+      const result = await (service as any).fetchRecordingsForStudent(studentId);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe(recordingId);
+      expect(result[0].status).toBe('ready');
+    });
+
+    it('should return empty when no recording_batches entries exist', async () => {
+      const studentId = 'student-orphaned';
+      const batchId = '550e8400-e29b-41d4-a716-446655440002';
+
+      let callIndex = 0;
+      chain.from.mockImplementation(() => {
+        const q = mockChain(null);
+        const idx = callIndex++;
+
+        if (idx === 0) {
+          q.eq.mockResolvedValue({ data: [{ batch_id: batchId }], error: null });
+        } else if (idx === 1) {
+          q.in.mockResolvedValue({ data: [], error: null });
+        } else {
+          q.in.mockResolvedValue({ data: [], error: null });
+        }
+        return q;
+      });
+
+      const result = await (service as any).fetchRecordingsForStudent(studentId);
+
+      expect(result).toHaveLength(0);
+    });
+  });
 });
