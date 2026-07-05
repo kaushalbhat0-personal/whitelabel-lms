@@ -22,6 +22,7 @@ import Mux from '@mux/mux-node';
 import { SupabaseClient } from '@supabase/supabase-js';
 import * as crypto from 'crypto';
 import { SupabaseService } from '../../common/services/supabase.service';
+import { RedisCacheService } from '../../common/services/redis-cache.service';
 import { TABLES } from '../../common/constants/tables.constant';
 
 @Injectable()
@@ -32,6 +33,7 @@ export class MuxService {
   constructor(
     private readonly configService: ConfigService,
     private readonly supabaseService: SupabaseService,
+    private readonly redisCache: RedisCacheService,
   ) {}
 
   // ──────────────────────────────────────────────────────────────
@@ -198,6 +200,8 @@ export class MuxService {
       this.logger.error(`Failed to update RECORDINGS for recording ${recording.id}: ${error.message}`, error.stack);
     } else {
       this.logger.log(`Recording ${recording.id} is ready (${durationSeconds}s, playbackId=${updates.mux_playback_id ?? recording.mux_playback_id ?? 'none'})`);
+      await this.redisCache.invalidateRecordingsCache();
+      this.logger.log(`Recording ${recording.id}: cache invalidated after asset_ready`);
     }
   }
 

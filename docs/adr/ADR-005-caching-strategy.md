@@ -78,9 +78,21 @@ The current system does NOT implement stampede protection. The team accepts the 
 - The burst of Supabase queries after invalidation is within database capacity
 - If stampede becomes a problem, the fix is to add targeted invalidation or a short revalidation period
 
+### Known Invariant: Mux Webhook Must Invalidate Cache
+
+Every Mux webhook handler that mutates `recordings` status must call `invalidateRecordingsCache()`:
+
+- `video.asset.ready` → `handleAssetReady()` → updates `status='ready'` → **MUST invalidate cache** ✅ (fixed 2026-07-06)
+- `video.upload.asset_created` → updates `mux_asset_id`, `status='processing'` → cache invalidation not required (students never see `processing` recordings)
+- `video.asset.errored` → updates `status='error'` → should ideally invalidate cache, but low impact (stale cache expires within TTL)
+- `video.asset.deleted` → deletes recording row → **MUST invalidate cache** ⚠️ currently missing
+
+The `handleAssetReady()` invalidation is the most critical because it transitions a recording from invisible (`processing`, filtered by `.eq('status', 'ready')`) to visible (`ready`). Without it, students see stale empty results for up to the TTL window (300 seconds).
+
 ### Future Work
 
 - Add targeted invalidation using batch-to-student mapping stored in a Redis set.
 - Consider a write-through or write-behind pattern if cache stampede becomes a bottleneck.
+- Add cache invalidation to `video.asset.deleted` handler and `video.asset.errored` handler in `mux.controller.ts`.
 - Add a cache health metric (hit rate, invalidation frequency) to monitoring dashboards.
 - If Redis memory becomes a concern, add TTL-based eviction as a fallback (e.g., 1-hour TTL, with invalidation still used for immediate consistency).
