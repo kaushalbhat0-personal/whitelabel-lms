@@ -1,0 +1,4 @@
+[31m[Nest] 908  - [39m05/07/2026, 8:52:40 pm [31m  ERROR[39m [38;5;3m[AuthService] [39m[31mUser c1087172-c30f-4c7f-b0ad-a10cab5e35e0 authenticated but no profile found[39m
+[31m[Nest] 908  - [39m05/07/2026, 8:52:41 pm [31m  ERROR[39m [38;5;3m[HttpExceptionFilter] [39m[31mPOST /auth/login → 401: "Invalid email or password"[39m
+[31m[Nest] 908  - [39m05/07/2026, 8:53:06 pm [31m  ERROR[39m [38;5;3m[AuthService] [39m[31mUser c1087172-c30f-4c7f-b0ad-a10cab5e35e0 authenticated but no profile found[39m
+[31m[Nest] 908  - [39m05/07/2026, 8:53:07 pm [31m  ERROR[39m [38;5;3m[HttpExceptionFilter] [39m[31mPOST /auth/login → 401: "Invalid email or password"[39m

@@ -1,18 +1,54 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuthStore } from '@/stores/auth.store';
-import { useWatermarkPositions } from '@/hooks/useWatermarkPositions';
 import {
-  WATERMARK_INSTANCES,
-  POSITION_INTERVAL_MS,
   WATERMARK_OPACITY,
   WATERMARK_FONT_SIZE,
-  TRAP_INSTANCES,
+  WATERMARK_MIN_INTERVAL,
+  WATERMARK_MAX_INTERVAL,
+  WATERMARK_FADE_DURATION,
 } from '@/lib/watermark/constants';
 
 interface WatermarkOverlayProps {
   sessionId: string;
+}
+
+interface Position {
+  top: number;
+  left: number;
+}
+
+const SAFE_ZONES = [
+  { top: 5, left: 5 },
+  { top: 5, left: 50 },
+  { top: 50, left: 5 },
+  { top: 50, left: 50 },
+  { top: 5, left: 25 },
+  { top: 25, left: 5 },
+  { top: 25, left: 65 },
+  { top: 60, left: 65 },
+  { top: 5, left: 75 },
+  { top: 35, left: 35 },
+  { top: 65, left: 30 },
+  { top: 10, left: 60 },
+  { top: 60, left: 10 },
+  { top: 30, left: 70 },
+];
+
+function randomPosition(): Position {
+  const zone = SAFE_ZONES[Math.floor(Math.random() * SAFE_ZONES.length)];
+  return {
+    top: zone.top + Math.random() * 8,
+    left: zone.left + Math.random() * 8,
+  };
+}
+
+function randomInterval(): number {
+  return Math.floor(
+    Math.random() * (WATERMARK_MAX_INTERVAL - WATERMARK_MIN_INTERVAL + 1) +
+      WATERMARK_MIN_INTERVAL,
+  );
 }
 
 function formatTimestamp(): string {
@@ -24,77 +60,70 @@ function formatTimestamp(): string {
 export function WatermarkOverlay({ sessionId }: WatermarkOverlayProps) {
   const user = useAuthStore((s) => s.user);
   const [timestamp, setTimestamp] = useState(formatTimestamp);
+  const [pos, setPos] = useState<Position>(randomPosition);
+  const [visible, setVisible] = useState(true);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
-    const id = setInterval(() => setTimestamp(formatTimestamp()), 30_000);
-    return () => clearInterval(id);
+    const ts = setInterval(() => setTimestamp(formatTimestamp()), 30_000);
+    return () => clearInterval(ts);
   }, []);
 
-  const positions = useWatermarkPositions(
-    WATERMARK_INSTANCES,
-    TRAP_INSTANCES,
-    POSITION_INTERVAL_MS,
-  );
+  const moveWatermark = useCallback(() => {
+    setVisible(false);
+    setTimeout(() => {
+      if (!mountedRef.current) return;
+      setPos(randomPosition());
+      setVisible(true);
+    }, WATERMARK_FADE_DURATION);
+  }, []);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    const scheduleNext = () => {
+      const delay = randomInterval();
+      return setTimeout(() => {
+        moveWatermark();
+        timerRef.current = scheduleNext();
+      }, delay);
+    };
+    const timerRef: { current: ReturnType<typeof setTimeout> | null } = { current: null };
+    timerRef.current = scheduleNext();
+    return () => {
+      mountedRef.current = false;
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [moveWatermark]);
 
   const displayName = user?.name || user?.email?.split('@')[0] || 'Student';
 
-  const line1 = `${displayName}  •  ${user?.email || ''}`;
-  const line2 = `${timestamp}`;
-  const line3 = `Session: ${sessionId.slice(0, 8)}...`;
-
   return (
     <div
-      className="pointer-events-none absolute inset-0 z-50 select-none overflow-hidden"
+      className="pointer-events-none absolute inset-0 z-40 select-none overflow-hidden"
       aria-hidden="true"
     >
-      {positions.instances.map((pos, i) => (
-        <div
-          key={i}
-          className="absolute whitespace-nowrap transition-all duration-1000 ease-in-out"
-          style={{
-            top: `${pos.top}%`,
-            left: `${pos.left}%`,
-            opacity: WATERMARK_OPACITY,
-            fontSize: `${WATERMARK_FONT_SIZE}px`,
-            lineHeight: '1.4',
-            color: 'white',
-            textShadow:
-              '0 0 4px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.6)',
-            fontFamily: 'system-ui, -apple-system, sans-serif',
-            fontWeight: 500,
-            letterSpacing: '0.02em',
-            transform: `rotate(${i % 2 === 0 ? -3 : 2}deg)`,
-          }}
-        >
-          <div>{line1}</div>
-          <div>{line2}</div>
-          <div>{line3}</div>
+      <div
+        className="absolute whitespace-nowrap transition-opacity duration-500 ease-in-out"
+        style={{
+          top: `${pos.top}%`,
+          left: `${pos.left}%`,
+          opacity: visible ? Number(WATERMARK_OPACITY) : 0,
+          fontSize: `${WATERMARK_FONT_SIZE}px`,
+          lineHeight: '1.5',
+          color: 'rgba(200, 200, 205, 0.15)',
+          textShadow: '0 1px 3px rgba(0,0,0,0.5)',
+          fontFamily: 'system-ui, -apple-system, sans-serif',
+          fontWeight: 500,
+          letterSpacing: '0.03em',
+        }}
+      >
+        <div>{displayName}</div>
+        <div>{user?.email || ''}</div>
+        <div>{timestamp}</div>
+        <div style={{ fontSize: `${WATERMARK_FONT_SIZE - 1}px`, opacity: 0.7 }}>
+          SID: {sessionId.slice(0, 8)}
         </div>
-      ))}
-
-      {positions.trap.map((pos, i) => (
-        <div
-          key={`trap-${i}`}
-          className="absolute whitespace-nowrap"
-          style={{
-            top: `${pos.top}%`,
-            left: `${pos.left}%`,
-            opacity: '0.01',
-            fontSize: `${WATERMARK_FONT_SIZE - 2}px`,
-            lineHeight: '1.3',
-            color: 'white',
-            fontFamily: 'system-ui, -apple-system, sans-serif',
-            fontWeight: 400,
-            pointerEvents: 'none',
-            userSelect: 'none',
-          }}
-          aria-hidden="true"
-        >
-          <div>{line1}</div>
-          <div>{line2}</div>
-          <div>{line3}</div>
-        </div>
-      ))}
+      </div>
     </div>
   );
 }

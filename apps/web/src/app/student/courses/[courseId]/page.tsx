@@ -4,6 +4,8 @@ import { getMyVideosGrouped, type StudentBatchRecordings } from '@/lib/api/video
 import { PageHeader } from '@/components/shared/PageHeader';
 import { CourseDetailSessions } from './course-detail-sessions';
 import { CourseDetailRecordings } from './course-detail-recordings';
+import { CourseProgress } from '@/components/student/CourseProgress';
+import { ContinueWatching } from '@/components/student/ContinueWatching';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,6 +73,10 @@ export default async function StudentCourseDetailPage({ params }: Props) {
               </div>
             )}
           </div>
+
+          <ContinueWatching />
+
+          <CourseProgress batchIds={batchIds} />
 
           <CourseDetailSessions
             upcoming={upcomingSessions}

@@ -88,6 +88,7 @@ const navGroups: NavGroup[] = [
       { label: 'Monitoring', href: ROUTES.ADMIN.MONITORING },
       { label: 'Performance', href: ROUTES.ADMIN.PERFORMANCE },
       { label: 'Analytics', href: ROUTES.ADMIN.ANALYTICS },
+      { label: 'Playback Analytics', href: ROUTES.ADMIN.PLAYBACK_ANALYTICS },
       { label: 'Audit Logs', href: ROUTES.ADMIN.AUDIT_LOGS },
       { label: 'Violations', href: ROUTES.ADMIN.VIOLATIONS },
     ],

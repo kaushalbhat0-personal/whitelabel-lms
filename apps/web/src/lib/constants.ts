@@ -12,6 +12,7 @@ export const ROUTES = {
     BUSINESS_CONFIG: '/admin/business-config',
     SESSIONS: '/admin/sessions',
     VIOLATIONS: '/admin/violations',
+    PLAYBACK_ANALYTICS: '/admin/playback-analytics',
     TESTS: '/admin/tests',
     TESTS_NEW: '/admin/tests/new',
     QUESTIONS: '/admin/questions',

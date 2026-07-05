@@ -4,6 +4,8 @@ import { getMyVideos, type StudentVideo } from '@/lib/api/videos';
 import { getMyResults } from '@/lib/api/assessments';
 import { getMyPaymentPlans, type PaymentPlan } from '@/lib/api/payments';
 import { DashboardClient } from './dashboard-client';
+import { ContinueWatching } from '@/components/student/ContinueWatching';
+import { RecentlyWatched } from '@/components/student/RecentlyWatched';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,16 +44,20 @@ export default async function StudentDashboardPage() {
   console.log(`[DEBUG_DASHBOARD] videosCount=${recordings.length} | inProgress=${inProgressVideos.length} | continueContent=${continueContent.length}`);
 
   return (
-    <DashboardClient
-      name="Trader"
-      nextClass={nextClass}
-      upcoming={upcoming}
-      continueContent={continueContent}
-      courses={courses}
-      recordings={recordings}
-      results={results}
-      pastSessions={past}
-      paymentPlans={paymentPlans}
-    />
+    <>
+      <ContinueWatching />
+      <RecentlyWatched />
+      <DashboardClient
+        name="Trader"
+        nextClass={nextClass}
+        upcoming={upcoming}
+        continueContent={continueContent}
+        courses={courses}
+        recordings={recordings}
+        results={results}
+        pastSessions={past}
+        paymentPlans={paymentPlans}
+      />
+    </>
   );
 }
