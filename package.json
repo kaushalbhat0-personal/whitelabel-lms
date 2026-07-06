@@ -7,6 +7,10 @@
     "dev": "pnpm --parallel -r run dev",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
+    "test:e2e": "playwright test --config=tests/e2e/playwright.config.ts --workers=1",
+    "test:e2e:api": "playwright test --config=tests/e2e/playwright.config.ts --workers=1 --grep-invert \"student-playback-ui|PiP|mobile double-tap\"",
+    "test:e2e:browser": "playwright test --config=tests/e2e/playwright.config.ts --workers=1 --grep \"student-playback-ui|PiP|mobile double-tap\"",
+
     "recordings:repair-batch-links": "node scripts/repair-batch-links.js"
   },
   "devDependencies": {

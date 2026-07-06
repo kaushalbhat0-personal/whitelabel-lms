@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { getDb } from '../utils/db-helpers';
 import { loginAs } from '../utils/login-helpers';
 import { seedTestData, teardownTestData, enrollStudentInBatch, SeedContext } from '../utils/seed';
-import { resetSeq } from '../utils/counter';
+
 
 export type { SeedContext };
 
@@ -58,7 +58,6 @@ const test = base.extend<TestFixtures, WorkerFixtures>({
   },
 
   seed: async ({ workerDb, workerAuth }, use) => {
-    resetSeq();
     const context = await seedTestData();
     await enrollStudentInBatch(workerDb, workerAuth.studentA.userId, context.batchAId);
     await enrollStudentInBatch(workerDb, workerAuth.studentB.userId, context.batchBId);

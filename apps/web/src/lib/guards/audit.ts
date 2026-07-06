@@ -47,12 +47,13 @@ export function logExpiredSession(pathname: string, role?: string): void {
 
 function logAudit(entry: AuditEntry): void {
   if (isDev) {
-    console.group(`[AUDIT] ${entry.type}`);
+    const log = typeof console.group === 'function' ? console.group : console.log;
+    log(`[AUDIT] ${entry.type}`);
     console.log('Path:', entry.pathname);
     console.log('Role:', entry.role ?? 'none');
     console.log('Reason:', entry.reason);
     console.log('Time:', entry.timestamp);
-    console.groupEnd();
+    try { console.groupEnd?.(); } catch {}
     return;
   }
 

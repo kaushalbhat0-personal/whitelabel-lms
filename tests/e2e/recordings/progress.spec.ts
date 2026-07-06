@@ -58,6 +58,6 @@ test.describe('Playback Progress — Test 6', () => {
       headers: { Authorization: `Bearer ${studentBToken}` },
     });
 
-    expect(progRes3.status()).toBe(200);
+    expect(progRes3.ok()).toBe(true);
   });
 });

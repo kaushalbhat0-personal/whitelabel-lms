@@ -1,6 +1,9 @@
 import { expect, APIResponse } from '@playwright/test';
 
 export async function expectOk(response: APIResponse): Promise<{ success: boolean; data: unknown }> {
+  if (!response.ok()) {
+    console.error('=== expectOk FAILED === Status:', response.status(), 'Body:', await response.text());
+  }
   expect(response.ok()).toBe(true);
   const wrapper: { success: boolean; data: unknown } = await response.json();
   expect(wrapper.success).toBe(true);

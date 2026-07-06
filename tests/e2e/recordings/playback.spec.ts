@@ -1,21 +1,16 @@
 import { test, expect } from '../fixtures/recordings-fixture';
-import { expectCreated, expectOk } from '../utils/assertions';
-import { createRecordingDto } from '../utils/factories';
+import { expectOk } from '../utils/assertions';
+import { createRecordingInDb, assignRecordingToBatch } from '../utils/db-helpers';
 
 test.describe('Playback Authorization — Test 5', () => {
   let recordingId: string;
 
-  test.beforeEach(async ({ request, adminToken, seed }) => {
-    const dto = createRecordingDto({
+  test.beforeEach(async ({ db, seed }) => {
+    recordingId = await createRecordingInDb(db, {
       title: 'E2E-Playback-Test',
-      batchIds: [seed.batchAId],
+      status: 'ready',
     });
-    const res = await request.post('/admin/recordings', {
-      data: dto,
-      headers: { Authorization: `Bearer ${adminToken}` },
-    });
-    const wrapper = await expectCreated(res);
-    recordingId = ((wrapper.data as Record<string, unknown>).recording as Record<string, unknown>).id as string;
+    await assignRecordingToBatch(db, recordingId, seed.batchAId);
   });
 
   test.afterEach(async ({ db }) => {
