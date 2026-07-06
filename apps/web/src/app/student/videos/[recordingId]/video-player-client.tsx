@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { Calendar } from 'lucide-react';
+import { Calendar, X } from 'lucide-react';
 import Hls from 'hls.js';
 import { usePlaybackToken } from '@/hooks/usePlaybackToken';
 import { usePlayerPreferences } from '@/hooks/usePlayerPreferences';
@@ -70,6 +70,7 @@ export function VideoPlayerClient({
   const [qualityLabel, setQualityLabel] = useState('Auto');
   const [playerReady, setPlayerReady] = useState(false);
   const [pipSupported, setPipSupported] = useState(false);
+  const [isMini, setIsMini] = useState(false);
 
   const {
     playbackUrl,
@@ -85,6 +86,7 @@ export function VideoPlayerClient({
 
   const {
     prefs,
+    updatePrefs,
     setSpeed: saveSpeed,
     setVolume: saveVolume,
     setMuted: saveMuted,
@@ -110,7 +112,7 @@ export function VideoPlayerClient({
     }
 
     prefsApplied.current = true;
-  }, [playbackUrl, prefs]);
+  }, [playbackUrl]);
 
   // Track playing state
   const handlePlay = useCallback(() => {
@@ -176,10 +178,9 @@ export function VideoPlayerClient({
     if (video) {
       setVolume(video.volume);
       setMuted(video.muted);
-      saveVolume(video.volume);
-      saveMuted(video.muted);
+      updatePrefs({ volume: video.volume, muted: video.muted });
     }
-  }, [saveVolume, saveMuted]);
+  }, [updatePrefs]);
 
   // Quality tracking
   const updateLevels = useCallback((hls: Hls) => {
@@ -223,7 +224,7 @@ export function VideoPlayerClient({
     [saveQuality],
   );
 
-  // HLS setup
+  // HLS setup — only recreates when playbackUrl changes
   useEffect(() => {
     const video = videoRef.current;
     if (!playbackUrl || !video) return;
@@ -248,10 +249,6 @@ export function VideoPlayerClient({
         if (seekToOnReady.current !== null) {
           video.currentTime = seekToOnReady.current;
           seekToOnReady.current = null;
-        }
-        // Apply saved quality preference
-        if (prefsApplied.current && prefs.quality !== -1) {
-          hls.currentLevel = prefs.quality;
         }
       });
 
@@ -287,7 +284,7 @@ export function VideoPlayerClient({
         hlsRef.current = null;
       }
     };
-  }, [playbackUrl, updateLevels, handleLevelChanged, prefs]);
+  }, [playbackUrl, updateLevels, handleLevelChanged]);
 
   // Attach native video event listeners
   useEffect(() => {
@@ -525,13 +522,28 @@ export function VideoPlayerClient({
       >
         <div
           ref={containerRef}
-          className="relative aspect-video w-full bg-black overflow-hidden group select-none"
+          className={`relative aspect-video w-full bg-black overflow-hidden group select-none transition-all duration-300 ${
+            isMini
+              ? 'fixed bottom-4 right-4 z-50 w-72 rounded-xl shadow-2xl border border-white/10'
+              : ''
+          }`}
           onDoubleClick={handleFullscreen}
           onClick={handleContainerClick}
           role="application"
           aria-label="Video player"
         >
           {videoElement}
+
+          {isMini && (
+            <button
+              type="button"
+              onClick={() => setIsMini(false)}
+              className="absolute top-2 right-2 z-10 rounded-full bg-black/60 p-1 text-white/80 hover:bg-black/80 hover:text-white transition-colors"
+              aria-label="Close mini player"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
 
           <KeyboardShortcuts
             videoRef={videoRef}
@@ -595,10 +607,14 @@ export function VideoPlayerClient({
           <WatermarkOverlay sessionId={sessionId} />
         </div>
 
-        <MiniPlayer containerRef={containerRef}>
-          {videoElement}
-        </MiniPlayer>
+        <MiniPlayer
+          containerRef={containerRef}
+          enabled={playerReady}
+          onMiniChange={setIsMini}
+        />
       </ScreenRecordingDetector>
+
+      {isMini && <div className="aspect-video w-full" aria-hidden />}
 
       <div className="space-y-1 px-4 py-4 md:px-0">
         <h2 className="text-base font-bold text-text-primary">

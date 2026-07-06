@@ -31,6 +31,7 @@ test.describe('Student Playback UI — player controls, keyboard, PiP, resume, w
     const response = await page.goto(`http://localhost:3000/student/videos/${id}`, {
       waitUntil: 'domcontentloaded',
     });
+
     expect(response!.status()).toBe(200);
     expect(page.url()).toContain(id);
   });

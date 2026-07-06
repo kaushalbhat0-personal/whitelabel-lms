@@ -38,30 +38,38 @@ function save(prefs: PlayerPreferences) {
 }
 
 export function usePlayerPreferences() {
-  const [prefs, setPrefs] = useState<PlayerPreferences>(load);
+  const [prefs, setPrefs] = useState<PlayerPreferences>(() => {
+    const loaded = load();
+    return loaded;
+  });
 
   useEffect(() => {
     save(prefs);
   }, [prefs]);
 
-  const setSpeed = useCallback((speed: number) => {
-    setPrefs((p) => ({ ...p, speed }));
+  const updatePrefs = useCallback((updates: Partial<PlayerPreferences>) => {
+    setPrefs((p) => ({ ...p, ...updates }));
   }, []);
+
+  const setSpeed = useCallback((speed: number) => {
+    updatePrefs({ speed });
+  }, [updatePrefs]);
 
   const setVolume = useCallback((volume: number) => {
-    setPrefs((p) => ({ ...p, volume }));
-  }, []);
+    updatePrefs({ volume });
+  }, [updatePrefs]);
 
   const setMuted = useCallback((muted: boolean) => {
-    setPrefs((p) => ({ ...p, muted }));
-  }, []);
+    updatePrefs({ muted });
+  }, [updatePrefs]);
 
   const setQuality = useCallback((quality: number) => {
-    setPrefs((p) => ({ ...p, quality }));
-  }, []);
+    updatePrefs({ quality });
+  }, [updatePrefs]);
 
   return {
     prefs,
+    updatePrefs,
     setSpeed,
     setVolume,
     setMuted,
