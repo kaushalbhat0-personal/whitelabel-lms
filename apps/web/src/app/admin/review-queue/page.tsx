@@ -63,7 +63,7 @@ export default function AdminReviewQueuePage() {
         status: statusFilter || undefined,
         testId: debouncedTestFilter || undefined,
       });
-      setItems(result);
+      setItems(result.items ?? []);
     } catch {
       setItems([]);
     } finally {
@@ -134,6 +134,19 @@ export default function AdminReviewQueuePage() {
 
   const maxMarks = (item: any) => item.test?.total_marks || 100;
 
+  const studentName = (item: any) =>
+    item.test_attempts?.profiles?.name ||
+    item.test_attempts?.user_id ||
+    'Unknown Student';
+
+  const testTitle = (item: any) => item.test_id || 'Test';
+
+  const questionText = (item: any) =>
+    item.test_answers?.question_bank?.question_text || 'Question not available';
+
+  const answerText = (item: any) =>
+    item.test_answers?.answer ?? item.answer ?? 'No answer provided';
+
   return (
     <div className="space-y-6">
       <div>
@@ -198,10 +211,10 @@ export default function AdminReviewQueuePage() {
                   )} />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-text-primary">
-                      {item.attempt?.student?.name || item.attempt?.student_id || 'Unknown Student'}
+                      {studentName(item)}
                     </p>
                     <p className="text-xs text-text-muted truncate mt-0.5">
-                      {item.attempt?.test?.title || 'Test'} — {item.question?.question_text || 'Question'}
+                      {testTitle(item)} — {questionText(item)}
                     </p>
                   </div>
                   <span className={cn(
@@ -224,14 +237,14 @@ export default function AdminReviewQueuePage() {
                     <div>
                       <p className="text-sm font-medium text-text-primary mb-1">Question:</p>
                       <p className="text-sm text-text-secondary bg-surface-muted rounded-xl p-3">
-                        {item.question?.question_text || 'Question not available'}
+                        {questionText(item)}
                       </p>
                     </div>
 
                     <div>
                       <p className="text-sm font-medium text-text-primary mb-1">Student&apos;s Answer:</p>
                       <p className="text-sm text-text-secondary bg-surface-muted rounded-xl p-3">
-                        {item.answer || item.attempt?.answers?.[0]?.answer || 'No answer provided'}
+                        {answerText(item)}
                       </p>
                     </div>
 

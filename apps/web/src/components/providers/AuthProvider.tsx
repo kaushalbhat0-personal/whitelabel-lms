@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import {
   getSessionCache,
+  setSessionCache,
   clearSessionCache,
   clearAuthCookies,
 } from '@/lib/auth';
@@ -249,6 +250,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       logTransition(store.status, 'authenticated', 'Phase 2 /auth/me success');
       store.hydrate(user, token);
       store.setStatus('authenticated');
+
+      setSessionCache({
+        user,
+        token,
+        mustChangePassword: false,
+        sessionCount: useAuthStore.getState().sessionCount,
+      });
 
       try {
         broadcastLogin(user, token, false);

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { createPaymentPlan } from '@/lib/api/payments';
+import { markInstallmentPaid } from '@/lib/api/payments';
 
 const PAYMENT_METHODS: { value: string; label: string }[] = [
   { value: 'cash', label: 'Cash' },
@@ -38,7 +38,6 @@ export function MarkPaidModal({
     setSubmitting(true);
 
     try {
-      const { markInstallmentPaid } = await import('@/lib/api/payments');
       await markInstallmentPaid(
         installmentId,
         { paymentMethod, transactionId: transactionId || undefined },

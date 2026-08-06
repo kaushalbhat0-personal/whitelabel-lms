@@ -68,30 +68,32 @@ export default function ResultsPage() {
           </div>
         ) : (
           results.map((result: any) => {
-            const passed = (result.score ?? result.marksAwarded ?? 0) >= (result.passingMarks ?? result.totalMarks ?? 0);
-            const percentage = result.totalMarks > 0
-              ? Math.round(((result.score ?? result.marksAwarded ?? 0) / result.totalMarks) * 100)
-              : 0;
+            const totalMarks = result.total_marks ?? result.totalMarks ?? 0;
+            const obtainedMarks = result.obtained_marks ?? result.score ?? result.marksAwarded ?? 0;
+            const passed = result.passed ?? (obtainedMarks >= totalMarks);
+            const percentage = totalMarks > 0
+              ? Math.round((obtainedMarks / totalMarks) * 100)
+              : (result.percentage ?? 0);
 
             return (
               <div
                 key={result.id}
                 className="flex cursor-pointer items-center gap-3 rounded-card border border-surface-border bg-surface-card p-4 transition-colors hover:bg-surface-muted"
-                onClick={() => handleView(result.attemptId ?? result.id)}
+                onClick={() => handleView(result.attempt_id ?? result.attemptId ?? result.id)}
               >
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-navy/10">
                   <FileText className="h-5 w-5 text-brand-navy" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-text-primary truncate">
-                    {result.testTitle ?? result.title ?? 'Test'}
+                    {result.test_title ?? result.testTitle ?? result.title ?? 'Test'}
                   </p>
                   <div className="mt-0.5 flex items-center gap-2 text-xs text-text-muted">
                     <span>{percentage}%</span>
                     <span>·</span>
                     <span>Rank #{result.rank ?? '—'}</span>
                     <span>·</span>
-                    <span>{formatDate(result.submittedAt ?? result.created_at ?? new Date().toISOString())}</span>
+                    <span>{formatDate(result.published_at ?? result.submittedAt ?? result.created_at ?? new Date().toISOString())}</span>
                   </div>
                 </div>
                 <div className="shrink-0 text-right">

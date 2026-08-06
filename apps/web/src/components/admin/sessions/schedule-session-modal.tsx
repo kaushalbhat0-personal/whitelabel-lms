@@ -118,7 +118,6 @@ export function ScheduleSessionModal({
         durationMinutes: totalDurationMinutes,
         batchIds: Array.from(selectedBatchIds),
       };
-      console.log('[ScheduleSession] payload:', payload);
       await scheduleSession(payload);
       toast.success('Class scheduled successfully');
       onSuccess?.();

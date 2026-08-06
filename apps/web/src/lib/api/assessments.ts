@@ -234,7 +234,7 @@ export async function getReviewQueue(params?: { status?: string; assignedTo?: st
   if (params?.page) searchParams.set('page', String(params.page));
   if (params?.limit) searchParams.set('limit', String(params.limit));
   const query = searchParams.toString();
-  return fetchApi<any[]>(`/evaluation/review-queue${query ? `?${query}` : ''}`);
+  return fetchApi<{ items: any[]; page: number; limit: number }>(`/evaluation/review-queue${query ? `?${query}` : ''}`);
 }
 
 export async function assignForReview(reviewId: string) {
@@ -268,12 +268,15 @@ export async function getStudentResult(attemptId: string) {
   return fetchApi<any>(`/results/${attemptId}`);
 }
 
-export async function getMyResults(page?: number, limit?: number) {
+export async function getMyResults(page?: number, limit?: number): Promise<any[]> {
   const params = new URLSearchParams();
   if (page) params.set('page', String(page));
   if (limit) params.set('limit', String(limit));
   const query = params.toString();
-  return fetchApi<any[]>(`/results/my${query ? `?${query}` : ''}`);
+  const result = await fetchApi<{ items: any[]; total: number; page: number; limit: number }>(
+    `/results/my${query ? `?${query}` : ''}`,
+  );
+  return result?.items ?? [];
 }
 
 export async function getTestResults(testId: string) {

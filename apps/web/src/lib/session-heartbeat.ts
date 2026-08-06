@@ -1,5 +1,4 @@
 import { useAuthStore } from '@/stores/auth.store';
-import { getAccessTokenSync } from './auth-token';
 import { validateTokenOnServer } from './auth-validation';
 import { handleTakeover as sharedHandleTakeover } from './session-manager';
 
@@ -25,7 +24,7 @@ function releaseLeadership(): void {
 }
 
 async function checkSession(): Promise<'valid' | 'invalid' | 'error'> {
-  const token = getAccessTokenSync();
+  const token = useAuthStore.getState().token;
   if (!token) return 'invalid';
   try {
     const valid = await validateTokenOnServer(token);

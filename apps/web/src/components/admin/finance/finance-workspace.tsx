@@ -326,7 +326,7 @@ export function FinanceWorkspace({
             ) : collectionData.length === 0 ? (
               <AdminEmptyState icon={CheckCircle2} title="All clear" description="No pending or overdue installments found." />
             ) : (
-              <AdminDataTable columns={collectionsColumns} data={collectionData} keyExtractor={(i) => i.id} showSearch={true} searchPlaceholder="Search students..." exportCsv csvFilename="collections.csv" csvHeaders={['Student', 'Email', 'Course', 'Due Amount', 'Due Date', 'Status']} getCsvRow={(i) => [i.name, i.email, i.course, String(i.amount), i.dueDate || '', i.status]} showPagination={collectionData.length > 20} pageSize={20} total={collectionData.length} />
+              <AdminDataTable columns={collectionsColumns} data={collectionData} keyExtractor={(i) => i.id} showSearch={true} searchPlaceholder="Search students..." searchKeys={['name', 'email', 'course']} exportCsv csvFilename="collections.csv" csvHeaders={['Student', 'Email', 'Course', 'Due Amount', 'Due Date', 'Status']} getCsvRow={(i) => [i.name, i.email, i.course, String(i.amount), i.dueDate || '', i.status]} showPagination={collectionData.length > 20} pageSize={20} total={collectionData.length} />
             )}
           </div>
         )}
@@ -347,7 +347,7 @@ export function FinanceWorkspace({
             ) : atRiskStudents.length === 0 ? (
               <AdminEmptyState icon={CheckCircle2} title="No at-risk students" description="All students with payment plans are in good standing." />
             ) : (
-              <AdminDataTable columns={atRiskColumns} data={atRiskStudents} keyExtractor={(s) => s.id} showSearch={true} searchPlaceholder="Search by name or email..." showPagination={atRiskStudents.length > 15} pageSize={15} total={atRiskStudents.length} />
+              <AdminDataTable columns={atRiskColumns} data={atRiskStudents} keyExtractor={(s) => s.id} showSearch={true} searchPlaceholder="Search by name or email..." searchKeys={['name', 'email']} showPagination={atRiskStudents.length > 15} pageSize={15} total={atRiskStudents.length} />
             )}
           </div>
         )}

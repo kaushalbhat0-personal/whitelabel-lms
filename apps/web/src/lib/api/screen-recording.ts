@@ -30,13 +30,16 @@ export async function reportScreenRecordingViolation(
 
 export async function getScreenRecordingViolations(
   params?: { userId?: string; contextType?: string; limit?: number },
-) {
+): Promise<any[]> {
   const searchParams = new URLSearchParams();
   if (params?.userId) searchParams.set('userId', params.userId);
   if (params?.contextType) searchParams.set('contextType', params.contextType);
   if (params?.limit) searchParams.set('limit', String(params.limit));
   const query = searchParams.toString();
-  return fetchApi<any[]>(`/screen-recording/violations${query ? `?${query}` : ''}`);
+  const result = await fetchApi<{ items: any[]; total: number; page: number; limit: number }>(
+    `/screen-recording/violations${query ? `?${query}` : ''}`,
+  );
+  return result?.items ?? [];
 }
 
 export async function getViolationCounters(userId?: string) {

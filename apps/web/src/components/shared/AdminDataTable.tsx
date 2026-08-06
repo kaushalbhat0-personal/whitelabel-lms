@@ -48,6 +48,7 @@ interface AdminDataTableProps<T> {
   getCsvRow?: (item: T) => string[];
   showSearch?: boolean;
   showPagination?: boolean;
+  searchKeys?: string[];
   className?: string;
 }
 
@@ -73,6 +74,7 @@ export function AdminDataTable<T>({
   getCsvRow,
   showSearch = true,
   showPagination = true,
+  searchKeys,
   className,
 }: AdminDataTableProps<T>) {
   const [sortKey, setSortKey] = useState<string | null>(null);
@@ -101,7 +103,15 @@ export function AdminDataTable<T>({
   };
 
   const sortedData = useMemo(() => {
-    const arr = [...data];
+    let arr = [...data];
+    const query = (searchValue ?? '').trim().toLowerCase();
+    if (query && searchKeys && searchKeys.length > 0) {
+      arr = arr.filter((item) =>
+        searchKeys.some((key) =>
+          String((item as Record<string, unknown>)[key] ?? '').toLowerCase().includes(query),
+        ),
+      );
+    }
     if (sortKey && sortDir) {
       arr.sort((a, b) => {
         const aVal = (a as Record<string, unknown>)[sortKey];
@@ -112,7 +122,7 @@ export function AdminDataTable<T>({
       });
     }
     return arr;
-  }, [data, sortKey, sortDir]);
+  }, [data, sortKey, sortDir, searchValue, searchKeys]);
 
   const handleSort = useCallback((key: string) => {
     if (sortKey === key) {

@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { createTest, getQuestions } from '@/lib/api/assessments';
+import { getAllBatches } from '@/lib/api/courses';
 import { ROUTES } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import type { QuestionResponse } from '@/lib/api/assessments';
@@ -58,11 +59,13 @@ export default function CreateTestPage() {
   const [loadingQuestions, setLoadingQuestions] = useState(false);
   const [showQuestionBank, setShowQuestionBank] = useState(false);
 
-  const availableBatches = [
-    { id: 'batch-1', name: 'Morning Batch' },
-    { id: 'batch-2', name: 'Evening Batch' },
-    { id: 'batch-3', name: 'Weekend Batch' },
-  ];
+  const [availableBatches, setAvailableBatches] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    getAllBatches({ isActive: true, limit: 200 })
+      .then((result) => setAvailableBatches(result.items ?? []))
+      .catch(() => setAvailableBatches([]));
+  }, []);
 
   useEffect(() => {
     fetchQuestions();
@@ -337,19 +340,23 @@ export default function CreateTestPage() {
 
         <div className="rounded-xl border border-surface-border bg-surface-card p-6">
           <h2 className="mb-4 text-lg font-semibold text-text-primary">Batch Assignment</h2>
-          <div className="space-y-2">
-            {availableBatches.map((batch) => (
-              <label key={batch.id} className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  checked={batches.includes(batch.id)}
-                  onChange={() => toggleBatch(batch.id)}
-                  className="h-4 w-4 rounded border-surface-border text-brand-navy focus:ring-brand-navy"
-                />
-                <span className="text-sm text-text-primary">{batch.name}</span>
-              </label>
-            ))}
-          </div>
+          {availableBatches.length === 0 ? (
+            <p className="text-sm text-text-muted">No active batches found. Create a batch before assigning this test.</p>
+          ) : (
+            <div className="space-y-2">
+              {availableBatches.map((batch) => (
+                <label key={batch.id} className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    checked={batches.includes(batch.id)}
+                    onChange={() => toggleBatch(batch.id)}
+                    className="h-4 w-4 rounded border-surface-border text-brand-navy focus:ring-brand-navy"
+                  />
+                  <span className="text-sm text-text-primary">{batch.name}</span>
+                </label>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="rounded-xl border border-surface-border bg-surface-card p-6">

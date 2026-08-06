@@ -27,7 +27,10 @@ export default async function AdminDashboardPage() {
     ]);
 
     if (results[0].status === 'fulfilled') overview = results[0].value;
-    if (results[1].status === 'fulfilled') reviewQueue = Array.isArray(results[1].value) ? results[1].value : [];
+    if (results[1].status === 'fulfilled') {
+      const queueResult = results[1].value as { items?: unknown[] } | unknown[];
+      reviewQueue = Array.isArray(queueResult) ? queueResult : (queueResult?.items ?? []);
+    }
     if (results[2].status === 'fulfilled' && results[2].value) {
       failedEmails = results[2].value.failed ?? 0;
       totalEmails = results[2].value.total ?? 0;

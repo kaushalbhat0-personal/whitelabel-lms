@@ -14,6 +14,7 @@ import {
 import { cn } from '@/lib/utils';
 import { getPlaybackEvents, getPlaybackViolations } from '@/lib/api/playback-analytics';
 import type { PlaybackEvent, PlaybackViolation } from '@/lib/api/playback-analytics';
+import { getAdminVideos } from '@/lib/api/videos';
 
 interface AnalyticsSummary {
   totalViews: number;
@@ -51,47 +52,59 @@ function StatCard({ title, value, subtitle, icon: Icon, color }: {
   );
 }
 
-function computeAnalytics(events: PlaybackEvent[], violations: PlaybackViolation[]): AnalyticsSummary {
+function computeAnalytics(
+  events: PlaybackEvent[],
+  violations: PlaybackViolation[],
+  durations: Record<string, number>,
+): AnalyticsSummary {
   const uniqueStudents = new Set(events.map((e) => e.user_id)).size;
-  const videoIds = new Set(events.map((e) => e.recording_id).filter(Boolean));
   const totalViews = events.filter((e) => e.event_type === 'play').length;
   const ended = events.filter((e) => e.event_type === 'ended').length;
   const heartbeats = events.filter((e) => e.event_type === 'heartbeat');
   const seeks = events.filter((e) => e.event_type === 'seek');
 
-  const userProgress = new Map<string, number[]>();
+  const userRecording = new Map<string, number>();
+  const usersWithHeartbeats = new Set<string>();
   for (const h of heartbeats) {
-    const arr = userProgress.get(h.user_id) || [];
-    if (h.position_seconds != null) arr.push(h.position_seconds);
-    userProgress.set(h.user_id, arr);
+    if (h.position_seconds == null) continue;
+    usersWithHeartbeats.add(h.user_id);
+    const key = `${h.user_id}:${h.recording_id ?? ''}`;
+    const prev = userRecording.get(key) ?? 0;
+    if (h.position_seconds > prev) userRecording.set(key, h.position_seconds);
   }
 
-  let totalMaxPos = 0;
+  let watchPctSum = 0;
+  let watchPctCount = 0;
   let usersAbove90 = 0;
-  const allEndPositions: number[] = [];
+  const usersAbove90Seen = new Set<string>();
+  const dropMap = new Map<number, number>();
 
-  for (const [, positions] of userProgress) {
-    if (positions.length === 0) continue;
-    const maxPos = Math.max(...positions);
-    totalMaxPos += maxPos;
-    allEndPositions.push(maxPos);
-    if (maxPos > 90) usersAbove90++;
+  for (const [key, maxPos] of userRecording) {
+    const separator = key.indexOf(':');
+    const userId = key.slice(0, separator);
+    const recordingId = key.slice(separator + 1);
+    const duration = durations[recordingId];
+    if (!duration || duration <= 0) continue;
+
+    const pct = Math.min(100, (maxPos / duration) * 100);
+    watchPctSum += pct;
+    watchPctCount++;
+
+    if (pct >= 90 && !usersAbove90Seen.has(userId)) {
+      usersAbove90Seen.add(userId);
+      usersAbove90++;
+    }
+
+    if (maxPos < duration) {
+      const bucket = Math.floor(maxPos / 10) * 10;
+      dropMap.set(bucket, (dropMap.get(bucket) || 0) + 1);
+    }
   }
 
-  const avgWatchPercent = userProgress.size > 0 ? Math.round(totalMaxPos / userProgress.size) : 0;
+  const avgWatchPercent = watchPctCount > 0 ? Math.round(watchPctSum / watchPctCount) : 0;
   const completionRate = totalViews > 0 ? Math.round((ended / totalViews) * 100) : 0;
-
-  const userSpeeds = new Map<string, number[]>();
-  events.filter((e) => e.event_type === 'heartbeat').forEach((e) => {
-    const arr = userSpeeds.get(e.user_id) || [];
-    arr.push(1);
-    userSpeeds.set(e.user_id, arr);
-  });
-
   const avgSpeed = 1;
-
-  const allStudents = uniqueStudents;
-  const neverWatched = Math.max(0, allStudents - userProgress.size);
+  const neverWatched = Math.max(0, uniqueStudents - usersWithHeartbeats.size);
 
   const replayMap = new Map<number, number>();
   seeks.forEach((s) => {
@@ -105,17 +118,6 @@ function computeAnalytics(events: PlaybackEvent[], violations: PlaybackViolation
     .slice(0, 10)
     .map(([position, count]) => ({ position, count }));
 
-  const dropMap = new Map<number, number>();
-  userProgress.forEach((positions) => {
-    let prev = 0;
-    positions.forEach((p) => {
-      if (p > prev) prev = p;
-    });
-    if (prev < 80) {
-      const bucket = Math.floor(prev / 10) * 10;
-      dropMap.set(bucket, (dropMap.get(bucket) || 0) + 1);
-    }
-  });
   const dropOffPoints = [...dropMap.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10)
@@ -138,6 +140,7 @@ function computeAnalytics(events: PlaybackEvent[], violations: PlaybackViolation
 export default function AdminPlaybackAnalyticsPage() {
   const [events, setEvents] = useState<PlaybackEvent[]>([]);
   const [violations, setViolations] = useState<PlaybackViolation[]>([]);
+  const [durations, setDurations] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -147,11 +150,17 @@ export default function AdminPlaybackAnalyticsPage() {
     Promise.all([
       getPlaybackEvents(),
       getPlaybackViolations(),
+      getAdminVideos({ limit: 500 }).catch(() => ({ items: [] })),
     ])
-      .then(([evts, viols]) => {
+      .then(([evts, viols, videoResult]) => {
         if (cancelled) return;
         setEvents(evts);
         setViolations(viols);
+        const durationMap: Record<string, number> = {};
+        for (const v of videoResult.items ?? []) {
+          if (v.duration_seconds) durationMap[v.id] = v.duration_seconds;
+        }
+        setDurations(durationMap);
       })
       .catch((err) => {
         if (!cancelled) setError(err?.message || 'Failed to load analytics');
@@ -162,7 +171,7 @@ export default function AdminPlaybackAnalyticsPage() {
     return () => { cancelled = true; };
   }, []);
 
-  const analytics = useMemo(() => computeAnalytics(events, violations), [events, violations]);
+  const analytics = useMemo(() => computeAnalytics(events, violations, durations), [events, violations, durations]);
 
   const recentViolations = useMemo(
     () => violations.slice(0, 20),

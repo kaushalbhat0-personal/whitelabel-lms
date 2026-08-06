@@ -41,19 +41,21 @@ export class UsersService {
   // ──────────────────────────────────────────────────────────────
 
   /**
-   * List users with optional role filter and pagination.
+   * List users with optional role filter, search, and pagination.
    *
    * Steps:
    *   1. Build query against TABLES.PROFILES with optional role filter
-   *   2. Apply Supabase range() for pagination, order by created_at desc
-   *   3. Also fetch total count for pagination metadata
-   *   4. Return PaginatedResponse<User>
+   *   2. If `search` is provided, filter by name/email ILIKE match
+   *   3. Apply Supabase range() for pagination, order by created_at desc
+   *   4. Also fetch total count for pagination metadata
+   *   5. Return PaginatedResponse<User>
    */
   async findAll(
     page = 1,
     limit = 20,
     role?: UserRole,
     includeInactive = false,
+    search?: string,
   ): Promise<PaginatedResponse<UserType>> {
     const from = (page - 1) * limit;
     const to = from + limit - 1;
@@ -73,6 +75,11 @@ export class UsersService {
 
     if (!includeInactive) {
       query = query.eq('is_active', true);
+    }
+
+    if (search?.trim()) {
+      const term = `%${search.trim()}%`;
+      query = query.or(`name.ilike.${term},email.ilike.${term}`);
     }
 
     const { data, error, count } = await query

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Upload } from 'lucide-react';
-import { ManualUploadModal } from './manual-upload-modal';
+import { UploadRecordingModal } from './upload-recording-modal';
 
 interface ManualUploadButtonProps {
   onUploadComplete?: () => void;
@@ -21,7 +21,7 @@ export function ManualUploadButton({ onUploadComplete }: ManualUploadButtonProps
         Upload Video
       </button>
 
-      <ManualUploadModal
+      <UploadRecordingModal
         isOpen={showModal}
         onClose={() => setShowModal(false)}
         onComplete={() => {

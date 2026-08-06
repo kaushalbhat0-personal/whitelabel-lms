@@ -45,12 +45,14 @@ export class UsersController {
     @Query('limit') limit?: string,
     @Query('role') role?: UserRole,
     @Query('includeInactive') includeInactive?: string,
+    @Query('search') search?: string,
   ) {
     return this.usersService.findAll(
       page ? parseInt(page, 10) : 1,
       limit ? parseInt(limit, 10) : 20,
       role,
       includeInactive === 'true',
+      search,
     );
   }
 

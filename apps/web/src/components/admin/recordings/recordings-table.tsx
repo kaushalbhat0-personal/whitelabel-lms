@@ -18,6 +18,7 @@ import {
   deleteVideo,
 } from '@/lib/api/videos';
 import { EditVideoModal } from './edit-video-modal';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 interface RecordingsTableProps {
   initialVideos: AdminVideo[];
@@ -54,7 +55,9 @@ export function RecordingsTable({
 }: RecordingsTableProps) {
   const [videos, setVideos] = useState<AdminVideo[]>(initialVideos);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<AdminVideo | null>(null);
   const [editingVideo, setEditingVideo] = useState<AdminVideo | null>(null);
+  const [deleteError, setDeleteError] = useState('');
 
   // Sync local state when parent refreshes (e.g. after a new upload)
   useEffect(() => {
@@ -70,19 +73,18 @@ export function RecordingsTable({
     }
   }, []);
 
-  const handleDelete = async (video: AdminVideo) => {
-    const confirmed = window.confirm(
-      `Are you sure you want to delete "${video.title}"?\n\nThe video will be deleted from both the LMS and Mux. This cannot be undone.`,
-    );
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
 
-    if (!confirmed) return;
-
-    setDeletingId(video.id);
+    setDeletingId(deleteTarget.id);
+    setDeleteError('');
     try {
-      await deleteVideo(video.id);
-      setVideos((prev) => prev.filter((v) => v.id !== video.id));
+      await deleteVideo(deleteTarget.id);
+      setVideos((prev) => prev.filter((v) => v.id !== deleteTarget.id));
+      setDeleteTarget(null);
     } catch {
-      alert('Failed to delete video. Please try again.');
+      setDeleteError(`Failed to delete "${deleteTarget.title}". Please try again.`);
+      setDeleteTarget(null);
     } finally {
       setDeletingId(null);
     }
@@ -211,7 +213,7 @@ export function RecordingsTable({
                         <Pencil className="h-4 w-4" />
                       </button>
                       <button
-                        onClick={() => handleDelete(video)}
+                        onClick={() => setDeleteTarget(video)}
                         disabled={deletingId === video.id}
                         className="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-500 disabled:opacity-50"
                         title="Delete"
@@ -234,6 +236,27 @@ export function RecordingsTable({
       <p className="mt-3 text-sm text-gray-400">
         Showing {videos.length} of {total} total
       </p>
+
+      {deleteError && (
+        <div className="mt-3 flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          {deleteError}
+        </div>
+      )}
+
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        title="Delete Recording"
+        message={
+          deleteTarget
+            ? `Delete "${deleteTarget.title}"? The video will be deleted from both the LMS and Mux. This cannot be undone.`
+            : ''
+        }
+        confirmLabel="Delete"
+        loading={deletingId !== null}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+      />
 
       {editingVideo && (
         <EditVideoModal

@@ -118,6 +118,7 @@ export class ResultsService {
 
     const items = (data ?? []).map((r: any) => ({
       id: r.id,
+      attempt_id: r.attempt_id,
       test_id: r.test_id,
       test_title: r.test?.title ?? null,
       percentage: r.percentage,

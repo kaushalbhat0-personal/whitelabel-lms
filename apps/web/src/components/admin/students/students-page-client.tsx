@@ -147,6 +147,7 @@ export function StudentsPageClient({ initialStudents, initialTotal }: StudentsPa
           searchValue={search}
           onSearchChange={setSearch}
           searchPlaceholder="Search by name or email..."
+          searchKeys={['name', 'email', 'phone']}
           bulkActions={[{ label: 'Assign to Batch', onClick: () => openAssignBulk() }]}
           exportCsv csvFilename="students.csv"
           csvHeaders={['Name', 'Email', 'Phone', 'Batches', 'Status']}

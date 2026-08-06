@@ -32,16 +32,12 @@ export default async function StudentDashboardPage() {
   results = resultsResult;
   paymentPlans = plansResult;
 
-  console.log(`[DEBUG_DASHBOARD] getMyVideos() returned ${recordings.length} recordings | sourceEndpoint=GET /recordings/my`);
-  console.log(`[DEBUG_DASHBOARD] recordings array:`, JSON.stringify(recordings));
-
   const nextClass = upcoming.length > 0
     ? upcoming.sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())[0]
     : null;
 
   const inProgressVideos = recordings.filter((r) => !r.progress.completed && r.progress.watched_seconds > 0);
   const continueContent = inProgressVideos.length > 0 ? inProgressVideos : recordings.slice(0, 6);
-  console.log(`[DEBUG_DASHBOARD] videosCount=${recordings.length} | inProgress=${inProgressVideos.length} | continueContent=${continueContent.length}`);
 
   return (
     <>

@@ -69,7 +69,7 @@ const quickActions = [
   { label: 'Create Test', href: ROUTES.ADMIN.TESTS_NEW, icon: FileText, color: 'bg-purple-50 text-purple-600' },
   { label: 'Upload Recording', href: ROUTES.ADMIN.RECORDINGS, icon: Video, color: 'bg-amber-50 text-amber-600' },
   { label: 'New Announcement', href: ROUTES.ADMIN.ANNOUNCEMENTS, icon: Megaphone, color: 'bg-pink-50 text-pink-600' },
-  { label: 'Settings', href: ROUTES.ADMIN.BUSINESS_CONFIG, icon: Settings, color: 'bg-gray-50 text-gray-600' },
+  { label: 'Business Config', href: ROUTES.ADMIN.BUSINESS_CONFIG, icon: Settings, color: 'bg-gray-50 text-gray-600' },
 ];
 
 export function AdminDashboardClient({

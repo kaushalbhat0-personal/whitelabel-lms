@@ -12,11 +12,14 @@ import {
 import { AdminPageHeader } from '@/components/shared/AdminPageHeader';
 import { AdminSection } from '@/components/shared/AdminSection';
 import { AdminStatCard } from '@/components/shared/AdminStatCard';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 export default function AdminSessionsPage() {
   const [sessions, setSessions] = useState<ScheduledSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchSessions = useCallback(async () => {
     setLoading(true);
@@ -34,14 +37,18 @@ export default function AdminSessionsPage() {
     fetchSessions();
   }, [fetchSessions]);
 
-  const handleDelete = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete this live session from the LMS and Zoom?')) return;
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
     try {
-      await deleteSession(id);
+      await deleteSession(deleteTarget);
       toast.success('Session deleted');
+      setDeleteTarget(null);
       fetchSessions();
     } catch (err: any) {
       toast.error(err.message || 'Failed to delete session');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -98,7 +105,7 @@ export default function AdminSessionsPage() {
               </h2>
               <SessionTable
                 sessions={upcoming}
-                onDelete={handleDelete}
+                onDelete={setDeleteTarget}
                 formatDateTime={formatDateTime}
               />
             </section>
@@ -112,7 +119,7 @@ export default function AdminSessionsPage() {
               </h2>
               <SessionTable
                 sessions={past}
-                onDelete={handleDelete}
+                onDelete={setDeleteTarget}
                 formatDateTime={formatDateTime}
               />
             </section>
@@ -124,6 +131,16 @@ export default function AdminSessionsPage() {
         isOpen={showScheduleModal}
         onClose={() => setShowScheduleModal(false)}
         onSuccess={fetchSessions}
+      />
+
+      <ConfirmDialog
+        isOpen={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        loading={deleting}
+        title="Delete live session"
+        message="Are you sure you want to delete this live session from the LMS and Zoom?"
+        confirmLabel="Delete Session"
       />
     </div>
   );
