@@ -14,7 +14,7 @@ const ATTEMPT_WITH_ANSWERS_SELECT = `
 
 const TEST_FOR_ATTEMPT_SELECT = `
   *,
-  test_batches!inner(batch_id),
+  test_batches(batch_id),
   test_question_bank(
     *,
     question_bank(id, question_text, question_type, options, correct_answer, explanation, difficulty, topic_id, image_url),
@@ -129,7 +129,7 @@ export class AttemptsService {
         }
       }
 
-      const answerRows = ordered.map((q: any, idx: number) => ({
+      const answerRows = ordered.map((q: any) => ({
         attempt_id: attempt.id,
         question_id: q.question_bank_id,
         question_type: q.question_bank?.question_type ?? 'single_choice',
@@ -137,7 +137,6 @@ export class AttemptsService {
         marks_awarded: 0,
         is_correct: false,
         is_manual_review: false,
-        sort_order: idx,
       }));
 
       const { error: answersError } = await this.supabaseService.client
@@ -395,11 +394,10 @@ export class AttemptsService {
         question_text: q.question_bank?.question_text,
         question_type: q.question_bank?.question_type,
         options: q.question_bank?.options,
-        correct_answer: q.question_bank?.correct_answer,
         marks: q.marks,
         negative_marks: q.negative_mark,
         sort_order: q.sort_order,
-        section_title: q.section?.title,
+        section_title: q.test_sections?.title ?? null,
         image_url: q.question_bank?.image_url,
       })),
       test_answers: this.maybeShuffleQuestions({ ...attempt, test_answers: answers ?? [] }),
@@ -425,11 +423,9 @@ export class AttemptsService {
   }
 
   private maybeShuffleQuestions(attempt: any) {
-    if (!attempt.test_answers) return attempt.test_answers;
-    const answers = [...attempt.test_answers];
-    if (answers.length > 0 && 'sort_order' in answers[0]) {
-      answers.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-    }
-    return answers;
+    // test_answers have no sort_order column; rows are inserted in
+    // test_question_bank.sort_order order at attempt creation, so order is
+    // already correct (incl. after question shuffling).
+    return attempt.test_answers;
   }
 }

@@ -144,8 +144,20 @@ export default function AdminReviewQueuePage() {
   const questionText = (item: any) =>
     item.test_answers?.question_bank?.question_text || 'Question not available';
 
-  const answerText = (item: any) =>
-    item.test_answers?.answer ?? item.answer ?? 'No answer provided';
+  const answerText = (item: any) => {
+    const raw = item.test_answers?.answer ?? item.answer ?? null;
+    if (raw == null) return 'No answer provided';
+    if (typeof raw === 'string') return raw;
+    if (typeof raw === 'number' || typeof raw === 'boolean') return String(raw);
+    if (Array.isArray(raw)) return raw.join(', ');
+    // Answers are stored as JSON objects (e.g. { text: "..." }) — stringify safely.
+    try {
+      const str = JSON.stringify(raw);
+      return str && str !== '{}' ? str : 'No answer provided';
+    } catch {
+      return String(raw);
+    }
+  };
 
   return (
     <div className="space-y-6">

@@ -85,7 +85,6 @@ export class ResultsService {
       marks_awarded: showResults ? (a.marks_awarded ?? null) : null,
       is_correct: showResults ? (a.is_correct ?? null) : null,
       is_manual_review: a.is_manual_review ?? null,
-      sort_order: a.sort_order,
     }));
 
     return {

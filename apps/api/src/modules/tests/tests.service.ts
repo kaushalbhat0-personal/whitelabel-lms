@@ -8,7 +8,7 @@ import { UpdateTestDto } from './dto/update-test.dto';
 
 const TEST_SELECT = `
   *,
-  test_batches!inner(batch_id, batches(name)),
+  test_batches(batch_id, batches(name)),
   test_sections(*),
   test_question_bank(
     *,

@@ -182,7 +182,7 @@ export class EvaluationService {
       .from(TABLES.TEST_ATTEMPTS)
       .update({
         status: newStatus,
-        updated_at: new Date().toISOString(),
+        last_saved_at: new Date().toISOString(),
       })
       .eq('id', attemptId);
 
@@ -382,7 +382,7 @@ export class EvaluationService {
 
       const { error: statusError } = await this.supabaseService.client
         .from(TABLES.TEST_ATTEMPTS)
-        .update({ status: AttemptStatus.EVALUATED, updated_at: new Date().toISOString() })
+        .update({ status: AttemptStatus.EVALUATED, last_saved_at: new Date().toISOString() })
         .eq('id', attemptId);
 
       if (statusError) {
@@ -405,7 +405,7 @@ export class EvaluationService {
         this.logger.error('Auto-publish after review failed', err);
         await this.supabaseService.client
           .from(TABLES.TEST_ATTEMPTS)
-          .update({ status: prevStatus, updated_at: new Date().toISOString() })
+          .update({ status: prevStatus, last_saved_at: new Date().toISOString() })
           .eq('id', attemptId);
       });
     }
@@ -515,7 +515,7 @@ export class EvaluationService {
             .from(TABLES.TEST_ATTEMPTS)
             .update({
               status: AttemptStatus.PUBLISHED,
-              updated_at: new Date().toISOString(),
+              last_saved_at: new Date().toISOString(),
             })
             .eq('id', attemptId);
           if (error) throw error;
@@ -525,7 +525,7 @@ export class EvaluationService {
             .from(TABLES.TEST_ATTEMPTS)
             .update({
               status: attempt.status,
-              updated_at: new Date().toISOString(),
+              last_saved_at: new Date().toISOString(),
             })
             .eq('id', attemptId);
         },
