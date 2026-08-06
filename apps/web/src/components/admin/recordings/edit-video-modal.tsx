@@ -1,8 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Modal } from '@/components/ui/Modal';
-import { type AdminVideo, type Topic, updateVideoMetadata } from '@/lib/api/videos';
+import { X, Loader2, ChevronDown } from 'lucide-react';
+import {
+  type AdminVideo,
+  type Topic,
+  updateVideoMetadata,
+  assignRecordingToBatches,
+  removeRecordingFromBatches,
+} from '@/lib/api/videos';
+import { getAllBatches, type Batch } from '@/lib/api/courses';
 
 interface EditVideoModalProps {
   video: AdminVideo;
@@ -25,6 +33,51 @@ export function EditVideoModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  const [allBatches, setAllBatches] = useState<Batch[]>([]);
+  const [loadingBatches, setLoadingBatches] = useState(true);
+  const [selectedBatchIds, setSelectedBatchIds] = useState<Set<string>>(new Set());
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+
+  // Reset form state whenever the modal opens for a (potentially different) video
+  useEffect(() => {
+    if (isOpen) {
+      setTitle(video.title);
+      setDescription(video.description ?? '');
+      setTopicId(video.topic_id ?? '');
+      setError('');
+      setSaving(false);
+      setDropdownOpen(false);
+      setSelectedBatchIds(
+        new Set((video.recording_batches ?? []).map((b) => b.batch_id)),
+      );
+    }
+  }, [isOpen, video]);
+
+  const fetchBatches = useCallback(async () => {
+    setLoadingBatches(true);
+    try {
+      const result = await getAllBatches({ isActive: true, limit: 200 });
+      setAllBatches(result.items);
+    } catch {
+      // silent — batch add stays disabled
+    } finally {
+      setLoadingBatches(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) fetchBatches();
+  }, [isOpen, fetchBatches]);
+
+  const toggleBatch = (id: string) => {
+    setSelectedBatchIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   const handleSave = async () => {
     if (!title.trim()) {
       setError('Title is required');
@@ -35,22 +88,52 @@ export function EditVideoModal({
     setError('');
 
     try {
-      const updated = await updateVideoMetadata(
-        video.id,
-        {
-          title: title.trim(),
-          description: description.trim() || undefined,
-          topicId: topicId || null,
-        },
+      const originalBatchIds = new Set(
+        (video.recording_batches ?? []).map((b) => b.batch_id),
       );
-      onSaved(updated);
-      onClose();
+      const added = [...selectedBatchIds].filter((id) => !originalBatchIds.has(id));
+      const removed = [...originalBatchIds].filter((id) => !selectedBatchIds.has(id));
+
+      if (added.length > 0) {
+        await assignRecordingToBatches(video.id, added);
+      }
+      if (removed.length > 0) {
+        await removeRecordingFromBatches(video.id, removed);
+      }
+
+      const updated = await updateVideoMetadata(video.id, {
+        title: title.trim(),
+        description: description.trim() || undefined,
+        topicId: topicId || null,
+      });
+
+      const updatedBatchEntries = (video.recording_batches ?? [])
+        .filter((b) => selectedBatchIds.has(b.batch_id))
+        .concat(
+          added.map((id) => {
+            const name = allBatches.find((b) => b.id === id)?.name;
+            return {
+              batch_id: id,
+              batches: name ? { name } : null,
+            };
+          }),
+        );
+
+      onSaved({
+        ...video,
+        ...updated,
+        recording_batches: updatedBatchEntries,
+      });
     } catch (err: any) {
       setError(err.message || 'Failed to save changes');
     } finally {
       setSaving(false);
     }
   };
+
+  const selectedLabels = allBatches
+    .filter((b) => selectedBatchIds.has(b.id))
+    .map((b) => b.name);
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Edit Video">
@@ -101,6 +184,86 @@ export function EditVideoModal({
           </select>
         </div>
 
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Assigned Batches
+          </label>
+
+          {selectedLabels.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-2">
+              {selectedLabels.map((name) => {
+                const id = allBatches.find((b) => b.name === name)?.id;
+                return (
+                  <span
+                    key={name}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1 text-sm font-medium text-brand-700"
+                  >
+                    {name}
+                    {id && (
+                      <button
+                        onClick={() => toggleBatch(id)}
+                        disabled={saving}
+                        className="rounded-full p-0.5 text-brand-400 hover:bg-brand-100 hover:text-brand-600 disabled:opacity-40"
+                        title={`Remove ${name}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    )}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setDropdownOpen((o) => !o)}
+              disabled={saving || loadingBatches}
+              className="flex w-full items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-left focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-gray-100"
+            >
+              <span className={selectedLabels.length === 0 ? 'text-gray-400' : 'text-gray-900'}>
+                {loadingBatches
+                  ? 'Loading batches...'
+                  : selectedLabels.length > 0
+                    ? `${selectedLabels.length} assigned`
+                    : 'Select batches...'}
+              </span>
+              <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {dropdownOpen && (
+              <div className="absolute z-10 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg">
+                <div className="max-h-48 overflow-y-auto">
+                  {allBatches.length === 0 ? (
+                    <div className="py-4 text-center text-sm text-gray-400">
+                      No active batches
+                    </div>
+                  ) : (
+                    allBatches.map((b) => (
+                      <label
+                        key={b.id}
+                        className="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm hover:bg-gray-50"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedBatchIds.has(b.id)}
+                          onChange={() => toggleBatch(b.id)}
+                          className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                        />
+                        <span className="text-gray-700">{b.name}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+          <p className="mt-1.5 text-xs text-gray-400">
+            Assigning a batch makes this recording visible to that batch&apos;s students.
+          </p>
+        </div>
+
         <div className="flex justify-end gap-3 pt-2">
           <button
             type="button"
@@ -112,8 +275,9 @@ export function EditVideoModal({
           <button
             onClick={handleSave}
             disabled={saving}
-            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
+            className="flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
           >
+            {saving && <Loader2 className="h-4 w-4 animate-spin" />}
             {saving ? 'Saving...' : 'Save'}
           </button>
         </div>

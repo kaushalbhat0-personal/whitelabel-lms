@@ -855,18 +855,83 @@ export class RecordingsService {
    * @returns Paginated result with items (including nested batch_id array), total.
    * @throws BadRequestException on DB query failure.
    */
-  async getAdminRecordings(topicId?: string, page = 1, limit = 20) {
+  /**
+   * Fetch recordings for the admin recordings table with server-side
+   * search, filtering, and pagination.
+   * @param filters - topicId, search (title/description), status, batchId,
+   *   published ('true' = has batch links, 'false' = none), sort ('newest'|'oldest').
+   * @param page - 1-based page number.
+   * @param limit - page size, capped at 100.
+   * @returns Paginated recordings with topics + batch links (with batch names).
+   * @throws BadRequestException on DB query failure.
+   */
+  async getAdminRecordings(
+    filters: {
+      topicId?: string;
+      search?: string;
+      status?: string;
+      batchId?: string;
+      published?: string;
+      sort?: string;
+    } = {},
+    page = 1,
+    limit = 20,
+  ) {
+    limit = Math.min(limit, 1000);
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
     let query = this.supabaseService.client
       .from(TABLES.RECORDINGS)
-      .select(`*, topics(name), ${TABLES.RECORDING_BATCHES}!recording_id(batch_id)`, { count: 'exact' })
-      .order('created_at', { ascending: false });
+      .select(
+        `*, topics(name), ${TABLES.RECORDING_BATCHES}!recording_id(batch_id, batches(name))`,
+        { count: 'exact' },
+      );
 
-    if (topicId) {
-      query = query.eq('topic_id', topicId);
+    // ── Search: title OR description (case-insensitive) ──
+    if (filters.search) {
+      const term = filters.search.replace(/[*%\\]/g, '\\$&').replace(/'/g, "''");
+      query = query.or(`title.ilike.*${term}*,description.ilike.*${term}*`);
     }
+
+    if (filters.topicId) {
+      query = query.eq('topic_id', filters.topicId);
+    }
+
+    if (filters.status) {
+      query = query.eq('status', filters.status);
+    }
+
+    // ── Batch / published filters ─────────────────────────────
+    // PostgREST embedded to-many filters are unreliable on this dataset,
+    // so resolve recording IDs from recording_batches first, then filter
+    // the recordings query with in/not.in. Count stays exact.
+    if (filters.batchId || filters.published) {
+      let linksQuery = this.supabaseService.client
+        .from(TABLES.RECORDING_BATCHES)
+        .select('recording_id');
+
+      if (filters.batchId) {
+        linksQuery = linksQuery.eq('batch_id', filters.batchId);
+      }
+
+      const { data: links } = await linksQuery;
+      const recordingIds = [
+        ...new Set((links ?? []).map((l: any) => l.recording_id)),
+      ];
+
+      if (filters.batchId) {
+        query = query.in('id', recordingIds);
+      } else if (filters.published === 'true') {
+        query = query.in('id', recordingIds);
+      } else if (filters.published === 'false' && recordingIds.length > 0) {
+        query = query.not('id', 'in', `(${recordingIds.join(',')})`);
+      }
+    }
+
+    query = query.order('created_at', {
+      ascending: filters.sort === 'oldest',
+    });
 
     const { data, error, count } = await query.range(from, to);
 

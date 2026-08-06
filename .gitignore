@@ -36,3 +36,13 @@ Desktop.ini
 # Temp
 tmp/
 temp/
+
+# Local tooling / logs
+*.err
+*.out
+create-e2e-users.js
+
+# Playwright artifacts
+playwright-report/
+test-results/
+playwright/.cache/

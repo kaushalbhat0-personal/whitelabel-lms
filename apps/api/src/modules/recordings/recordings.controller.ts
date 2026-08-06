@@ -71,11 +71,16 @@ export class RecordingsController {
   @Get('admin/recordings/all')
   getAdminRecordings(
     @Query('topicId') topicId?: string,
+    @Query('search') search?: string,
+    @Query('status') status?: string,
+    @Query('batchId') batchId?: string,
+    @Query('published') published?: string,
+    @Query('sort') sort?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
     return this.recordingsService.getAdminRecordings(
-      topicId,
+      { topicId, search, status, batchId, published, sort },
       page ? parseInt(page, 10) : 1,
       limit ? parseInt(limit, 10) : 20,
     );
@@ -267,11 +272,16 @@ export class RecordingsController {
   @Get('videos/admin')
   legacyGetAdminVideos(
     @Query('topicId') topicId?: string,
+    @Query('search') search?: string,
+    @Query('status') status?: string,
+    @Query('batchId') batchId?: string,
+    @Query('published') published?: string,
+    @Query('sort') sort?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
     return this.recordingsService.getAdminRecordings(
-      topicId,
+      { topicId, search, status, batchId, published, sort },
       page ? parseInt(page, 10) : 1,
       limit ? parseInt(limit, 10) : 20,
     );

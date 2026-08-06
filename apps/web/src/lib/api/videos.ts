@@ -29,7 +29,10 @@ export interface AdminVideo {
   duration_seconds?: number;
   created_at: string;
   topics?: { name: string } | null;
-  recording_batches?: { batch_id: string }[];
+  recording_batches?: {
+    batch_id: string;
+    batches?: { name: string } | null;
+  }[];
 }
 
 export interface Topic {
@@ -87,16 +90,48 @@ export interface StudentBatchRecordings {
   sections: StudentSection[];
 }
 
-export async function getAdminVideos(
-  params?: { topicId?: string; page?: number; limit?: number },
-) {
+export async function getAdminVideos(params?: {
+  topicId?: string;
+  search?: string;
+  status?: string;
+  batchId?: string;
+  published?: string;
+  sort?: string;
+  page?: number;
+  limit?: number;
+}) {
   const searchParams = new URLSearchParams();
   if (params?.topicId) searchParams.set('topicId', params.topicId);
+  if (params?.search) searchParams.set('search', params.search);
+  if (params?.status) searchParams.set('status', params.status);
+  if (params?.batchId) searchParams.set('batchId', params.batchId);
+  if (params?.published) searchParams.set('published', params.published);
+  if (params?.sort) searchParams.set('sort', params.sort);
   if (params?.page) searchParams.set('page', String(params.page));
   if (params?.limit) searchParams.set('limit', String(params.limit));
   const query = searchParams.toString();
   return fetchApi<AdminVideosResponse>(
     `${API_ROUTES.ADMIN_RECORDINGS}/all${query ? `?${query}` : ''}`,
+  );
+}
+
+export async function assignRecordingToBatches(
+  recordingId: string,
+  batchIds: string[],
+) {
+  return fetchApi<{ assignedCount: number }>(
+    `${API_ROUTES.ADMIN_RECORDINGS}/${recordingId}/batches`,
+    { method: 'POST', body: JSON.stringify({ batchIds }) },
+  );
+}
+
+export async function removeRecordingFromBatches(
+  recordingId: string,
+  batchIds: string[],
+) {
+  return fetchApi<{ removedCount: number }>(
+    `${API_ROUTES.ADMIN_RECORDINGS}/${recordingId}/batches`,
+    { method: 'DELETE', body: JSON.stringify({ batchIds }) },
   );
 }
 

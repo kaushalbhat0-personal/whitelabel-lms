@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Film,
   Pencil,
@@ -11,12 +11,7 @@ import {
   Loader2,
   Hourglass,
 } from 'lucide-react';
-import {
-  type AdminVideo,
-  type Topic,
-  getAdminVideos,
-  deleteVideo,
-} from '@/lib/api/videos';
+import { type AdminVideo, type Topic, deleteVideo } from '@/lib/api/videos';
 import { EditVideoModal } from './edit-video-modal';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
@@ -24,12 +19,15 @@ interface RecordingsTableProps {
   initialVideos: AdminVideo[];
   total: number;
   topics: Topic[];
+  loading?: boolean;
+  onChanged?: () => void;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   ready: { label: 'Ready', className: 'bg-green-100 text-green-700' },
   processing: { label: 'Processing', className: 'bg-yellow-100 text-yellow-700' },
   uploading: { label: 'Uploading', className: 'bg-blue-100 text-blue-700' },
+  failed: { label: 'Failed', className: 'bg-red-100 text-red-700' },
   error: { label: 'Error', className: 'bg-red-100 text-red-700' },
 };
 
@@ -52,6 +50,8 @@ export function RecordingsTable({
   initialVideos,
   total,
   topics,
+  loading = false,
+  onChanged,
 }: RecordingsTableProps) {
   const [videos, setVideos] = useState<AdminVideo[]>(initialVideos);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -59,19 +59,10 @@ export function RecordingsTable({
   const [editingVideo, setEditingVideo] = useState<AdminVideo | null>(null);
   const [deleteError, setDeleteError] = useState('');
 
-  // Sync local state when parent refreshes (e.g. after a new upload)
+  // Sync local state when parent refreshes (search/filter/pagination)
   useEffect(() => {
     setVideos(initialVideos);
   }, [initialVideos]);
-
-  const refreshVideos = useCallback(async () => {
-    try {
-      const result = await getAdminVideos({ page: 1, limit: 50 });
-      setVideos(result.items);
-    } catch {
-      // stay with last-known state
-    }
-  }, []);
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
@@ -82,6 +73,7 @@ export function RecordingsTable({
       await deleteVideo(deleteTarget.id);
       setVideos((prev) => prev.filter((v) => v.id !== deleteTarget.id));
       setDeleteTarget(null);
+      onChanged?.();
     } catch {
       setDeleteError(`Failed to delete "${deleteTarget.title}". Please try again.`);
       setDeleteTarget(null);
@@ -95,15 +87,17 @@ export function RecordingsTable({
 
   const handleSaved = (updated: AdminVideo) => {
     setVideos((prev) => prev.map((v) => (v.id === updated.id ? updated : v)));
+    setEditingVideo(null);
+    onChanged?.();
   };
 
   if (videos.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 py-16 text-gray-500">
         <Film className="mb-3 h-10 w-10 text-gray-300" />
-        <p className="text-lg font-medium">No recordings yet</p>
-        <p className="text-sm mt-1">
-          Recordings from Zoom webinars will appear here automatically.
+        <p className="text-lg font-medium">No recordings match your filters</p>
+        <p className="mt-1 text-sm">
+          Try adjusting search or filters, or upload a new recording.
         </p>
       </div>
     );
@@ -112,6 +106,12 @@ export function RecordingsTable({
   return (
     <>
       <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
+        {loading && (
+          <div className="flex items-center gap-2 border-b border-gray-100 bg-gray-50 px-4 py-2 text-xs text-gray-500">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Updating results...
+          </div>
+        )}
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
@@ -123,6 +123,9 @@ export function RecordingsTable({
               </th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
                 Topic
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                Batches
               </th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
                 Status
@@ -143,6 +146,9 @@ export function RecordingsTable({
               };
 
               const pending = isProcessing(video);
+              const batchNames = (video.recording_batches ?? [])
+                .map((b) => b.batches?.name)
+                .filter(Boolean);
 
               return (
                 <tr key={video.id} className={`hover:bg-gray-50 transition-colors ${pending ? 'opacity-70' : ''}`}>
@@ -185,13 +191,34 @@ export function RecordingsTable({
                   <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
                     {video.topics?.name ?? '—'}
                   </td>
+                  <td className="px-4 py-3">
+                    {batchNames.length === 0 ? (
+                      <span className="text-xs text-gray-400">Unassigned</span>
+                    ) : (
+                      <div className="flex max-w-[220px] flex-wrap gap-1">
+                        {batchNames.slice(0, 3).map((name) => (
+                          <span
+                            key={name}
+                            className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700"
+                          >
+                            {name}
+                          </span>
+                        ))}
+                        {batchNames.length > 3 && (
+                          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
+                            +{batchNames.length - 3}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </td>
                   <td className="whitespace-nowrap px-4 py-3">
                     <span
                       className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${cfg.className}`}
                     >
                       {video.status === 'ready' ? (
                         <CheckCircle className="h-3 w-3" />
-                      ) : video.status === 'error' ? (
+                      ) : video.status === 'error' || video.status === 'failed' ? (
                         <AlertCircle className="h-3 w-3" />
                       ) : (
                         <Loader2 className="h-3 w-3 animate-spin" />
@@ -208,7 +235,7 @@ export function RecordingsTable({
                         onClick={() => setEditingVideo(video)}
                         disabled={pending}
                         className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
-                        title={pending ? 'Cannot edit while processing' : 'Edit'}
+                        title={pending ? 'Cannot edit while processing' : 'Edit video, batches and metadata'}
                       >
                         <Pencil className="h-4 w-4" />
                       </button>
@@ -232,10 +259,6 @@ export function RecordingsTable({
           </tbody>
         </table>
       </div>
-
-      <p className="mt-3 text-sm text-gray-400">
-        Showing {videos.length} of {total} total
-      </p>
 
       {deleteError && (
         <div className="mt-3 flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
