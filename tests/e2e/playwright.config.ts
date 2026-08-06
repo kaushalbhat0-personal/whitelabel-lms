@@ -60,6 +60,11 @@ export default defineConfig({
       testMatch: 'recordings/*.spec.ts',
       use: { ...devices['Desktop Chrome'] },
     },
+    {
+      name: 'assessments-api',
+      testMatch: 'assessments/*.spec.ts',
+      use: { ...devices['Desktop Chrome'] },
+    },
   ],
 
   webServer: [

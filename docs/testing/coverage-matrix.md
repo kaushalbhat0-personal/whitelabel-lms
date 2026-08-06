@@ -43,3 +43,62 @@
 | **Auth 403/401/404 DB assertion** | No DB mutation occurs on auth failures â€” API status proves the guard |
 | **Invalid batch ID on assign** | Covered by `validateCurriculumPayload` unit tests |
 | **Empty payload validation** | Covered by `BadRequestException` unit tests |
+
+---
+
+# Assessments Module — Coverage Matrix
+
+## Feature ? API ? DB ? UI
+
+| # | Feature | Test File | API | DB | UI | Notes |
+|---|---------|-----------|-----|-----|-----|-------|
+| 1 | Attempt lifecycle | ttempt.spec.ts | ? | ? | ? | start?save?submit?grade?publish?result |
+| 2 | Resume no-dup | ttempt.spec.ts | ? | ? | - | single in_progress attempt verified in DB |
+| 3 | Max attempts | ttempt.spec.ts | ? | ? | - | 403 after max_attempts reached |
+| 4 | Draft test blocked | ttempt.spec.ts | ? | - | - | 403 on start |
+| 5 | Question CRUD | question-bank.spec.ts | ? | ? | - | create/update/archive/unarchive/delete + DB |
+| 6 | Bulk import | question-bank.spec.ts | ? | ? | - | 3 questions + DB rows |
+| 7 | Question validation | question-bank.spec.ts | ? | - | - | 400 on missing text |
+| 8 | Question role guard | question-bank.spec.ts | ? | - | - | student 403 |
+| 9 | Manual review | esults-review.spec.ts | ? | ? | - | pending?assign?review?publish + DB |
+| 10 | Results list/detail | esults-review.spec.ts | ? | - | - | published data |
+| 11 | Test analytics | esults-review.spec.ts | ? | ? | - | snapshot created + fetch |
+| 12 | Rank ordering | esults-review.spec.ts | ? | - | - | higher marks ? rank 1 |
+| 13 | Test create | 	est-management.spec.ts | ? | ? | - | draft + relations in DB |
+| 14 | Test duplicate | 	est-management.spec.ts | ? | ? | - | (Copy) + same question links |
+| 15 | Test status | 	est-management.spec.ts | ? | ? | - | draft?published?archived |
+| 16 | Test delete | 	est-management.spec.ts | ? | ? | - | row removed |
+| 17 | Batch visibility | 	est-management.spec.ts | ? | - | - | student sees own-batch tests only |
+| 18 | Security (roles/ownership) | security.spec.ts | ? | - | - | 7 attack surfaces |
+| 19 | No answer leak | security.spec.ts | ? | - | - | correct_answer absent |
+| 20 | Browser attempt | rowser-ui.spec.ts | ? | - | ? | student completes in real browser |
+| 21 | Review queue UI | rowser-ui.spec.ts | ? | - | ? | renders + expands, no crash |
+| 22 | Mobile overflow | rowser-ui.spec.ts | - | - | ? | 390px no overflow |
+
+## Score
+
+| Layer | Tests Verified | Coverage |
+|-------|----------------|----------|
+| API | 22 / 22 | 100% |
+| DB | 12 / 22 | 55% |
+| UI | 3 / 22 | 14% (browser; API-backed asserts cover the rest) |
+
+## Unit Coverage (service files)
+
+| Service | Statements | Lines | Functions |
+|---------|-----------|-------|-----------|
+| AnalyticsService | 100% | 100% | 100% |
+| AttemptsService | 90% | 98% | 100% |
+| ResultsService | 88% | 92% | 84% |
+| QuestionsService | 83% | 100% | 100% |
+| EvaluationService | 80% | 85% | 82% |
+| TestsService | 57% | 66% | 67% |
+
+## Missing Scenarios (assessment)
+
+| Scenario | Priority |
+|----------|----------|
+| shuffle_options runtime behavior (feature not implemented) | P2 |
+| Timer-expiry server enforcement | P2 |
+| Negative-marking end-to-end with published result | P3 |
+| PATCH /tests/:id partial-relation data-loss guard | P3 |

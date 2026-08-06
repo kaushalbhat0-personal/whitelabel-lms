@@ -629,7 +629,6 @@ export class EvaluationService {
           user_id,
           started_at,
           submitted_at,
-          profiles!inner(batch_id),
           tests!inner(passing_marks)
         )
       `)
@@ -753,19 +752,36 @@ export class EvaluationService {
   }
 
   private async buildBatchPerformance(results: any[]) {
+    // Resolve each user's batch via batch_students (profiles has no batch_id).
+    const userIds = [...new Set(results.map((r) => r.test_attempts?.user_id).filter(Boolean))];
     const batchMap = new Map<string, { attempts: number; totalScore: number; totalMarks: number }>();
 
-    for (const result of results) {
-      const batchId = result.test_attempts?.profiles?.batch_id ?? 'unknown';
+    if (userIds.length > 0) {
+      const { data: memberships, error } = await this.supabaseService.client
+        .from(TABLES.BATCH_STUDENTS)
+        .select('user_id, batch_id')
+        .in('user_id', userIds);
 
-      if (!batchMap.has(batchId)) {
-        batchMap.set(batchId, { attempts: 0, totalScore: 0, totalMarks: 0 });
+      if (error) this.logger.error('Failed to fetch batch memberships for analytics', error);
+
+      const batchByUser = new Map<string, string>();
+      for (const m of memberships ?? []) {
+        if (!batchByUser.has(m.user_id)) batchByUser.set(m.user_id, m.batch_id);
       }
 
-      const entry = batchMap.get(batchId)!;
-      entry.attempts++;
-      entry.totalScore += result.obtained_marks ?? 0;
-      entry.totalMarks += result.total_marks ?? 0;
+      for (const result of results) {
+        const userId = result.test_attempts?.user_id;
+        const batchId = userId ? (batchByUser.get(userId) ?? 'unknown') : 'unknown';
+
+        if (!batchMap.has(batchId)) {
+          batchMap.set(batchId, { attempts: 0, totalScore: 0, totalMarks: 0 });
+        }
+
+        const entry = batchMap.get(batchId)!;
+        entry.attempts++;
+        entry.totalScore += result.obtained_marks ?? 0;
+        entry.totalMarks += result.total_marks ?? 0;
+      }
     }
 
     return Array.from(batchMap.entries()).map(([batchId, data]) => ({

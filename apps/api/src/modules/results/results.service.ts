@@ -177,7 +177,7 @@ export class ResultsService {
       .from(TABLES.TEST_ANALYTICS_SNAPSHOTS)
       .select('*')
       .eq('test_id', testId)
-      .order('created_at', { ascending: false })
+      .order('calculated_at', { ascending: false })
       .limit(1)
       .single();
 
@@ -317,26 +317,31 @@ export class ResultsService {
     let performanceByBatch: any[] = [];
 
     if (options?.batchId) {
-      const { data: batchResults } = await this.supabaseService.client
-        .from(TABLES.TEST_RESULTS)
-        .select(`
-          percentage,
-          passed,
-          profile:${TABLES.PROFILES}!user_id(id, batch_id)
-        `)
-        .eq('profile.batch_id', options.batchId);
+      // Resolve users in the batch via batch_students (profiles has no batch_id)
+      const { data: memberships } = await this.supabaseService.client
+        .from(TABLES.BATCH_STUDENTS)
+        .select('user_id')
+        .eq('batch_id', options.batchId);
 
-      if (batchResults && batchResults.length > 0) {
-        const batchPercentages = batchResults.map((r: any) => r.percentage);
-        const batchAvg = batchPercentages.reduce((a: number, b: number) => a + b, 0) / batchPercentages.length;
-        const batchPassed = batchResults.filter((r: any) => r.passed).length;
+      const userIds = (memberships ?? []).map((m: any) => m.user_id);
+      if (userIds.length > 0) {
+        const { data: batchResults } = await this.supabaseService.client
+          .from(TABLES.TEST_RESULTS)
+          .select('percentage, passed')
+          .in('user_id', userIds);
 
-        performanceByBatch = [{
-          batch_id: options.batchId,
-          attempts: batchResults.length,
-          average_percentage: Math.round(batchAvg * 100) / 100,
-          pass_rate: Math.round((batchPassed / batchResults.length) * 10000) / 100,
-        }];
+        if (batchResults && batchResults.length > 0) {
+          const batchPercentages = batchResults.map((r: any) => r.percentage);
+          const batchAvg = batchPercentages.reduce((a: number, b: number) => a + b, 0) / batchPercentages.length;
+          const batchPassed = batchResults.filter((r: any) => r.passed).length;
+
+          performanceByBatch = [{
+            batch_id: options.batchId,
+            attempts: batchResults.length,
+            average_percentage: Math.round(batchAvg * 100) / 100,
+            pass_rate: Math.round((batchPassed / batchResults.length) * 10000) / 100,
+          }];
+        }
       }
     }
 

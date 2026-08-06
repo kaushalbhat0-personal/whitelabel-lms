@@ -11,8 +11,8 @@ const config: Config = {
   coverageDirectory: '../coverage',
   testEnvironment: 'node',
   moduleNameMapper: {
-    '^@lms/shared-types$': '<rootDir>/../../packages/shared-types/src',
-    '^@lms/shared-types/(.*)$': '<rootDir>/../../packages/shared-types/src/$1',
+    '^@lms/shared-types$': '<rootDir>/../../../packages/shared-types/src',
+    '^@lms/shared-types/(.*)$': '<rootDir>/../../../packages/shared-types/src/$1',
   },
 };
 
