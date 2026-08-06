@@ -1,10 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Clock, Play } from 'lucide-react';
-import { getMyVideos } from '@/lib/api/videos';
-import type { StudentVideo } from '@/lib/api/videos';
+import type { Watchable } from './ContinueWatching';
 
 function formatDuration(seconds: number): string {
   if (!isFinite(seconds) || seconds < 0) return '0:00';
@@ -30,33 +28,39 @@ function timeAgo(dateStr: string | null): string {
   return new Date(dateStr).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 }
 
-export function RecentlyWatched() {
-  const [items, setItems] = useState<StudentVideo[]>([]);
-  const [loading, setLoading] = useState(true);
+interface RecentlyItem extends Watchable {
+  progress: Watchable['progress'] & {
+    watchedSeconds?: number;
+    lastWatchedAt?: string | null;
+  };
+}
 
-  useEffect(() => {
-    let cancelled = false;
-    getMyVideos()
-      .then((videos) => {
-        if (cancelled) return;
-        const sorted = [...videos]
-          .filter((v) => v.progress?.watched_seconds > 0)
-          .sort((a, b) => {
-            if (!a.progress?.last_watched_at) return 1;
-            if (!b.progress?.last_watched_at) return -1;
-            return new Date(b.progress.last_watched_at).getTime() - new Date(a.progress.last_watched_at).getTime();
-          })
-          .slice(0, 5);
-        setItems(sorted);
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, []);
+export function RecentlyWatched({ recordings }: { recordings: Watchable[] }) {
+  const items: RecentlyItem[] = [...recordings]
+    .map((v) => ({
+      id: v.id,
+      title: v.title,
+      duration_seconds: v.duration_seconds,
+      durationSeconds: v.durationSeconds,
+      progress: {
+        watched_seconds: v.progress?.watched_seconds,
+        watchedSeconds: v.progress?.watchedSeconds ?? v.progress?.watched_seconds,
+        completed: v.progress?.completed,
+        last_watched_at: v.progress?.last_watched_at,
+        lastWatchedAt: v.progress?.lastWatchedAt ?? v.progress?.last_watched_at,
+      },
+    }))
+    .filter((v) => (v.progress.watched_seconds ?? 0) > 0)
+    .sort((a, b) => {
+      const aw = a.progress.lastWatchedAt;
+      const bw = b.progress.lastWatchedAt;
+      if (!aw) return 1;
+      if (!bw) return -1;
+      return new Date(bw).getTime() - new Date(aw).getTime();
+    })
+    .slice(0, 5);
 
-  if (loading || items.length === 0) return null;
+  if (items.length === 0) return null;
 
   return (
     <section className="mb-8">
@@ -77,11 +81,11 @@ export function RecentlyWatched() {
               </p>
               <div className="mt-0.5 flex items-center gap-2 text-xs text-text-muted">
                 <Clock className="h-3 w-3" />
-                <span>{formatDuration(item.progress.watched_seconds)} watched</span>
-                {item.progress.last_watched_at && (
+                <span>{formatDuration(item.progress.watched_seconds ?? 0)} watched</span>
+                {item.progress.lastWatchedAt && (
                   <>
                     <span>·</span>
-                    <span>{timeAgo(item.progress.last_watched_at)}</span>
+                    <span>{timeAgo(item.progress.lastWatchedAt)}</span>
                   </>
                 )}
               </div>

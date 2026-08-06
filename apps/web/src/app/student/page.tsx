@@ -17,7 +17,6 @@ export default async function StudentDashboardPage() {
   let results: unknown[] = [];
   let paymentPlans: PaymentPlan[] = [];
 
-  console.log('[DEBUG_DASHBOARD] Calling getMyVideos() — endpoint: GET /recordings/my');
   const [coursesResult, sessionsResult, recordingsResult, resultsResult, plansResult] = await Promise.all([
     getMyCourses().catch(() => [] as StudentCourse[]),
     getMySessions().catch(() => ({ upcoming: [], past: [] }) as { upcoming: LiveSession[]; past: (LiveSession & { attendanceStatus?: string })[] }),
@@ -41,8 +40,8 @@ export default async function StudentDashboardPage() {
 
   return (
     <>
-      <ContinueWatching />
-      <RecentlyWatched />
+      <ContinueWatching recordings={recordings} />
+      <RecentlyWatched recordings={recordings} />
       <DashboardClient
         name="Trader"
         nextClass={nextClass}

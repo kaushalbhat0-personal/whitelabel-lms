@@ -174,8 +174,11 @@ export async function getTopics() {
 
 // ─── Attempts ────────────────────────────────────────────────
 export interface StartAttemptResponse {
-  attempt: any;
+  attempt?: any;
   questions: any[];
+  test?: any;
+  test_answers?: any[];
+  [key: string]: any;
 }
 
 export interface AttemptAnswer {

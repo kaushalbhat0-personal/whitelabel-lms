@@ -11,7 +11,8 @@ interface Props {
 }
 
 export function ProfileClient({ email, batchNames }: Props) {
-  const { logout } = useSession();
+  const { logout, user } = useSession();
+  const displayEmail = email || user?.email || '';
 
   return (
     <div className="space-y-4">
@@ -19,7 +20,7 @@ export function ProfileClient({ email, batchNames }: Props) {
         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-brand-navy/10">
           <User className="h-8 w-8 text-brand-navy" />
         </div>
-        <p className="mt-3 text-sm font-medium text-text-primary">{email}</p>
+        <p className="mt-3 text-sm font-medium text-text-primary">{displayEmail || 'Student'}</p>
         <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-surface-muted px-2.5 py-0.5 text-xs font-medium text-text-secondary">
           <Shield className="h-3 w-3" />
           Student

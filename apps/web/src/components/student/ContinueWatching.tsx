@@ -1,10 +1,21 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Play, Clock } from 'lucide-react';
-import { getMyVideos } from '@/lib/api/videos';
-import type { StudentVideo } from '@/lib/api/videos';
+
+export interface Watchable {
+  id: string;
+  title: string;
+  duration_seconds?: number;
+  durationSeconds?: number;
+  progress: {
+    watched_seconds?: number;
+    watchedSeconds?: number;
+    completed?: boolean;
+    last_watched_at?: string | null;
+    lastWatchedAt?: string | null;
+  };
+}
 
 function formatDuration(seconds: number): string {
   if (!isFinite(seconds) || seconds < 0) return '0:00';
@@ -26,51 +37,28 @@ interface ContinueWatchingItem {
   lastWatchedAt: string | null;
 }
 
-export function ContinueWatching() {
-  const [items, setItems] = useState<ContinueWatchingItem[]>([]);
-  const [loading, setLoading] = useState(true);
+export function ContinueWatching({ recordings }: { recordings: Watchable[] }) {
+  const items: ContinueWatchingItem[] = recordings
+    .map((v) => ({
+      id: v.id,
+      title: v.title,
+      watchedSeconds: v.progress?.watched_seconds ?? v.progress?.watchedSeconds ?? 0,
+      totalDuration: v.duration_seconds ?? v.durationSeconds ?? 0,
+      completed: v.progress?.completed ?? false,
+      lastWatchedAt: v.progress?.last_watched_at ?? v.progress?.lastWatchedAt ?? null,
+    }))
+    .filter((v) => v.watchedSeconds > 30 && !v.completed)
+    .sort((a, b) => {
+      if (!a.lastWatchedAt) return 1;
+      if (!b.lastWatchedAt) return -1;
+      return (
+        new Date(b.lastWatchedAt).getTime() -
+        new Date(a.lastWatchedAt).getTime()
+      );
+    })
+    .slice(0, 5);
 
-  useEffect(() => {
-    let cancelled = false;
-    getMyVideos()
-      .then((videos: any[]) => {
-        if (cancelled) return;
-        const inProgress = videos
-          .filter(
-            (v) =>
-              v.progress &&
-              v.progress.watched_seconds > 30 &&
-              !v.progress.completed,
-          )
-          .map((v) => ({
-            id: v.id,
-            title: v.title,
-            watchedSeconds: v.progress.watched_seconds,
-            totalDuration: v.duration_seconds || 0,
-            completed: v.progress.completed || false,
-            lastWatchedAt: v.progress.last_watched_at || null,
-          }))
-          .sort((a, b) => {
-            if (!a.lastWatchedAt) return 1;
-            if (!b.lastWatchedAt) return -1;
-            return (
-              new Date(b.lastWatchedAt).getTime() -
-              new Date(a.lastWatchedAt).getTime()
-            );
-          })
-          .slice(0, 5);
-        setItems(inProgress);
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (loading || items.length === 0) return null;
+  if (items.length === 0) return null;
 
   return (
     <section className="mb-8">

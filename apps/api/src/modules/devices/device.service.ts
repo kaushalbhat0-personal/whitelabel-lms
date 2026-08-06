@@ -20,20 +20,20 @@ export interface DeviceInfo {
 
 export interface DeviceRow {
   id: string;
-  user_id: string;
-  fingerprint_hash: string;
+  userId: string;
+  fingerprintHash: string;
   browser: string | null;
   os: string | null;
-  screen_resolution: string | null;
+  screenResolution: string | null;
   timezone: string | null;
   language: string | null;
-  ip_address: string | null;
-  last_ip_address: string | null;
-  user_agent: string | null;
-  is_trusted: boolean;
+  ipAddress: string | null;
+  lastIpAddress: string | null;
+  userAgent: string | null;
+  isTrusted: boolean;
   name: string | null;
-  first_seen_at: string;
-  last_seen_at: string;
+  firstSeenAt: string;
+  lastSeenAt: string;
 }
 
 @Injectable()
@@ -214,20 +214,20 @@ export class DeviceService {
   private toCamelCase(row: any): DeviceRow {
     return {
       id: row.id,
-      user_id: row.user_id,
-      fingerprint_hash: row.fingerprint_hash,
+      userId: row.user_id,
+      fingerprintHash: row.fingerprint_hash,
       browser: row.browser,
       os: row.os,
-      screen_resolution: row.screen_resolution,
+      screenResolution: row.screen_resolution,
       timezone: row.timezone,
       language: row.language,
-      ip_address: row.ip_address,
-      last_ip_address: row.last_ip_address,
-      user_agent: row.user_agent,
-      is_trusted: row.is_trusted,
+      ipAddress: row.ip_address,
+      lastIpAddress: row.last_ip_address,
+      userAgent: row.user_agent,
+      isTrusted: row.is_trusted,
       name: row.name,
-      first_seen_at: row.first_seen_at,
-      last_seen_at: row.last_seen_at,
+      firstSeenAt: row.first_seen_at,
+      lastSeenAt: row.last_seen_at,
     };
   }
 }

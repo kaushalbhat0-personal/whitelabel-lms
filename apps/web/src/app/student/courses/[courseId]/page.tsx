@@ -52,6 +52,10 @@ export default async function StudentCourseDetailPage({ params }: Props) {
       batchIds.includes(br.batchId),
     );
 
+    const continueRecordings = recordingsForCourse.flatMap((br) =>
+      br.sections.flatMap((s) => s.recordings),
+    );
+
     return (
       <div>
         <PageHeader title={course.name} showBack />
@@ -74,7 +78,7 @@ export default async function StudentCourseDetailPage({ params }: Props) {
             )}
           </div>
 
-          <ContinueWatching />
+          <ContinueWatching recordings={continueRecordings as any} />
 
           <CourseProgress batchIds={batchIds} />
 

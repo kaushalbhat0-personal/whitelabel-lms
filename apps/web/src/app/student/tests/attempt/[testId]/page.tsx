@@ -275,18 +275,19 @@ export default function TestAttemptPage() {
     async function init() {
       try {
         const res = await startAttempt(testId);
-        const att = res.attempt;
-        const qs = res.questions ?? [];
+        // API returns the attempt flat with `questions` (question content) and `test`.
+        const att = res.attempt ?? res;
+        const qs = res.questions ?? att.questions ?? [];
 
         setAttemptId(att.id);
-        setTestTitle(att.test?.title ?? att.testTitle ?? 'Test');
+        setTestTitle(att.test?.title ?? att.testTitle ?? res.test?.title ?? 'Test');
         setQuestions(qs);
-        setDurationMinutes(att.test?.duration_minutes ?? att.durationMinutes ?? null);
+        setDurationMinutes(att.test?.duration_minutes ?? att.durationMinutes ?? res.test?.duration_minutes ?? null);
 
         if (att.timeRemainingSeconds != null) {
           setTimeRemaining(att.timeRemainingSeconds);
-        } else if (att.test?.duration_minutes) {
-          setTimeRemaining(att.test.duration_minutes * 60);
+        } else if (att.test?.duration_minutes ?? res.test?.duration_minutes) {
+          setTimeRemaining((att.test?.duration_minutes ?? res.test?.duration_minutes) * 60);
         }
 
         if (att.currentQuestionIndex != null) {
@@ -295,10 +296,10 @@ export default function TestAttemptPage() {
 
         // Load existing answers
         const savedAnswers: Record<string, any> = {};
-        const ansArr = att.answers ?? [];
+        const ansArr = att.answers ?? att.test_answers ?? res.test_answers ?? [];
         if (Array.isArray(ansArr)) {
           for (const a of ansArr) {
-            savedAnswers[a.questionId ?? a.question_id] = a.answer;
+            savedAnswers[a.questionId ?? a.question_id] = a.answer ?? a.answer ?? '';
           }
         }
         setAnswers(savedAnswers);

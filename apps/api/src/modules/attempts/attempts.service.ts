@@ -17,7 +17,8 @@ const TEST_FOR_ATTEMPT_SELECT = `
   test_batches!inner(batch_id),
   test_question_bank(
     *,
-    question_bank(id, question_text, question_type, options, correct_answer, explanation, difficulty, topic_id)
+    question_bank(id, question_text, question_type, options, correct_answer, explanation, difficulty, topic_id, image_url),
+    test_sections(id, title)
   )
 `;
 
@@ -382,13 +383,25 @@ export class AttemptsService {
 
     const { data: test } = await this.supabaseService.client
       .from(TABLES.TESTS)
-      .select('*')
+      .select(TEST_FOR_ATTEMPT_SELECT)
       .eq('id', attempt.test_id)
       .single();
 
     return {
       ...attempt,
       test: test ?? null,
+      questions: (test?.test_question_bank ?? []).map((q: any) => ({
+        id: q.question_bank_id,
+        question_text: q.question_bank?.question_text,
+        question_type: q.question_bank?.question_type,
+        options: q.question_bank?.options,
+        correct_answer: q.question_bank?.correct_answer,
+        marks: q.marks,
+        negative_marks: q.negative_mark,
+        sort_order: q.sort_order,
+        section_title: q.section?.title,
+        image_url: q.question_bank?.image_url,
+      })),
       test_answers: this.maybeShuffleQuestions({ ...attempt, test_answers: answers ?? [] }),
     };
   }

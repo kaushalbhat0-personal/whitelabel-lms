@@ -108,23 +108,30 @@ export default function TestResultPage() {
     async function fetch() {
       try {
         const raw: any = await getStudentResult(attemptId);
+        const answers: any[] = Array.isArray(raw.answers) ? raw.answers : [];
+        const totalMarks = raw.totalMarks ?? raw.total_marks ?? 0;
+        const score = raw.score ?? raw.marksAwarded ?? raw.obtained_marks ?? 0;
+        const correctAnswers = raw.correctAnswers ?? raw.correct_answers ?? answers.filter((a) => a.is_correct === true).length;
+        // API returns accuracy as a fraction (0..1); normalize to percent.
+        const accuracyRaw = raw.accuracy ?? (answers.length > 0 ? correctAnswers / answers.length : 0);
+        const accuracy = accuracyRaw > 1 ? accuracyRaw : Math.round(accuracyRaw * 100);
         // Normalize API response
         const r: ResultData = {
           id: raw.id,
           testTitle: raw.testTitle ?? raw.test?.title ?? raw.title ?? 'Test',
-          score: raw.score ?? raw.marksAwarded ?? 0,
-          totalMarks: raw.totalMarks ?? raw.total_marks ?? 0,
+          score,
+          totalMarks,
           passingMarks: raw.passingMarks ?? raw.passing_marks ?? 0,
-          percentage: raw.percentage ?? (raw.totalMarks > 0 ? Math.round(((raw.score ?? raw.marksAwarded ?? 0) / raw.totalMarks) * 100) : 0),
+          percentage: raw.percentage ?? (totalMarks > 0 ? Math.round((score / totalMarks) * 100) : 0),
           passed: raw.passed ?? raw.isPassed ?? raw.status === 'passed',
           rank: raw.rank ?? 0,
-          accuracy: raw.accuracy ?? (raw.totalQuestions > 0 ? Math.round((raw.correctAnswers / raw.totalQuestions) * 100) : 0),
-          totalQuestions: raw.totalQuestions ?? raw.total_questions ?? 0,
-          correctAnswers: raw.correctAnswers ?? raw.correct_answers ?? 0,
-          incorrectAnswers: raw.incorrectAnswers ?? raw.incorrect_answers ?? 0,
-          unansweredCount: raw.unansweredCount ?? raw.unanswered_count ?? 0,
-          timeTakenSeconds: raw.timeTakenSeconds ?? raw.time_taken_seconds ?? 0,
-          submittedAt: raw.submittedAt ?? raw.submitted_at ?? raw.created_at ?? new Date().toISOString(),
+          accuracy,
+          totalQuestions: raw.totalQuestions ?? raw.total_questions ?? answers.length,
+          correctAnswers,
+          incorrectAnswers: raw.incorrectAnswers ?? raw.incorrect_answers ?? answers.filter((a) => a.is_correct === false).length,
+          unansweredCount: raw.unansweredCount ?? raw.unanswered_count ?? answers.filter((a) => a.is_correct == null && a.marks_awarded == null).length,
+          timeTakenSeconds: raw.timeTakenSeconds ?? raw.time_taken_seconds ?? raw.duration_seconds ?? 0,
+          submittedAt: raw.submittedAt ?? raw.submitted_at ?? raw.published_at ?? raw.created_at ?? new Date().toISOString(),
           questions: Array.isArray(raw.questions ?? raw.questionReview ?? [])
             ? (raw.questions ?? raw.questionReview ?? []).map((q: any) => ({
                 id: q.id,
@@ -132,14 +139,26 @@ export default function TestResultPage() {
                 question_type: q.question_type,
                 options: q.options,
                 correct_answer: q.correct_answer,
-                student_answer: q.student_answer,
+                student_answer: q.student_answer ?? q.answer,
                 marks_awarded: q.marks_awarded ?? q.marksAwarded ?? 0,
-                marks: q.marks ?? q.totalMarks ?? 0,
+                marks: q.marks ?? q.totalMarks ?? q.marks_possible ?? 0,
                 is_correct: q.is_correct ?? q.isCorrect ?? false,
                 teacher_feedback: q.teacher_feedback ?? q.teacherFeedback ?? null,
                 image_url: q.image_url,
               }))
-            : [],
+            : answers.map((a: any) => ({
+                id: a.id,
+                question_text: a.question_text ?? null,
+                question_type: a.question_type,
+                options: null,
+                correct_answer: a.correct_answer ?? null,
+                student_answer: a.answer,
+                marks_awarded: a.marks_awarded ?? 0,
+                marks: a.marks_possible ?? 0,
+                is_correct: a.is_correct === true,
+                teacher_feedback: null,
+                image_url: null,
+              })),
           topicBreakdown: Array.isArray(raw.topicBreakdown ?? raw.topic_breakdown ?? [])
             ? (raw.topicBreakdown ?? raw.topic_breakdown ?? []).map((t: any) => ({
                 topicName: t.topicName ?? t.topic_name ?? t.name ?? 'Unknown',
