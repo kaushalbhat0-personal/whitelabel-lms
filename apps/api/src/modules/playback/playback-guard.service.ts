@@ -8,7 +8,7 @@ import * as crypto from 'crypto';
 import { RedisService } from '@liaoliaots/nestjs-redis';
 import Redis from 'ioredis';
 import { SupabaseService } from '../../common/services/supabase.service';
-import { MuxService } from '../mux/mux.service';
+import { RecordingProviderResolver } from '../video-provider/recording-provider.resolver';
 import { TABLES } from '../../common/constants/tables.constant';
 import { REDIS_KEYS, REDIS_TTL } from '../../common/constants/redis-keys.constant';
 
@@ -16,6 +16,16 @@ const SEEK_THRESHOLD = 15;
 const URL_GEN_THRESHOLD = 8;
 const EVENT_THRESHOLD = 60;
 const WINDOW_SECONDS = 60;
+
+export interface PlaybackTarget {
+  /**
+   * Provider playback identifier (storage slot historically named
+   * mux_playback_id; interpretation keyed by `provider`).
+   */
+  playbackId: string;
+  /** Owning provider — null/undefined/'mux' = Mux (pre-migration rows). */
+  provider?: string | null;
+}
 
 export interface PlaybackTokenPayload {
   userId: string;
@@ -33,7 +43,7 @@ export class PlaybackGuardService {
   constructor(
     redisService: RedisService,
     private readonly supabaseService: SupabaseService,
-    private readonly muxService: MuxService,
+    private readonly providerResolver: RecordingProviderResolver,
   ) {
     this.redis = redisService.getOrThrow();
   }
@@ -69,12 +79,11 @@ export class PlaybackGuardService {
 
   async getSignedUrl(
     token: string,
-    muxPlaybackId: string,
+    target: PlaybackTarget,
     expectedUserId: string,
     expectedRecordingId: string,
     deviceId?: string,
     ip?: string,
-    thumbnailDuration?: number,
   ): Promise<{ url: string; thumbnail: string; sessionId: string; expiresAt: string }> {
     const revoked = await this.redis.get(REDIS_KEYS.playbackRevoked(expectedUserId));
     if (revoked) {
@@ -116,10 +125,12 @@ export class PlaybackGuardService {
       JSON.stringify(payload),
     );
 
-    const [{ url, expiresAt }, { url: thumbnail }] = await Promise.all([
-      this.muxService.getSignedPlaybackUrl(muxPlaybackId, payload.sessionId),
-      this.muxService.getSignedThumbnailUrl(muxPlaybackId, payload.sessionId),
-    ]);
+    // Provider selection happens here — strictly BELOW the authorization
+    // checks above. The provider only mints URLs; it never grants access.
+    // A Bunny row whose provider is unavailable fails observably (503).
+    const urls = await this.providerResolver
+      .providerFor(target)
+      .getPlaybackUrls(target.playbackId, { sessionId: payload.sessionId });
 
     await this.redis.setex(
       REDIS_KEYS.playbackSession(payload.sessionId),
@@ -146,13 +157,13 @@ export class PlaybackGuardService {
           recording_id: expectedRecordingId,
           session_id: payload.sessionId,
           ip_address: ip ?? null,
-          url_expires_at: expiresAt,
+          url_expires_at: urls.expiresAt,
         }),
     ]).catch((err) => {
       this.logger.error(`Failed to log video access: ${err.message}`);
     });
 
-    return { url, thumbnail, sessionId: payload.sessionId, expiresAt };
+    return { url: urls.url, thumbnail: urls.thumbnailUrl, sessionId: payload.sessionId, expiresAt: urls.expiresAt };
   }
 
   async revokeUserTokens(userId: string): Promise<void> {

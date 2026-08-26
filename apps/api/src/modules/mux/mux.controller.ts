@@ -135,14 +135,18 @@ export class MuxController {
       }
 
       // ── video.asset.errored ────────────────────────────────
-      // Mux failed to process the asset — update status to 'error'.
+      // Mux failed to process the asset — update status to 'failed'.
+      // Canonical status mapping (Phase 7B): provider error → 'failed'
+      // (the DB CHECK constraint only allows processing|ready|failed; the
+      // previous 'error' value silently violated it and left rows stuck
+      // in 'processing').
       case 'video.asset.errored': {
         const failedAssetId = event.object?.id;
         if (failedAssetId) {
           try {
             const { error } = await this.supabaseService.client
               .from(TABLES.RECORDINGS)
-              .update({ status: 'error' })
+              .update({ status: 'failed' })
               .eq('mux_asset_id', failedAssetId);
 
             if (error) {

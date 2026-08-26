@@ -3,10 +3,26 @@ import { ForbiddenException, NotFoundException, BadRequestException } from '@nes
 import { RecordingsService } from './recordings.service';
 import { SupabaseService } from '../../common/services/supabase.service';
 import { RedisCacheService } from '../../common/services/redis-cache.service';
-import { MuxService } from '../mux/mux.service';
 import { PlaybackGuardService } from '../playback/playback-guard.service';
+import { RecordingProviderResolver } from '../video-provider/recording-provider.resolver';
 import { ObservabilityService } from '../observability/observability.service';
 import { RedisService } from '@liaoliaots/nestjs-redis';
+
+/** Fake VideoProvider standing in for whatever the resolver returns. */
+const fakeProvider = {
+  name: 'mux',
+  createDirectUpload: jest.fn(),
+  createAssetFromSource: jest.fn(),
+  getAssetStatus: jest.fn(),
+  getPlaybackUrls: jest.fn(),
+  deleteAsset: jest.fn().mockResolvedValue(undefined),
+};
+
+const resolverMock = {
+  resolveUploadProvider: jest.fn().mockReturnValue('mux'),
+  resolve: jest.fn().mockReturnValue(fakeProvider),
+  providerFor: jest.fn().mockReturnValue(fakeProvider),
+};
 
 function mockResolvedQuery(result: any) {
   return {
@@ -57,7 +73,6 @@ function mockChain(fromResult?: any) {
 describe('RecordingsService', () => {
   let service: RecordingsService;
   let supabase: any;
-  let muxService: any;
   let playbackGuard: any;
   let chain: any;
 
@@ -99,13 +114,8 @@ describe('RecordingsService', () => {
           },
         },
         {
-          provide: MuxService,
-          useValue: {
-            createUploadUrl: jest.fn(),
-            deleteAsset: jest.fn().mockResolvedValue(undefined),
-            getSignedPlaybackUrl: jest.fn(),
-            getSignedThumbnailUrl: jest.fn(),
-          },
+          provide: RecordingProviderResolver,
+          useValue: resolverMock,
         },
         {
           provide: PlaybackGuardService,
@@ -115,6 +125,7 @@ describe('RecordingsService', () => {
               sessionId: 'mock-session',
               expiresInSeconds: 14400,
             }),
+            getSignedUrl: jest.fn(),
           },
         },
         {
@@ -142,9 +153,9 @@ describe('RecordingsService', () => {
 
     service = module.get<RecordingsService>(RecordingsService);
     supabase = module.get(SupabaseService);
-    muxService = module.get(MuxService);
     playbackGuard = module.get(PlaybackGuardService);
     jest.clearAllMocks();
+    fakeProvider.deleteAsset.mockResolvedValue(undefined);
   });
 
   describe('authorizePlayback - student assigned to batch', () => {
@@ -581,25 +592,28 @@ describe('RecordingsService', () => {
       return { recordingId, muxAssetId };
     }
 
-    it('should delete curriculum + batch links, clean Mux, then delete recording', async () => {
+    it('should delete curriculum + batch links, clean provider asset, then delete recording', async () => {
       const { recordingId } = setupRecordingMuxMock(5);
 
       const result = await service.deleteRecording(recordingId);
 
       expect(result.deleted).toBe(true);
       expect(result.cleanupPending).toBeUndefined();
-      expect(muxService.deleteAsset).toHaveBeenCalledWith('mux-1');
+      expect(fakeProvider.deleteAsset).toHaveBeenCalledWith('mux-1');
+      expect(resolverMock.providerFor).toHaveBeenCalledWith(
+        expect.objectContaining({ mux_asset_id: 'mux-1' }),
+      );
     });
 
-    it('should return cleanupPending=true when Mux deletion fails', async () => {
+    it('should return cleanupPending=true when provider deletion fails', async () => {
       const { recordingId } = setupRecordingMuxMock(4);
-      jest.spyOn(muxService, 'deleteAsset').mockRejectedValue(new Error('Mux API timeout'));
+      fakeProvider.deleteAsset.mockRejectedValueOnce(new Error('Mux API timeout'));
 
       const result = await service.deleteRecording(recordingId);
 
       expect(result.deleted).toBe(true);
       expect(result.cleanupPending).toBe(true);
-      expect(muxService.deleteAsset).toHaveBeenCalledWith('mux-1');
+      expect(fakeProvider.deleteAsset).toHaveBeenCalledWith('mux-1');
     });
 
     it('should skip Mux deletion when recording has no mux_asset_id', async () => {
@@ -637,7 +651,7 @@ describe('RecordingsService', () => {
       const result = await service.deleteRecording(recordingId);
 
       expect(result.deleted).toBe(true);
-      expect(muxService.deleteAsset).not.toHaveBeenCalled();
+      expect(fakeProvider.deleteAsset).not.toHaveBeenCalled();
     });
   });
 
@@ -655,7 +669,8 @@ describe('RecordingsService', () => {
         return q;
       });
 
-      muxService.createDirectUploadUrl = jest.fn().mockResolvedValue({
+      resolverMock.resolveUploadProvider.mockReturnValueOnce('mux');
+      fakeProvider.createDirectUpload.mockResolvedValueOnce({
         uploadUrl: 'https://example.com/upload',
         uploadId: 'upload-1',
       });
@@ -666,6 +681,67 @@ describe('RecordingsService', () => {
 
       expect(result.uploadUrl).toBe('https://example.com/upload');
       expect(result.recording).toEqual(mockRecording);
+      // Draft flow has no batch context — must resolve through the centralized
+      // resolver with an empty batch set (audit A-3).
+      expect(resolverMock.resolveUploadProvider).toHaveBeenCalledWith([]);
+      expect(fakeProvider.createDirectUpload).toHaveBeenCalledWith({ title: 'Test Upload' });
+    });
+  });
+
+  // ── provider routing (Phase 7B) ───────────────────────────
+
+  describe('provider routing', () => {
+    it('createRecordingWithUpload resolves the upload provider from dto.batchIds via the resolver', async () => {
+      const batchIds = ['550e8400-e29b-41d4-a716-446655440001'];
+      fakeProvider.createDirectUpload.mockRejectedValueOnce(new Error('provider down'));
+
+      await expect(
+        service.createRecordingWithUpload({ title: 'X', batchIds } as any),
+      ).rejects.toThrow('provider down');
+
+      expect(resolverMock.resolveUploadProvider).toHaveBeenCalledWith(batchIds);
+      expect(resolverMock.resolve).toHaveBeenCalledWith('mux');
+      expect(fakeProvider.createDirectUpload).toHaveBeenCalledWith({ title: 'X' });
+    });
+
+    it('getPlaybackUrl passes provider + playback id to PlaybackGuard', async () => {
+      let callIndex = 0;
+      chain.from.mockImplementation(() => {
+        const q = mockChain(null);
+        const idx = callIndex++;
+        if (idx === 0) {
+          q.single.mockResolvedValueOnce({ data: { id: 'rec-1', status: 'ready' }, error: null });
+        } else if (idx === 1) {
+          // batch_students (awaited on .eq)
+          q.eq.mockResolvedValue({ data: [{ batch_id: 'batch-1' }], error: null });
+        } else if (idx === 2) {
+          // recording_batches intersection
+          q.eq.mockReturnValue({
+            in: jest.fn().mockResolvedValue({ data: [{ batch_id: 'batch-1' }], error: null }),
+          });
+        } else if (idx === 3) {
+          q.single.mockResolvedValueOnce({
+            data: { provider: 'mux', mux_playback_id: 'pb-1' },
+            error: null,
+          });
+        }
+        return q;
+      });
+
+      (playbackGuard.getSignedUrl as jest.Mock).mockResolvedValueOnce({
+        url: 'u', thumbnail: 't', sessionId: 's', expiresAt: 'e',
+      });
+
+      await service.getPlaybackUrl('rec-1', 'user-1', 'tok');
+
+      expect(playbackGuard.getSignedUrl).toHaveBeenCalledWith(
+        'tok',
+        { playbackId: 'pb-1', provider: 'mux' },
+        'user-1',
+        'rec-1',
+        undefined,
+        undefined,
+      );
     });
   });
 

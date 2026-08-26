@@ -33,6 +33,7 @@ import { EmailModule } from './modules/email/email.module';
 import { TestsModule } from './modules/tests/tests.module';
 import { ZoomModule } from './modules/zoom/zoom.module';
 import { MuxModule } from './modules/mux/mux.module';
+import { VideoProviderModule } from './modules/video-provider/video-provider.module';
 import { BulkUploadModule } from './modules/bulk-upload/bulk-upload.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
@@ -126,6 +127,7 @@ import { RecordingCleanupJob } from './jobs/recording-cleanup.job';
     TestsModule,
     ZoomModule,
     MuxModule,
+    VideoProviderModule,
     BulkUploadModule,
     PaymentsModule,
     OutboxModule,

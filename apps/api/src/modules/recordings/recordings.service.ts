@@ -9,8 +9,8 @@ import * as crypto from 'crypto';
 import { RedisService } from '@liaoliaots/nestjs-redis';
 import Redis from 'ioredis';
 import { SupabaseService } from '../../common/services/supabase.service';
-import { MuxService } from '../mux/mux.service';
 import { PlaybackGuardService } from '../playback/playback-guard.service';
+import { RecordingProviderResolver } from '../video-provider/recording-provider.resolver';
 import { ObservabilityService } from '../observability/observability.service';
 import { RedisCacheService } from '../../common/services/redis-cache.service';
 import { TABLES } from '../../common/constants/tables.constant';
@@ -31,10 +31,10 @@ export class RecordingsService {
 
   constructor(
     private readonly supabaseService: SupabaseService,
-    private readonly muxService: MuxService,
     private readonly playbackGuard: PlaybackGuardService,
     private readonly observabilityService: ObservabilityService,
     private readonly redisCache: RedisCacheService,
+    private readonly providerResolver: RecordingProviderResolver,
     redisService: RedisService,
   ) {
     this.redis = redisService.getOrThrow();
@@ -230,18 +230,24 @@ export class RecordingsService {
   }
 
   /**
-   * Create a recording with a Mux upload URL.
-   * Recording starts in 'processing' status; Mux webhook marks it 'ready'.
-   * Batch linking and curriculum creation are wrapped in a Transaction.
+   * Create a recording with a provider-routed upload URL.
+   * Recording starts in 'processing' status; the owning provider's webhook
+   * marks it 'ready'. Batch linking and curriculum creation are wrapped in a
+   * Transaction.
+   *
+   * Provider selection is centralized: resolveUploadProvider(batchIds) routes
+   * Bunny-listed batches to Bunny (only when explicitly enabled) and everything
+   * else — including any legacy/mixed batch — to Mux (audit A-1/A-2).
+   *
    * @param dto - Title, description, batch IDs, curriculum metadata.
-   * @returns The recording row and the Mux upload URL.
+   * @returns The recording row and the upload URL.
    * @throws BadRequestException if recording creation or transaction steps fail.
    */
   async createRecordingWithUpload(dto: CreateRecordingDto) {
-    const { uploadUrl, uploadId } = await this.muxService.createUploadUrl(
-      dto.title,
-      '',
-    );
+    const providerName = this.providerResolver.resolveUploadProvider(dto.batchIds);
+    const { uploadUrl, uploadId } = await this.providerResolver
+      .resolve(providerName)
+      .createDirectUpload({ title: dto.title });
 
     // ── Step 1: Create the recording row and capture its UUID ──
     const { data: recording, error: recordingError } = await this.supabaseService.client
@@ -249,7 +255,8 @@ export class RecordingsService {
       .insert({
         title: dto.title,
         description: dto.description ?? null,
-        mux_upload_id: uploadId,
+        provider: providerName,
+        mux_upload_id: uploadId, // provider-identifier storage slot (keyed by `provider`)
         status: 'processing',
       })
       .select()
@@ -307,23 +314,30 @@ export class RecordingsService {
     };
   }
 
-  // ── Mux Upload URL ────────────────────────────────────────
+  // ── Upload URL ────────────────────────────────────────────
 
   /**
-   * Create a direct Mux upload URL for the frontend to PUT a video file.
+   * Create a direct provider upload URL for the frontend to PUT a video file.
    * The recording starts in 'processing' status.
+   *
+   * Draft flow has no batch context (audit A-3) → resolves to the default
+   * provider ('mux') until Bunny is explicitly enabled for unlisted flows.
    * @param dto - Title for the recording/upload.
-   * @returns The Mux upload URL and the created recording row.
+   * @returns The upload URL and the created recording row.
    * @throws BadRequestException if recording creation fails.
    */
   async requestUploadUrl(dto: RequestUploadDto) {
-    const { uploadUrl, uploadId } = await this.muxService.createDirectUploadUrl(dto.title);
+    const providerName = this.providerResolver.resolveUploadProvider([]);
+    const { uploadUrl, uploadId } = await this.providerResolver
+      .resolve(providerName)
+      .createDirectUpload({ title: dto.title });
 
     const { data: recording, error } = await this.supabaseService.client
       .from(TABLES.RECORDINGS)
       .insert({
         title: dto.title,
-        mux_upload_id: uploadId,
+        provider: providerName,
+        mux_upload_id: uploadId, // provider-identifier storage slot (keyed by `provider`)
         status: 'processing',
       })
       .select('id, title, status, created_at')
@@ -718,12 +732,12 @@ export class RecordingsService {
   }
 
   /**
-   * Delete a recording and its associated Mux asset.
+   * Delete a recording and its associated provider asset (Mux or Bunny).
    * Flow:
    *   1. Transaction: delete curriculum → delete batch links → set cleanup_pending=true
-   *   2. Outside transaction: delete Mux asset (never rolls back DB for Mux failure)
-   *   3. On Mux success: hard-delete the recording row
-   *   4. On Mux failure: emit RECORDING_CLEANUP_PENDING event, return cleanupPending:true
+   *   2. Outside transaction: delete provider asset (never rolls back DB for provider failure)
+   *   3. On success: hard-delete the recording row
+   *   4. On failure: emit RECORDING_CLEANUP_PENDING event, return cleanupPending:true
    * @param id - UUID of the recording.
    * @returns Object with deleted:true and optionally cleanupPending:true.
    * @throws NotFoundException if recording does not exist.
@@ -732,7 +746,7 @@ export class RecordingsService {
   async deleteRecording(id: string) {
     const { data: recording } = await this.supabaseService.client
       .from(TABLES.RECORDINGS)
-      .select('id, mux_asset_id, title')
+      .select('id, mux_asset_id, provider, title')
       .eq('id', id)
       .single();
 
@@ -790,13 +804,15 @@ export class RecordingsService {
     const tx = new Transaction();
     await tx.run(steps);
 
-    // ── Outside transaction: delete Mux asset (never roll back DB for this) ──
+    // ── Outside transaction: delete the owning provider's asset ──
+    // (never roll back DB for provider failure). Mux assets of existing
+    // recordings are only ever deleted through this explicit admin path.
     if (recording.mux_asset_id) {
       try {
-        await this.muxService.deleteAsset(recording.mux_asset_id);
+        await this.providerResolver.providerFor(recording).deleteAsset(recording.mux_asset_id);
       } catch (err) {
         this.logger.error(
-          `Failed to delete Mux asset ${recording.mux_asset_id} for recording ${id}: ${(err as Error).message}. Cleanup_pending set to true; a reconciliation job should retry Mux deletion.`,
+          `Failed to delete ${recording.provider ?? 'mux'} asset ${recording.mux_asset_id} for recording ${id}: ${(err as Error).message}. Cleanup_pending set to true; a reconciliation job should retry provider deletion.`,
         );
 
         logEntityEvent(
@@ -814,7 +830,7 @@ export class RecordingsService {
       }
     }
 
-    // ── Mux cleaned (or none): hard-delete the recording row ──
+    // ── Provider cleaned (or none): hard-delete the recording row ──
     const { error: deleteError } = await this.supabaseService.client
       .from(TABLES.RECORDINGS)
       .delete()
@@ -1288,8 +1304,9 @@ export class RecordingsService {
   }
 
   /**
-   * Get a signed Mux playback URL for a student.
-   * Validates access then delegates to PlaybackGuard for the signed URL with JWT.
+   * Get a signed playback URL for a student (provider-transparent).
+   * Validates access, then delegates to PlaybackGuard which resolves the
+   * owning provider from recordings.provider and mints provider-signed URLs.
    * @param recordingId - UUID of the recording.
    * @param userId - UUID of the student.
    * @param token - Authorization token from authorizePlayback step.
@@ -1305,7 +1322,7 @@ export class RecordingsService {
 
     const { data: recording } = await this.supabaseService.client
       .from(TABLES.RECORDINGS)
-      .select('mux_playback_id')
+      .select('provider, mux_playback_id') // mux_playback_id = provider-identifier slot
       .eq('id', recordingId)
       .single();
 
@@ -1315,7 +1332,7 @@ export class RecordingsService {
 
     return this.playbackGuard.getSignedUrl(
       token,
-      recording.mux_playback_id,
+      { playbackId: recording.mux_playback_id, provider: recording.provider },
       userId,
       recordingId,
       deviceId,

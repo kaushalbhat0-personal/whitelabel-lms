@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { SupabaseService } from '../common/services/supabase.service';
-import { MuxService } from '../modules/mux/mux.service';
+import { RecordingProviderResolver } from '../modules/video-provider/recording-provider.resolver';
 import { ObservabilityService } from '../modules/observability/observability.service';
 import { TABLES } from '../common/constants/tables.constant';
 import { logEntityEvent } from '../common/utils/observability-helper';
@@ -24,15 +24,16 @@ export class RecordingCleanupJob {
 
   constructor(
     private readonly supabaseService: SupabaseService,
-    private readonly muxService: MuxService,
+    private readonly providerResolver: RecordingProviderResolver,
     private readonly observabilityService: ObservabilityService,
   ) {}
 
   /**
    * Cron handler: process recordings with cleanup_pending=true every 15 minutes.
    * - Queries up to 20 recordings (oldest first) where cleanup_pending=true and cleanup_failed=false.
-   * - For each recording: attempts Mux deleteAsset, then deletes the DB row on success/404.
-   * - On Mux error: increments retry_count. After 10 retries: marks cleanup_failed=true.
+   * - For each recording: deletes the asset through its OWNING provider
+   *   (recordings.provider), then deletes the DB row on success/not-found.
+   * - On provider error: increments retry_count. After 10 retries: marks cleanup_failed=true.
    * - Returns a CleanupSummary with processed/deleted/retried/failed/skipped/durationMs counters.
    * @returns CleanupSummary — metrics for this run.
    */
@@ -62,7 +63,7 @@ export class RecordingCleanupJob {
     try {
       const { data: recordings, error } = await this.supabaseService.client
         .from(TABLES.RECORDINGS)
-        .select('id, mux_asset_id, title, retry_count')
+        .select('id, mux_asset_id, provider, title, retry_count')
         .eq('cleanup_pending', true)
         .eq('cleanup_failed', false)
         .order('created_at', { ascending: true })
@@ -109,17 +110,21 @@ export class RecordingCleanupJob {
     if (!recording.mux_asset_id) {
       await this.deleteRecordingRow(recording.id);
       summary.deleted++;
-      this.logger.warn(`[Cleanup] Recording ${recording.id} had no mux_asset_id — deleted orphan`);
+      this.logger.warn(`[Cleanup] Recording ${recording.id} had no provider asset id — deleted orphan`);
       return;
     }
 
     try {
-      await this.muxService.deleteAsset(recording.mux_asset_id);
+      // Delete through the OWNING provider — Mux rows delete from Mux,
+      // Bunny rows from Bunny. Never the other way around.
+      await this.providerResolver.providerFor(recording).deleteAsset(recording.mux_asset_id);
       await this.deleteRecordingRow(recording.id);
       summary.deleted++;
-      this.logger.log(`[Cleanup] Deleted recording ${recording.id} (Mux asset ${recording.mux_asset_id})`);
+      this.logger.log(
+        `[Cleanup] Deleted recording ${recording.id} (${recording.provider ?? 'mux'} asset ${recording.mux_asset_id})`,
+      );
     } catch (err: any) {
-      await this.handleMuxError(recording, err, summary);
+      await this.handleProviderError(recording, err, summary);
       return;
     }
 
@@ -137,7 +142,7 @@ export class RecordingCleanupJob {
     }
   }
 
-  private async handleMuxError(recording: any, err: Error, summary: CleanupSummary): Promise<void> {
+  private async handleProviderError(recording: any, err: Error, summary: CleanupSummary): Promise<void> {
     const currentRetries = (recording.retry_count ?? 0) + 1;
 
     if (currentRetries >= RecordingCleanupJob.MAX_RETRIES) {
@@ -154,7 +159,7 @@ export class RecordingCleanupJob {
 
       summary.failed++;
       this.logger.error(
-        `[Cleanup] Retry exhausted for recording ${recording.id} (Mux asset ${recording.mux_asset_id}) after ${currentRetries} attempts. Marked cleanup_failed. Error: ${err.message}`,
+        `[Cleanup] Retry exhausted for recording ${recording.id} (${recording.provider ?? 'mux'} asset ${recording.mux_asset_id}) after ${currentRetries} attempts. Marked cleanup_failed. Error: ${err.message}`,
       );
 
       try {
@@ -188,7 +193,7 @@ export class RecordingCleanupJob {
 
       summary.retried++;
       this.logger.warn(
-        `[Cleanup] Mux delete failed for recording ${recording.id} (Mux asset ${recording.mux_asset_id}), retry ${currentRetries}/${RecordingCleanupJob.MAX_RETRIES}. Error: ${err.message}`,
+        `[Cleanup] ${recording.provider ?? 'mux'} delete failed for recording ${recording.id} (asset ${recording.mux_asset_id}), retry ${currentRetries}/${RecordingCleanupJob.MAX_RETRIES}. Error: ${err.message}`,
       );
     }
   }

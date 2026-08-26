@@ -3,7 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { SupabaseService } from '../common/services/supabase.service';
-import { MuxService } from '../modules/mux/mux.service';
+import { RecordingProviderResolver } from '../modules/video-provider/recording-provider.resolver';
 import { TABLES } from '../common/constants/tables.constant';
 
 @Injectable()
@@ -13,7 +13,7 @@ export class RecordingUploadJob {
 
   constructor(
     private readonly supabaseService: SupabaseService,
-    private readonly muxService: MuxService,
+    private readonly providerResolver: RecordingProviderResolver,
     private readonly configService: ConfigService,
   ) {}
 
@@ -80,18 +80,29 @@ export class RecordingUploadJob {
 
     const downloadUrl = `${job.zoom_download_url}?access_token=${zoomToken}`;
 
-    const muxAssetId = await this.muxService.uploadFromUrl(
-      job.session_id || '',
-      downloadUrl,
-      'Recording',
-    );
+    // Provider routing is decided by the session's target batches
+    // (Batch policy lives in RecordingProviderResolver — never inline here).
+    const { data: sessionBatches } = await this.supabaseService.client
+      .from(TABLES.SESSION_BATCHES)
+      .select('batch_id')
+      .eq('session_id', job.session_id);
+
+    const batchIds = (sessionBatches ?? []).map((sb: any) => sb.batch_id);
+    const providerName = this.providerResolver.resolveUploadProvider(batchIds);
+    const provider = this.providerResolver.resolve(providerName);
+
+    const { assetId } = await provider.createAssetFromSource({
+      sourceUrl: downloadUrl,
+      passthrough: { sessionId: job.session_id || '', title: 'Recording' },
+    });
 
     const { data: recording, error: recordingError } = await this.supabaseService.client
       .from(TABLES.RECORDINGS)
       .insert({
         session_id: job.session_id || null,
         title: 'Recording',
-        mux_asset_id: muxAssetId,
+        provider: providerName,
+        mux_asset_id: assetId, // provider-identifier storage slot (keyed by `provider`)
         status: 'processing',
       })
       .select()
@@ -100,11 +111,6 @@ export class RecordingUploadJob {
     if (recordingError) {
       throw new Error(`Failed to create recording: ${recordingError.message}`);
     }
-
-    const { data: sessionBatches } = await this.supabaseService.client
-      .from(TABLES.SESSION_BATCHES)
-      .select('batch_id')
-      .eq('session_id', job.session_id);
 
     if (sessionBatches && sessionBatches.length > 0) {
       const batchRecords = sessionBatches.map((sb: any) => ({
@@ -125,11 +131,13 @@ export class RecordingUploadJob {
       .from(TABLES.UPLOAD_QUEUE)
       .update({
         status: 'done',
-        mux_asset_id: muxAssetId,
+        mux_asset_id: assetId,
       })
       .eq('id', job.id);
 
-    this.logger.log(`Upload ${job.id} → Recording ${recording.id} (Mux asset ${muxAssetId})`);
+    this.logger.log(
+      `Upload ${job.id} → Recording ${recording.id} (${providerName} asset ${assetId})`,
+    );
   }
 
   private async markJobFailed(jobId: string, errorMessage: string) {

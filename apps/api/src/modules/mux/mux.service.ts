@@ -24,6 +24,7 @@ import * as crypto from 'crypto';
 import { SupabaseService } from '../../common/services/supabase.service';
 import { RedisCacheService } from '../../common/services/redis-cache.service';
 import { TABLES } from '../../common/constants/tables.constant';
+import { toCanonicalStatus } from '../video-provider/video-provider.types';
 
 @Injectable()
 export class MuxService {
@@ -203,6 +204,37 @@ export class MuxService {
       await this.redisCache.invalidateRecordingsCache();
       this.logger.log(`Recording ${recording.id}: cache invalidated after asset_ready`);
     }
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  //  getAssetStatus
+  // ──────────────────────────────────────────────────────────────
+
+  /**
+   * Retrieve an asset's lifecycle state from the Mux API.
+   *
+   * Additive Phase 7B accessor (used by MuxProvider.getAssetStatus for webhook
+   * playback-id backfill parity and future reconciliation sweeps). Mapping to the
+   * canonical status vocabulary happens via toCanonicalStatus().
+   */
+  async getAssetStatus(
+    muxAssetId: string,
+  ): Promise<{
+    status: 'processing' | 'ready' | 'failed';
+    durationSeconds?: number;
+    playbackId?: string;
+  }> {
+    const asset = await this.muxClient.video.assets.retrieve(muxAssetId);
+    const playbackId = (asset.playback_ids as any[])?.[0]?.id;
+
+    return {
+      status: toCanonicalStatus((asset as any).status),
+      durationSeconds:
+        typeof (asset as any).duration === 'number'
+          ? Math.round((asset as any).duration)
+          : undefined,
+      playbackId: playbackId ?? undefined,
+    };
   }
 
   // ──────────────────────────────────────────────────────────────

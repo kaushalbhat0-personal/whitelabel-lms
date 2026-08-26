@@ -342,12 +342,16 @@ CREATE INDEX idx_attendance_session ON attendance(session_id);
 CREATE INDEX idx_attendance_user ON attendance(user_id);
 
 -- 2.10 recordings + recording_batches (multi-batch flexibility, unified with old videos)
+-- provider (Phase 7B): which video infrastructure owns the asset — 'mux' | 'bunny'.
+-- mux_* columns are the provider-identifier STORAGE SLOTS keyed by `provider`
+-- (historical names kept for backwards compatibility; rename deferred to Mux retirement).
 CREATE TABLE recordings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   session_id UUID REFERENCES live_sessions(id) ON DELETE SET NULL,
   title TEXT NOT NULL,
   description TEXT,
   topic_id UUID REFERENCES topics(id) ON DELETE SET NULL,
+  provider TEXT NOT NULL DEFAULT 'mux' CHECK (provider IN ('mux', 'bunny')),
   mux_asset_id TEXT,
   mux_playback_id TEXT,
   mux_upload_id TEXT,
