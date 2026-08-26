@@ -15,7 +15,9 @@ export class UpdateRecordingDto {
   topicId?: string | null;
 
   @IsString()
-  @IsIn(['ready', 'error'])
+  // Live DB CHECK allows ONLY these canonical statuses. Writing 'error'
+  // violates the constraint and leaves the row stuck in 'processing' (7B R3).
+  @IsIn(['processing', 'ready', 'failed'])
   @IsOptional()
   status?: string;
 }

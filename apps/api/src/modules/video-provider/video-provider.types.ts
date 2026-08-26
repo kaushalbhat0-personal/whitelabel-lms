@@ -23,6 +23,21 @@ export interface DirectUploadHandle {
   uploadUrl: string;
   /** Provider-side upload identifier stored on the recording row. */
   uploadId: string;
+  /**
+   * Upload protocol the browser must speak for THIS handle.
+   * Absent/'plain-put' = single XHR PUT (Mux).
+   * 'tus' = resumable TUS protocol (Bunny Stream — its PUT endpoint cannot be
+   * exposed to browsers because it authenticates with the secret AccessKey
+   * header; Bunny's verified presigned mechanism is TUS + server-signed
+   * SHA256 credentials in uploadHeaders).
+   */
+  uploadKind?: 'tus';
+  /**
+   * Per-upload credentials the client MUST send on every TUS request
+   * (AuthorizationSignature / AuthorizationExpire / LibraryId / VideoId).
+   * Derived, video-scoped and time-limited — never the library API key itself.
+   */
+  uploadHeaders?: Record<string, string>;
 }
 
 export interface CreateAssetFromSourceOptions {

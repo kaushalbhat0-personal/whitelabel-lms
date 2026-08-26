@@ -1,3 +1,4 @@
+import { ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { RecordingProviderResolver } from './recording-provider.resolver';
 import { MuxProvider } from './providers/mux.provider';
@@ -14,70 +15,74 @@ function buildResolver(env: Record<string, string>) {
   };
 }
 
+const FULL_BUNNY_ENV: Record<string, string> = {
+  BUNNY_ENABLED: 'true',
+  BUNNY_LIBRARY_ID: '133',
+  BUNNY_API_KEY: 'key',
+  BUNNY_CDN_HOSTNAME: 'vz-x.b-cdn.net',
+};
+
 describe('RecordingProviderResolver', () => {
   const B1 = '11111111-1111-4111-8111-111111111111';
   const B2 = '22222222-2222-4222-8222-222222222222';
 
-  describe('resolveUploadProvider — Batch routing policy', () => {
-    it('routes to mux when Bunny is disabled (default production state)', () => {
+  describe('resolveUploadProvider — bunny-first production policy (Phase 7E)', () => {
+    it('routes EVERY new upload to bunny when Bunny is enabled+configured, regardless of batch', () => {
+      const { resolver } = buildResolver(FULL_BUNNY_ENV);
+      expect(resolver.resolveUploadProvider([B2])).toBe('bunny');
+      expect(resolver.resolveUploadProvider([B1, B2])).toBe('bunny'); // mixed selection is fine now
+      expect(resolver.resolveUploadProvider([])).toBe('bunny'); // draft flow too
+      expect(resolver.resolveUploadProvider()).toBe('bunny');
+    });
+
+    it('is the DEFAULT policy with zero configuration keys present except Bunny itself', () => {
+      const { resolver } = buildResolver({ ...FULL_BUNNY_ENV });
+      expect(resolver.productionUploadProvider).toBe('bunny');
+    });
+
+    it('FAILS VISIBLY (503) when VIDEO_UPLOAD_PROVIDER=bunny but Bunny is disabled — never silently falls back to mux', () => {
       const { resolver } = buildResolver({
+        ...FULL_BUNNY_ENV,
         BUNNY_ENABLED: 'false',
-        VIDEO_BUNNY_BATCH_IDS: B2,
       });
+      expect(() => resolver.resolveUploadProvider([B2])).toThrow(
+        ServiceUnavailableException,
+      );
+    });
+
+    it('FAILS VISIBLY (503) when Bunny is enabled but incompletely configured', () => {
+      const { resolver } = buildResolver({
+        BUNNY_ENABLED: 'true',
+        BUNNY_LIBRARY_ID: '133',
+        // missing api key + cdn hostname
+      });
+      expect(() => resolver.resolveUploadProvider([])).toThrow(
+        /not enabled\/configured/,
+      );
+    });
+
+    it('dormant rollback switch: VIDEO_UPLOAD_PROVIDER=mux routes new uploads to Mux without needing Bunny', () => {
+      const { resolver } = buildResolver({
+        VIDEO_UPLOAD_PROVIDER: 'mux',
+        // No Bunny configuration at all — must still resolve to mux.
+      });
+      expect(resolver.productionUploadProvider).toBe('mux');
       expect(resolver.resolveUploadProvider([B2])).toBe('mux');
-    });
-
-    it('routes to mux when Bunny is enabled but no batches are configured', () => {
-      const { resolver } = buildResolver({ BUNNY_ENABLED: 'true' });
-      expect(resolver.resolveUploadProvider([B2])).toBe('mux');
-    });
-
-    it('routes to bunny only for uploads whose EVERY batch is bunny-listed', () => {
-      const { resolver } = buildResolver({
-        BUNNY_ENABLED: 'true',
-        VIDEO_BUNNY_BATCH_IDS: `${B2}`,
-      });
-      expect(resolver.resolveUploadProvider([B2])).toBe('bunny');
-      expect(resolver.resolveUploadProvider([B2, B2])).toBe('bunny');
-    });
-
-    it('routes mixed legacy+bunny batch selections to mux (single shared asset rule)', () => {
-      const { resolver } = buildResolver({
-        BUNNY_ENABLED: 'true',
-        VIDEO_BUNNY_BATCH_IDS: `${B2}`,
-      });
-      expect(resolver.resolveUploadProvider([B1, B2])).toBe('mux');
-    });
-
-    it('routes unknown/unlisted batches to mux (safe failure, never guessed)', () => {
-      const { resolver } = buildResolver({
-        BUNNY_ENABLED: 'true',
-        VIDEO_BUNNY_BATCH_IDS: `${B2}`,
-      });
-      expect(resolver.resolveUploadProvider(['99999999-9999-4999-8999-999999999999'])).toBe('mux');
-    });
-
-    it('routes empty batch sets (draft flow) to mux', () => {
-      const { resolver } = buildResolver({
-        BUNNY_ENABLED: 'true',
-        VIDEO_BUNNY_BATCH_IDS: `${B2}`,
-      });
       expect(resolver.resolveUploadProvider([])).toBe('mux');
-      expect(resolver.resolveUploadProvider()).toBe('mux');
     });
 
-    it('ignores whitespace in the configured batch list', () => {
+    it('treats unrecognised VIDEO_UPLOAD_PROVIDER values as the safe default (bunny)', () => {
       const { resolver } = buildResolver({
-        BUNNY_ENABLED: 'true',
-        VIDEO_BUNNY_BATCH_IDS: ` ${B2} , `,
+        VIDEO_UPLOAD_PROVIDER: 's3',
+        ...FULL_BUNNY_ENV,
       });
-      expect(resolver.resolveUploadProvider([B2])).toBe('bunny');
+      expect(resolver.productionUploadProvider).toBe('bunny');
     });
   });
 
-  describe('providerFor — recording-level routing', () => {
+  describe('providerFor — recording-level routing (unchanged by 7E)', () => {
     it('returns the mux provider for existing/legacy rows', () => {
-      const { resolver, mux, bunny } = buildResolver({ BUNNY_ENABLED: 'true' });
+      const { resolver, mux, bunny } = buildResolver(FULL_BUNNY_ENV);
       expect(resolver.providerFor({ provider: 'mux' })).toBe(mux);
       expect(resolver.providerFor({ provider: null })).toBe(mux);
       expect(resolver.providerFor({})).toBe(mux);

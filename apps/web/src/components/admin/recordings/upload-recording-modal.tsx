@@ -14,6 +14,7 @@ import {
 import { toast } from 'sonner';
 import { getAllBatches, type Batch } from '@/lib/api/courses';
 import { createRecording } from '@/lib/api/recordings';
+import { tusUpload } from '@/lib/upload/tus-uploader';
 
 interface UploadRecordingModalProps {
   isOpen: boolean;
@@ -112,7 +113,7 @@ export function UploadRecordingModal({
     setPhase({ phase: 'requesting_url' });
 
     try {
-      const { uploadUrl } = await createRecording(
+      const { uploadUrl, upload } = await createRecording(
         {
           title: title.trim(),
           description: description.trim() || undefined,
@@ -126,28 +127,44 @@ export function UploadRecordingModal({
 
       setPhase({ phase: 'uploading', progress: 0 });
 
-      await new Promise<void>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhrRef.current = xhr;
-
-        xhr.upload.addEventListener('progress', (e) => {
-          if (e.lengthComputable) {
-            setPhase({ phase: 'uploading', progress: Math.round((e.loaded / e.total) * 100) });
-          }
+      // Phase 7E: the API returns a protocol handle. Bunny uses resumable TUS
+      // (its raw PUT endpoint requires the secret AccessKey header and can
+      // never be browser-facing); legacy handles stay plain XHR PUT.
+      if (upload?.kind === 'tus') {
+        await tusUpload({
+          endpoint: upload.url,
+          headers: upload.headers ?? {},
+          file,
+          onProgress: (fraction) =>
+            setPhase({ phase: 'uploading', progress: Math.round(fraction * 100) }),
+          registerXhr: (xhr) => {
+            xhrRef.current = xhr;
+          },
         });
+      } else {
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhrRef.current = xhr;
 
-        xhr.addEventListener('load', () => {
-          if (xhr.status >= 200 && xhr.status < 300) resolve();
-          else reject(new Error(`Upload failed with status ${xhr.status}`));
+          xhr.upload.addEventListener('progress', (e) => {
+            if (e.lengthComputable) {
+              setPhase({ phase: 'uploading', progress: Math.round((e.loaded / e.total) * 100) });
+            }
+          });
+
+          xhr.addEventListener('load', () => {
+            if (xhr.status >= 200 && xhr.status < 300) resolve();
+            else reject(new Error(`Upload failed with status ${xhr.status}`));
+          });
+
+          xhr.addEventListener('error', () => reject(new Error('Network error during upload')));
+          xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')));
+
+          xhr.open('PUT', uploadUrl);
+          xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+          xhr.send(file);
         });
-
-        xhr.addEventListener('error', () => reject(new Error('Network error during upload')));
-        xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')));
-
-        xhr.open('PUT', uploadUrl);
-        xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
-        xhr.send(file);
-      });
+      }
 
       setPhase({ phase: 'success' });
       toast.success('Recording uploaded successfully');
@@ -385,7 +402,7 @@ export function UploadRecordingModal({
           {phase.phase === 'uploading' && (
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-600">Uploading to Mux...</span>
+                <span className="text-gray-600">Uploading video...</span>
                 <span className="font-semibold text-brand-600">{phase.progress}%</span>
               </div>
               <div className="h-2.5 w-full overflow-hidden rounded-full bg-gray-200">

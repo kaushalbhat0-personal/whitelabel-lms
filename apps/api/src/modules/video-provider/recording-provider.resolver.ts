@@ -1,22 +1,25 @@
 /*
  * RecordingProviderResolver — THE single point of provider selection.
  *
- * Upload-time routing policy (preimplementation audit A-1/A-2/A-3):
- *   - Bunny is used for a NEW upload only when:
- *       (a) BUNNY_ENABLED=true, AND
- *       (b) VIDEO_BUNNY_BATCH_IDS lists batch UUIDs, AND
- *       (c) EVERY target batch of the upload appears in that list.
- *   - Any other case (Bunny disabled, unknown/legacy batch present, mixed
- *     Batch-1+Batch-2 selection, empty draft-upload batch set) routes to Mux.
- *   - Default with no configuration = 100% Mux = zero production behaviour
- *     change until operations explicitly enable Bunny.
+ * PRODUCTION POLICY (Phase 7E business decision):
+ *   The LMS launches with NO existing student content, so there is nothing to
+ *   migrate. ALL newly created recordings route to Bunny from day one:
  *
- * Playback/deletion routing is recording-level: recordings.provider decides,
- * with pre-migration rows (provider NULL/'mux') treated as Mux. An explicit
- * 'bunny' row NEVER silently falls back to Mux — BunnyProvider failures are
- * observable ServiceUnavailable errors (constraint #16).
+ *     VIDEO_UPLOAD_PROVIDER=bunny (default)
+ *       → every NEW upload (batch-linked OR draft, admin OR Zoom auto-pipeline)
+ *         uses provider='bunny'.
+ *       → if Bunny is not enabled/configured the upload FAILS VISIBLY with 503.
+ *         There is NEVER a silent fallback to Mux.
+ *     VIDEO_UPLOAD_PROVIDER=mux
+ *       → dormant emergency switch: temporarily routes NEW uploads back to Mux
+ *         without any code change (Mux stays compiled, registered and idle).
+ *
+ *   Playback/deletion routing remains recording-level: recordings.provider
+ *   decides via providerFor(), with pre-migration rows (provider NULL/'mux')
+ *   treated as Mux. An explicit 'bunny' row NEVER silently falls back to Mux —
+ *   BunnyProvider failures are observable ServiceUnavailable errors.
  */
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { BunnyProvider } from './providers/bunny.provider';
 import { MuxProvider } from './providers/mux.provider';
@@ -35,38 +38,47 @@ export class RecordingProviderResolver {
     private readonly bunnyProvider: BunnyProvider,
   ) {}
 
-  /** Batch UUIDs whose NEW uploads should route to Bunny (ops-configured). */
-  get bunnyBatchIds(): string[] {
-    const raw = this.configService.get<string>('VIDEO_BUNNY_BATCH_IDS') ?? '';
-    return raw
-      .split(',')
-      .map((id) => id.trim())
-      .filter((id) => id.length > 0);
+  /** Production provider for NEW uploads ('bunny' by default; 'mux' is the
+   *  documented emergency rollback switch). Unknown values fail closed to the
+   *  safe default rather than guessing. */
+  get productionUploadProvider(): VideoProviderName {
+    const raw = String(
+      this.configService.get<string>('VIDEO_UPLOAD_PROVIDER') ?? 'bunny',
+    )
+      .trim()
+      .toLowerCase();
+    return raw === 'mux' ? 'mux' : 'bunny';
   }
 
   /**
-   * Decide the provider for a NEW upload given its target batches.
-   * Conservative rule: one unknown/unlisted batch forces the whole upload to
-   * Mux because a single shared asset can only live on one provider (A-2).
+   * Decide the provider for a NEW upload. Batch numbers are irrelevant under
+   * the bunny-first launch policy (the previous Batch1=Mux/Batch2+=Bunny plan
+   * was migration scaffolding only). The batchIds parameter is retained for
+   * call-site compatibility and future per-batch overrides.
    */
   resolveUploadProvider(batchIds: string[] = []): VideoProviderName {
-    if (!this.bunnyProvider.enabled) return 'mux';
+    void batchIds;
 
-    const bunnyBatches = this.bunnyBatchIds;
-    if (bunnyBatches.length === 0) return 'mux';
-    if (!batchIds || batchIds.length === 0) return 'mux'; // A-3: draft flow
-
-    const allListed = batchIds.every((batchId) =>
-      bunnyBatches.includes(batchId),
-    );
-    if (!allListed) {
-      this.logger.log(
-        `Upload provider resolution -> mux (mixed/unlisted batches; bunnyBatches=${bunnyBatches.length})`,
+    const configured = this.productionUploadProvider;
+    if (configured === 'mux') {
+      this.logger.warn(
+        'VIDEO_UPLOAD_PROVIDER=mux — routing NEW upload to Mux (dormant fallback switch active)',
       );
       return 'mux';
     }
 
-    this.logger.log(`Upload provider resolution -> bunny (${batchIds.length} batch/es)`);
+    // bunny-first production policy: visible failure instead of silent fallback.
+    if (!this.bunnyProvider.enabled || !this.bunnyProvider.isConfigured) {
+      throw new ServiceUnavailableException(
+        'Bunny is the configured production video provider but it is not ' +
+          'enabled/configured (VIDEO_UPLOAD_PROVIDER=bunny requires BUNNY_ENABLED=true ' +
+          'plus BUNNY_LIBRARY_ID/BUNNY_API_KEY/BUNNY_CDN_HOSTNAME). ' +
+          'Upload refused — set the Bunny credentials or explicitly switch ' +
+          'VIDEO_UPLOAD_PROVIDER=mux.',
+      );
+    }
+
+    this.logger.log('Upload provider resolution -> bunny (production default)');
     return 'bunny';
   }
 

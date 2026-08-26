@@ -25,9 +25,29 @@ export interface Recording {
   batchIds: string[];
 }
 
+/**
+ * Direct-upload handle returned by the API. The admin browser uploads the
+ * bytes straight to the provider using this — video bytes never pass through
+ * the LMS API.
+ *
+ * kind = 'plain-put' → single XHR PUT to `url` (legacy Mux path).
+ * kind = 'tus'       → resumable TUS protocol against Bunny's endpoint;
+ *                      `headers` carries the per-video presigned credentials
+ *                      (AuthorizationSignature/AuthorizationExpire/LibraryId/
+ *                      VideoId) derived server-side. These are NOT secrets —
+ *                      they are scoped to one video and expire.
+ */
+export interface DirectUploadInfo {
+  url: string;
+  kind?: 'plain-put' | 'tus';
+  headers?: Record<string, string>;
+  recordingId?: string;
+}
+
 export interface CreateRecordingWithUploadResponse {
   recording: Recording;
   uploadUrl: string;
+  upload?: DirectUploadInfo;
 }
 
 export async function createRecording(

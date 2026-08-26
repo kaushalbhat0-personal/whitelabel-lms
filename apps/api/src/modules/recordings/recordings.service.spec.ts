@@ -681,10 +681,46 @@ describe('RecordingsService', () => {
 
       expect(result.uploadUrl).toBe('https://example.com/upload');
       expect(result.recording).toEqual(mockRecording);
+      // Phase 7E: the FULL direct-upload handle must reach the browser so a
+      // Bunny 'tus' response carries its presigned headers end-to-end.
+      expect(result.upload).toEqual({
+        url: 'https://example.com/upload',
+        kind: 'plain-put',
+        headers: {},
+        recordingId: validRecId,
+      });
       // Draft flow has no batch context — must resolve through the centralized
       // resolver with an empty batch set (audit A-3).
       expect(resolverMock.resolveUploadProvider).toHaveBeenCalledWith([]);
       expect(fakeProvider.createDirectUpload).toHaveBeenCalledWith({ title: 'Test Upload' });
+    });
+
+    it('Phase 7E: passes through a bunny TUS handle (kind + presigned headers) untouched', async () => {
+      const mockRecording = { id: validRecId, title: 'TUS Upload', status: 'processing', created_at: '2026-01-01T00:00:00Z' };
+      chain.from.mockImplementation(() => {
+        const q = mockChain(null);
+        q.single.mockResolvedValue({ data: mockRecording, error: null });
+        return q;
+      });
+
+      resolverMock.resolveUploadProvider.mockReturnValueOnce('bunny');
+      fakeProvider.createDirectUpload.mockResolvedValueOnce({
+        uploadUrl: 'https://video.bunnycdn.com/tusupload',
+        uploadId: 'guid-123',
+        uploadKind: 'tus',
+        uploadHeaders: {
+          AuthorizationSignature: 'sig',
+          AuthorizationExpire: '123',
+          LibraryId: '133',
+          VideoId: 'guid-123',
+        },
+      } as any);
+
+      const result = await service.requestUploadUrl({ title: 'TUS Upload' });
+
+      expect(result.upload.kind).toBe('tus');
+      expect(result.upload.headers.VideoId).toBe('guid-123');
+      expect(result.upload.url).toBe('https://video.bunnycdn.com/tusupload');
     });
   });
 

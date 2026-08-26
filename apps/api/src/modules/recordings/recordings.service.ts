@@ -230,24 +230,27 @@ export class RecordingsService {
   }
 
   /**
-   * Create a recording with a provider-routed upload URL.
+   * Create a recording with a provider-routed upload handle.
    * Recording starts in 'processing' status; the owning provider's webhook
    * marks it 'ready'. Batch linking and curriculum creation are wrapped in a
    * Transaction.
    *
-   * Provider selection is centralized: resolveUploadProvider(batchIds) routes
-   * Bunny-listed batches to Bunny (only when explicitly enabled) and everything
-   * else — including any legacy/mixed batch — to Mux (audit A-1/A-2).
+   * Provider selection is centralized and BUNNY-FIRST (Phase 7E business
+   * decision): every NEW recording routes to Bunny; if Bunny is unavailable
+   * the resolver fails visibly (503) instead of falling back to Mux. The
+   * VIDEO_UPLOAD_PROVIDER=mux env switch is the documented emergency rollback.
    *
    * @param dto - Title, description, batch IDs, curriculum metadata.
-   * @returns The recording row and the upload URL.
+   * @returns The recording row plus the direct-upload handle (`uploadUrl`
+   *          legacy field + `upload` { url, kind, headers }).
    * @throws BadRequestException if recording creation or transaction steps fail.
    */
   async createRecordingWithUpload(dto: CreateRecordingDto) {
     const providerName = this.providerResolver.resolveUploadProvider(dto.batchIds);
-    const { uploadUrl, uploadId } = await this.providerResolver
+    const handle = await this.providerResolver
       .resolve(providerName)
       .createDirectUpload({ title: dto.title });
+    const { uploadUrl, uploadId } = handle;
 
     // ── Step 1: Create the recording row and capture its UUID ──
     const { data: recording, error: recordingError } = await this.supabaseService.client
@@ -311,26 +314,34 @@ export class RecordingsService {
     return {
       recording,
       uploadUrl,
+      upload: {
+        url: uploadUrl,
+        kind: handle.uploadKind ?? ('plain-put' as const),
+        headers: handle.uploadHeaders ?? {},
+        recordingId,
+      },
     };
   }
 
   // ── Upload URL ────────────────────────────────────────────
 
   /**
-   * Create a direct provider upload URL for the frontend to PUT a video file.
+   * Create a direct provider upload handle for the frontend.
    * The recording starts in 'processing' status.
    *
-   * Draft flow has no batch context (audit A-3) → resolves to the default
-   * provider ('mux') until Bunny is explicitly enabled for unlisted flows.
+   * Draft flow has no batch context — irrelevant under the Phase 7E
+   * bunny-first policy, which routes ALL new recordings to Bunny (or fails
+   * visibly when Bunny is not configured).
    * @param dto - Title for the recording/upload.
-   * @returns The upload URL and the created recording row.
+   * @returns The upload handle and the created recording row.
    * @throws BadRequestException if recording creation fails.
    */
   async requestUploadUrl(dto: RequestUploadDto) {
     const providerName = this.providerResolver.resolveUploadProvider([]);
-    const { uploadUrl, uploadId } = await this.providerResolver
+    const handle = await this.providerResolver
       .resolve(providerName)
       .createDirectUpload({ title: dto.title });
+    const { uploadUrl, uploadId } = handle;
 
     const { data: recording, error } = await this.supabaseService.client
       .from(TABLES.RECORDINGS)
@@ -348,7 +359,16 @@ export class RecordingsService {
       throw new BadRequestException('Failed to create recording');
     }
 
-    return { uploadUrl, recording };
+    return {
+      uploadUrl,
+      recording,
+      upload: {
+        url: uploadUrl,
+        kind: handle.uploadKind ?? ('plain-put' as const),
+        headers: handle.uploadHeaders ?? {},
+        recordingId: recording.id,
+      },
+    };
   }
 
   // ── Batch Assignment ──────────────────────────────────────
