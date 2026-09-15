@@ -79,4 +79,22 @@ export class RedisCacheService {
     this.logger.debug(`[DEBUG_REDIS] CACHE INVALIDATED | pattern=cache:recordings:*`);
     await this.delByPattern('cache:recordings:*');
   }
+
+  async invalidateRecordingsCacheForUser(userId: string): Promise<void> {
+    if (!userId) return;
+    this.logger.debug(`[DEBUG_REDIS] CACHE INVALIDATED FOR USER | userId=${userId}`);
+    await this.delByPattern(`cache:recordings:flat:${userId}:*`);
+    await this.del(`cache:recordings:grouped:${userId}`);
+    // Fallback: cover any future flat key shape without trailing colon
+    await this.delByPattern(`cache:recordings:*${userId}*`);
+  }
+
+  async invalidateRecordingsCacheForUsers(userIds: string[]): Promise<void> {
+    const unique = [...new Set((userIds ?? []).filter(Boolean))];
+    if (unique.length === 0) return;
+    this.logger.debug(`[DEBUG_REDIS] CACHE INVALIDATED FOR USERS | count=${unique.length}`);
+    for (const uid of unique) {
+      await this.invalidateRecordingsCacheForUser(uid);
+    }
+  }
 }

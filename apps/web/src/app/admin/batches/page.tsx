@@ -8,7 +8,7 @@ export default async function AdminBatchesPage() {
   let total = 0;
 
   try {
-    const result = await getAllBatches({ isActive: false, page: 1, limit: 100 });
+    const result = await getAllBatches({ isActive: false, page: 1, limit: 20 });
     batches = result.items;
     total = result.total;
   } catch {

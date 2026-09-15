@@ -467,6 +467,7 @@ export class RecordingsService {
   /**
    * Remove a recording from one or more batches.
    * Deletes curriculum entries first, then removes batch links.
+   * Wrapped in Transaction — partial failures are rolled back.
    * @param recordingId - UUID of the recording.
    * @param batchIds - Array of batch UUIDs to remove.
    * @returns Object with removedCount.
@@ -475,40 +476,78 @@ export class RecordingsService {
   async removeBatchAccess(recordingId: string, batchIds: string[]) {
     this.validateCurriculumPayload(recordingId, batchIds);
 
-    this.logger.log(
-      `[Curriculum DELETE] BEGIN | recordingId=${recordingId} | batchIds=${JSON.stringify(batchIds)} | table=${TABLES.BATCH_RECORDING_CURRICULUM} | ts=${new Date().toISOString()}`,
-    );
+    const steps: TransactionStep[] = [
+      {
+        name: 'remove-curriculum-entries',
+        execute: async () => {
+          this.logger.log(
+            `[Curriculum DELETE] BEGIN | recordingId=${recordingId} | batchIds=${JSON.stringify(batchIds)} | table=${TABLES.BATCH_RECORDING_CURRICULUM} | ts=${new Date().toISOString()}`,
+          );
+          const { data, error: curriculumError, status, count } = await this.supabaseService.client
+            .from(TABLES.BATCH_RECORDING_CURRICULUM)
+            .delete()
+            .eq('content_id', recordingId)
+            .eq('content_type', 'recording')
+            .in('batch_id', batchIds);
+          if (curriculumError) {
+            this.logger.error(
+              `[Curriculum DELETE] FAILED | recordingId=${recordingId} | batchIds=${JSON.stringify(batchIds)} | error=${JSON.stringify(curriculumError)} | status=${status} | count=${count} | ts=${new Date().toISOString()}`,
+            );
+            throw new BadRequestException(
+              `Failed to remove curriculum entries for recording ${recordingId}. Supabase Error [${curriculumError.code}]: ${curriculumError.message}${curriculumError.details ? ` | Details: ${curriculumError.details}` : ''}${curriculumError.hint ? ` | Hint: ${curriculumError.hint}` : ''}`,
+            );
+          }
+          this.logger.debug(
+            `[Curriculum DELETE] SUCCEEDED | recordingId=${recordingId} | batchIds=${JSON.stringify(batchIds)} | status=${status} | count=${count} | ts=${new Date().toISOString()}`,
+          );
+        },
+        rollback: async () => {
+          await this.supabaseService.client
+            .from(TABLES.BATCH_RECORDING_CURRICULUM)
+            .upsert(
+              batchIds.map((batchId) => ({
+                batch_id: batchId,
+                content_id: recordingId,
+                content_type: 'recording',
+                category_name: 'General',
+                module_name: null,
+                title_override: null,
+                sort_order: 0,
+                is_published: true,
+              })),
+              { onConflict: 'batch_id,content_id,content_type' },
+            );
+        },
+      },
+      {
+        name: 'remove-batch-links',
+        execute: async () => {
+          const { error: linkError } = await this.supabaseService.client
+            .from(TABLES.RECORDING_BATCHES)
+            .delete()
+            .eq('recording_id', recordingId)
+            .in('batch_id', batchIds);
+          if (linkError) {
+            this.logger.error(`Failed to remove batch access: ${linkError.message}`);
+            throw new BadRequestException('Failed to remove batch access');
+          }
+        },
+        rollback: async () => {
+          await this.supabaseService.client
+            .from(TABLES.RECORDING_BATCHES)
+            .upsert(
+              batchIds.map((batchId) => ({
+                recording_id: recordingId,
+                batch_id: batchId,
+              })),
+              { onConflict: 'recording_id,batch_id' },
+            );
+        },
+      },
+    ];
 
-    const { data, error: curriculumError, status, count } = await this.supabaseService.client
-      .from(TABLES.BATCH_RECORDING_CURRICULUM)
-      .delete()
-      .eq('content_id', recordingId)
-      .eq('content_type', 'recording')
-      .in('batch_id', batchIds);
-
-    if (curriculumError) {
-      this.logger.error(
-        `[Curriculum DELETE] FAILED | recordingId=${recordingId} | batchIds=${JSON.stringify(batchIds)} | error=${JSON.stringify(curriculumError)} | status=${status} | count=${count} | ts=${new Date().toISOString()}`,
-      );
-      throw new BadRequestException(
-        `Failed to remove curriculum entries for recording ${recordingId}. Supabase Error [${curriculumError.code}]: ${curriculumError.message}${curriculumError.details ? ` | Details: ${curriculumError.details}` : ''}${curriculumError.hint ? ` | Hint: ${curriculumError.hint}` : ''}`,
-      );
-    }
-
-    this.logger.debug(
-      `[Curriculum DELETE] SUCCEEDED | recordingId=${recordingId} | batchIds=${JSON.stringify(batchIds)} | status=${status} | count=${count} | ts=${new Date().toISOString()}`,
-    );
-
-    const { error: linkError } = await this.supabaseService.client
-      .from(TABLES.RECORDING_BATCHES)
-      .delete()
-      .eq('recording_id', recordingId)
-      .in('batch_id', batchIds);
-
-    if (linkError) {
-      this.logger.error(`Failed to remove batch access: ${linkError.message}`);
-      throw new BadRequestException('Failed to remove batch access');
-    }
+    const tx = new Transaction();
+    await tx.run(steps);
 
     await this.redisCache.invalidateRecordingsCache();
 
@@ -1033,10 +1072,42 @@ export class RecordingsService {
       return [];
     }
 
+    // Phase 9: enforce publish gate — only is_published=true curriculum entries are student-visible.
+    // Legacy fallback: if zero curriculum rows exist for these recordings, show via recording_batches alone.
+    const { data: publishedCurriculum } = await this.supabaseService.client
+      .from(TABLES.BATCH_RECORDING_CURRICULUM)
+      .select('content_id')
+      .eq('content_type', 'recording')
+      .in('batch_id', batchIds)
+      .eq('is_published', true)
+      .in('content_id', recordingIds);
+
+    let publishedRecordingIds = [
+      ...new Set((publishedCurriculum ?? []).map((r: any) => r.content_id)),
+    ];
+    this.logger.debug(`[DEBUG] fetchRecordingsForStudent | publishedCurriculum count=${publishedCurriculum?.length ?? 0} | publishedRecordingIds=${JSON.stringify(publishedRecordingIds)}`);
+
+    if (publishedRecordingIds.length === 0) {
+      const { data: anyCurriculum } = await this.supabaseService.client
+        .from(TABLES.BATCH_RECORDING_CURRICULUM)
+        .select('content_id')
+        .eq('content_type', 'recording')
+        .in('batch_id', batchIds)
+        .in('content_id', recordingIds);
+      if (!anyCurriculum || anyCurriculum.length === 0) {
+        // No curriculum at all for these recordings — legacy fallback, use recording_batches ids.
+        publishedRecordingIds = recordingIds;
+        this.logger.debug(`[DEBUG] fetchRecordingsForStudent | LEGACY FALLBACK: no curriculum rows, using recordingIds=${JSON.stringify(publishedRecordingIds)}`);
+      } else {
+        this.logger.debug(`[DEBUG] fetchRecordingsForStudent | EARLY RETURN: no published curriculum entries (curriculum exists but unpublished) | response=[]`);
+        return [];
+      }
+    }
+
     let recordingsQuery = this.supabaseService.client
       .from(TABLES.RECORDINGS)
       .select('id, title, description, topic_id, sort_order, status, created_at, topics(name)')
-      .in('id', recordingIds)
+      .in('id', publishedRecordingIds)
       .eq('status', 'ready')
       .order('sort_order', { ascending: true });
 
@@ -1293,17 +1364,52 @@ export class RecordingsService {
       .eq('recording_id', recordingId)
       .in('batch_id', userBatchIds);
 
-    if (accessRecords && accessRecords.length > 0) {
-      this.logger.debug('validateAccess: access granted via recording_batches', {
-        recordingId, userId, matchedBatchIds: accessRecords.map((r: any) => r.batch_id),
+    if (!accessRecords || accessRecords.length === 0) {
+      this.logger.warn('validateAccess: access DENIED (no recording_batches overlap)', {
+        recordingId, userId, userBatchIds,
+      });
+      throw new ForbiddenException('You do not have access to this recording');
+    }
+
+    // Phase 9: enforce publish gate — at least one intersecting batch must have is_published=true.
+    // Legacy fallback: recordings with zero curriculum rows remain accessible via recording_batches alone
+    // (pre-curriculum rows). Only when curriculum rows exist but none are published do we deny.
+    const matchedBatchIds = accessRecords.map((r: any) => r.batch_id);
+    const { data: publishedCurriculum } = await this.supabaseService.client
+      .from(TABLES.BATCH_RECORDING_CURRICULUM)
+      .select('batch_id')
+      .eq('content_type', 'recording')
+      .eq('content_id', recordingId)
+      .eq('is_published', true)
+      .in('batch_id', matchedBatchIds);
+
+    if (publishedCurriculum && publishedCurriculum.length > 0) {
+      this.logger.debug('validateAccess: access granted via recording_batches + published curriculum', {
+        recordingId, userId, matchedBatchIds: publishedCurriculum.map((r: any) => r.batch_id),
       });
       return;
     }
 
-    this.logger.warn('validateAccess: access DENIED', {
-      recordingId, userId, userBatchIds,
+    // Fallback — check if any curriculum row exists for this recording+batches at all.
+    const { data: anyCurriculum } = await this.supabaseService.client
+      .from(TABLES.BATCH_RECORDING_CURRICULUM)
+      .select('batch_id')
+      .eq('content_type', 'recording')
+      .eq('content_id', recordingId)
+      .in('batch_id', matchedBatchIds);
+
+    if (!anyCurriculum || anyCurriculum.length === 0) {
+      // No curriculum entry at all — legacy recording, allow via recording_batches.
+      this.logger.debug('validateAccess: access granted via recording_batches (no curriculum rows — legacy fallback)', {
+        recordingId, userId, matchedBatchIds,
+      });
+      return;
+    }
+
+    this.logger.warn('validateAccess: access DENIED (unpublished for all overlapping batches)', {
+      recordingId, userId, userBatchIds, matchedBatchIds,
     });
-    throw new ForbiddenException('You do not have access to this recording');
+    throw new ForbiddenException('This recording is not published for your batch');
   }
 
   /**
@@ -1432,10 +1538,35 @@ export class RecordingsService {
       return [];
     }
 
+    // Phase 9: enforce publish gate — filter to is_published=true curriculum for this batch.
+    const { data: publishedLinks } = await this.supabaseService.client
+      .from(TABLES.BATCH_RECORDING_CURRICULUM)
+      .select('content_id')
+      .eq('content_type', 'recording')
+      .eq('batch_id', batchId)
+      .eq('is_published', true)
+      .in('content_id', recordingIds);
+
+    let publishedIds = [...new Set((publishedLinks ?? []).map((l: any) => l.content_id))];
+    if (publishedIds.length === 0) {
+      // Legacy fallback: if no published rows but also zero curriculum rows at all, use recording_batches.
+      const { data: anyCurriculum } = await this.supabaseService.client
+        .from(TABLES.BATCH_RECORDING_CURRICULUM)
+        .select('content_id')
+        .eq('content_type', 'recording')
+        .eq('batch_id', batchId)
+        .in('content_id', recordingIds);
+      if (!anyCurriculum || anyCurriculum.length === 0) {
+        publishedIds = recordingIds;
+      } else {
+        return [];
+      }
+    }
+
     const { data: recordings } = await this.supabaseService.client
       .from(TABLES.RECORDINGS)
       .select('id, title, description, duration_seconds, status, created_at, sort_order')
-      .in('id', recordingIds)
+      .in('id', publishedIds)
       .eq('status', 'ready')
       .order('sort_order', { ascending: true });
 

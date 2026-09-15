@@ -24,12 +24,24 @@ export function BatchList({ initialBatches, initialTotal }: BatchListProps) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingBatch, setEditingBatch] = useState<Batch | null>(null);
   const [deletingBatch, setDeletingBatch] = useState<Batch | null>(null);
+  const [searchValue, setSearchValue] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(20);
+
+  const fetchPage = useCallback(async (nextPage: number) => {
+    setLoading(true);
+    try { const r = await getAllBatches({ isActive: false, page: nextPage, limit: pageSize }); setBatches(r.items); setTotal(r.total); } catch { /* silent */ }
+    finally { setLoading(false); }
+  }, [pageSize]);
 
   const refresh = useCallback(async () => {
-    setLoading(true);
-    try { const r = await getAllBatches({ isActive: false, page: 1, limit: 100 }); setBatches(r.items); setTotal(r.total); } catch { /* silent */ }
-    finally { setLoading(false); }
-  }, []);
+    await fetchPage(page);
+  }, [fetchPage, page]);
+
+  const handlePageChange = useCallback((next: number) => {
+    setPage(next);
+    fetchPage(next);
+  }, [fetchPage]);
 
   const openCreate = async () => { try { const r = await getCourses(); setCourses(r.items); } catch { setCourses([]); } setShowCreateModal(true); };
   const openEdit = async (b: Batch) => { try { const r = await getCourses(); setCourses(r.items); } catch { setCourses([]); } setEditingBatch(b); };
@@ -40,9 +52,9 @@ export function BatchList({ initialBatches, initialTotal }: BatchListProps) {
 
   const columns: AdminDataTableColumn<Batch>[] = [
     { key: 'name', header: 'Name', sortable: true,
-      render: (b) => <Link href={`/admin/batches/${b.id}`} className="text-brand-600 hover:underline font-medium">{b.name}</Link> },
+      render: (b) => <Link href={`/admin/batches/${b.id}`} className="text-brand-600 hover:underline font-medium break-words whitespace-normal" title={b.name}>{b.name}</Link> },
     { key: 'course', header: 'Course',
-      render: (b) => <span className="text-xs text-text-muted">{(b as any).course?.name ?? '—'}</span> },
+      render: (b) => <span className="text-xs text-text-muted break-words whitespace-normal" title={(b as any).course?.name ?? ''}>{(b as any).course?.name ?? '—'}</span> },
     { key: 'schedule', header: 'Schedule',
       render: (b) => <span className="text-xs capitalize">{b.schedule_type || '—'}</span> },
     { key: 'status', header: 'Status',
@@ -74,10 +86,27 @@ export function BatchList({ initialBatches, initialTotal }: BatchListProps) {
 
       {loading ? (
         <AdminTableSkeleton rows={5} cols={5} />
-      ) : batches.length === 0 ? (
+      ) : batches.length === 0 && !searchValue ? (
         <AdminEmptyState icon={BookOpen} title="No batches" description="Create your first batch to get started." actionLabel="Create Batch" actionHref="#" />
       ) : (
-        <AdminDataTable columns={columns} data={batches} keyExtractor={(b) => b.id} showSearch searchPlaceholder="Search batches..." exportCsv csvFilename="batches.csv" csvHeaders={['Name', 'Course', 'Schedule', 'Status']} getCsvRow={(b) => [b.name, (b as any).course?.name ?? '', b.schedule_type || '', b.is_active ? 'Active' : 'Inactive']} />
+        <AdminDataTable
+          columns={columns}
+          data={batches}
+          keyExtractor={(b) => b.id}
+          showSearch
+          searchValue={searchValue}
+          onSearchChange={setSearchValue}
+          searchPlaceholder="Search batches..."
+          searchKeys={['name']}
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={handlePageChange}
+          exportCsv
+          csvFilename="batches.csv"
+          csvHeaders={['Name', 'Course', 'Schedule', 'Status']}
+          getCsvRow={(b) => [b.name, (b as any).course?.name ?? '', b.schedule_type || '', b.is_active ? 'Active' : 'Inactive']}
+        />
       )}
 
       <Modal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} title="Create Batch"><BatchForm courseId="" courses={courses} onSuccess={() => { setShowCreateModal(false); refresh(); }} /></Modal>

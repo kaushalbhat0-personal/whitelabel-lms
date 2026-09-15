@@ -7,8 +7,7 @@ import {
   type AdminVideo,
   type Topic,
   updateVideoMetadata,
-  assignRecordingToBatches,
-  removeRecordingFromBatches,
+  updateRecordingBatchCurriculum,
 } from '@/lib/api/videos';
 import { getAllBatches, type Batch } from '@/lib/api/courses';
 
@@ -94,11 +93,13 @@ export function EditVideoModal({
       const added = [...selectedBatchIds].filter((id) => !originalBatchIds.has(id));
       const removed = [...originalBatchIds].filter((id) => !selectedBatchIds.has(id));
 
-      if (added.length > 0) {
-        await assignRecordingToBatches(video.id, added);
-      }
-      if (removed.length > 0) {
-        await removeRecordingFromBatches(video.id, removed);
+      // Phase 9: use atomic batch-curriculum endpoint — single transaction for add+remove.
+      if (added.length > 0 || removed.length > 0) {
+        const assignments = [
+          ...added.map((batchId) => ({ batchId, assigned: true as const })),
+          ...removed.map((batchId) => ({ batchId, assigned: false as const })),
+        ];
+        await updateRecordingBatchCurriculum(video.id, assignments);
       }
 
       const updated = await updateVideoMetadata(video.id, {

@@ -135,6 +135,16 @@ export async function removeRecordingFromBatches(
   );
 }
 
+export async function updateRecordingBatchCurriculum(
+  recordingId: string,
+  assignments: { batchId: string; assigned: boolean }[],
+) {
+  return fetchApi<{ updated: boolean }>(
+    `${API_ROUTES.ADMIN_RECORDINGS}/${recordingId}/batch-curriculum`,
+    { method: 'PATCH', body: JSON.stringify({ assignments }) },
+  );
+}
+
 export async function getVideoTopics() {
   return fetchApi<Topic[]>(`${API_ROUTES.ADMIN_TOPICS}`);
 }

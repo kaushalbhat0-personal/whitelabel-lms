@@ -9,6 +9,7 @@ import { UserRole, Batch } from '@lms/shared-types';
 import { SupabaseService } from '../../common/services/supabase.service';
 import { EmailService } from '../email/email.service';
 import { ObservabilityService } from '../observability/observability.service';
+import { RedisCacheService } from '../../common/services/redis-cache.service';
 import { TABLES } from '../../common/constants/tables.constant';
 import { logEntityEvent } from '../../common/utils/observability-helper';
 import { CreateBatchDto } from './dto/create-batch.dto';
@@ -24,6 +25,7 @@ export class BatchesService {
     private readonly supabaseService: SupabaseService,
     private readonly emailService: EmailService,
     private readonly observabilityService: ObservabilityService,
+    private readonly redisCache: RedisCacheService,
   ) {}
 
   async findAll(page = 1, limit = 20, isActive?: boolean) {
@@ -247,6 +249,9 @@ export class BatchesService {
       throw new BadRequestException('Failed to assign students');
     }
 
+    // H1: targeted recording cache invalidation — only affected students
+    await this.redisCache.invalidateRecordingsCacheForUsers(dto.studentIds).catch(() => {});
+
     return { enrolledCount: dto.studentIds.length };
   }
 
@@ -262,6 +267,9 @@ export class BatchesService {
       this.logger.error(`Failed to remove students from batch ${batchId}: ${error.message}`);
       throw new BadRequestException('Failed to remove students');
     }
+
+    // H1: targeted recording cache invalidation
+    await this.redisCache.invalidateRecordingsCacheForUsers(studentIds).catch(() => {});
 
     return { removedCount: (data ?? []).length };
   }
@@ -424,6 +432,9 @@ export class BatchesService {
       throw new BadRequestException('Failed to enroll student in batch');
     }
 
+    // H1: targeted invalidation for the single affected student
+    await this.redisCache.invalidateRecordingsCacheForUser(userId).catch(() => {});
+
     // Fire-and-forget welcome email — only for newly created users
     if (tempPassword) {
       this.emailService
@@ -465,5 +476,8 @@ export class BatchesService {
       this.logger.error(`Failed to enroll student ${studentId} in batch ${batchId}: ${error.message}`);
       throw new BadRequestException('Failed to enroll student in batch');
     }
+
+    // H1: targeted invalidation — bulk upload also benefits via this helper
+    await this.redisCache.invalidateRecordingsCacheForUser(studentId).catch(() => {});
   }
 }

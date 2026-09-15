@@ -743,24 +743,37 @@ describe('RecordingsService', () => {
     it('getPlaybackUrl passes provider + playback id to PlaybackGuard', async () => {
       let callIndex = 0;
       chain.from.mockImplementation(() => {
-        const q = mockChain(null);
         const idx = callIndex++;
         if (idx === 0) {
+          const q: any = mockChain(null);
           q.single.mockResolvedValueOnce({ data: { id: 'rec-1', status: 'ready' }, error: null });
+          return q;
         } else if (idx === 1) {
-          // batch_students (awaited on .eq)
+          const q: any = mockChain(null);
           q.eq.mockResolvedValue({ data: [{ batch_id: 'batch-1' }], error: null });
+          return q;
         } else if (idx === 2) {
-          // recording_batches intersection
+          const q: any = mockChain(null);
           q.eq.mockReturnValue({
             in: jest.fn().mockResolvedValue({ data: [{ batch_id: 'batch-1' }], error: null }),
           });
+          return q;
         } else if (idx === 3) {
+          // Phase 9 publish gate: must have is_published=true curriculum for this batch
+          const chainObj: any = {};
+          chainObj.select = jest.fn().mockReturnValue(chainObj);
+          chainObj.eq = jest.fn().mockReturnValue(chainObj);
+          chainObj.in = jest.fn().mockResolvedValue({ data: [{ batch_id: 'batch-1' }], error: null });
+          return chainObj;
+        } else if (idx === 4) {
+          const q: any = mockChain(null);
           q.single.mockResolvedValueOnce({
             data: { provider: 'mux', mux_playback_id: 'pb-1' },
             error: null,
           });
+          return q;
         }
+        const q: any = mockChain(null);
         return q;
       });
 
@@ -791,16 +804,33 @@ describe('RecordingsService', () => {
 
       let callIndex = 0;
       chain.from.mockImplementation(() => {
-        const q = mockChain(null);
         const idx = callIndex++;
-
         if (idx === 0) {
+          const q: any = mockChain(null);
           q.eq.mockResolvedValue({ data: [{ batch_id: batchId }], error: null });
+          return q;
         } else if (idx === 1) {
+          const q: any = mockChain(null);
           q.in.mockResolvedValue({ data: [{ recording_id: recordingId }], error: null });
+          return q;
         } else if (idx === 2) {
-          const eqMock = jest.fn().mockReturnThis();
-          const orderMock = jest.fn().mockResolvedValue({
+          // Phase 9 publish gate: select('content_id').eq('content_type').in('batch_id').eq('is_published').in('content_id')
+          const chainObj: any = {};
+          chainObj.select = jest.fn().mockReturnValue(chainObj);
+          chainObj.eq = jest.fn().mockReturnValue(chainObj);
+          let inCalls = 0;
+          chainObj.in = jest.fn().mockImplementation(() => {
+            inCalls++;
+            if (inCalls === 1) return chainObj;
+            return Promise.resolve({ data: [{ content_id: recordingId }], error: null });
+          });
+          return chainObj;
+        } else if (idx === 3) {
+          const chainObj: any = {};
+          chainObj.select = jest.fn().mockReturnValue(chainObj);
+          chainObj.in = jest.fn().mockReturnValue(chainObj);
+          chainObj.eq = jest.fn().mockReturnValue(chainObj);
+          chainObj.order = jest.fn().mockResolvedValue({
             data: [{
               id: recordingId, title: 'Test Recording', description: null,
               topic_id: null, sort_order: 0, status: 'ready',
@@ -808,13 +838,14 @@ describe('RecordingsService', () => {
             }],
             error: null,
           });
-          q.in.mockReturnValue({ eq: eqMock });
-          eqMock.mockReturnValue({ order: orderMock });
-        } else if (idx === 3) {
+          return chainObj;
+        } else if (idx === 4) {
+          const q: any = mockChain(null);
           q.in.mockReturnValue({ eq: jest.fn().mockResolvedValue({ data: [], error: null }) });
-        } else {
-          q.in.mockResolvedValue({ data: [], error: null });
+          return q;
         }
+        const q: any = mockChain(null);
+        q.in.mockResolvedValue({ data: [], error: null });
         return q;
       });
 
