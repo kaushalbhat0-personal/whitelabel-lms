@@ -813,6 +813,34 @@ export class RecordingsService {
       throw new NotFoundException('Recording not found');
     }
 
+    // Collect affected batches/users BEFORE deleting links (for targeted cache invalidation)
+    let affectedUserIds: string[] = [];
+    try {
+      const { data: links } = await this.supabaseService.client
+        .from(TABLES.RECORDING_BATCHES)
+        .select('batch_id')
+        .eq('recording_id', id);
+      const batchIds = (links ?? []).map((r: any) => r.batch_id);
+      if (batchIds.length > 0) {
+        const { data: students } = await this.supabaseService.client
+          .from(TABLES.BATCH_STUDENTS)
+          .select('user_id')
+          .in('batch_id', batchIds);
+        affectedUserIds = [...new Set((students ?? []).map((s: any) => s.user_id))];
+      }
+    } catch {
+      // cache invalidation is best-effort; ignore lookup errors
+    }
+
+    const invalidateForAffected = async () => {
+      if (affectedUserIds.length > 0) {
+        await this.redisCache.invalidateRecordingsCacheForUsers(affectedUserIds).catch(() => {});
+      } else {
+        // Unassigned recording or lookup failed — still invalidate globally to cover admin listing
+        await this.redisCache.invalidateRecordingsCache().catch(() => {});
+      }
+    };
+
     // ── Transaction: remove DB references, mark pending cleanup ──
     const steps: TransactionStep[] = [
       {
@@ -869,23 +897,39 @@ export class RecordingsService {
     if (recording.mux_asset_id) {
       try {
         await this.providerResolver.providerFor(recording).deleteAsset(recording.mux_asset_id);
-      } catch (err) {
-        this.logger.error(
-          `Failed to delete ${recording.provider ?? 'mux'} asset ${recording.mux_asset_id} for recording ${id}: ${(err as Error).message}. Cleanup_pending set to true; a reconciliation job should retry provider deletion.`,
-        );
+      } catch (err: any) {
+        const msg = (err?.message ?? '').toLowerCase();
+        const status = err?.status ?? err?.response?.status;
+        const isNotFound = status === 404;
+        const isNotConfigured =
+          err?.name === 'ServiceUnavailableException' ||
+          msg.includes('not enabled/configured') ||
+          msg.includes('must be set in environment variables') ||
+          msg.includes('mux_token_id');
 
-        logEntityEvent(
-          this.observabilityService,
-          'RECORDING_CLEANUP_PENDING',
-          'recording',
-          id,
-          'system',
-          { title: recording.title, mux_asset_id: recording.mux_asset_id, error: (err as Error).message },
-        ).catch(() => {});
+        if (isNotFound || isNotConfigured) {
+          this.logger.warn(
+            `Provider asset ${recording.mux_asset_id} for recording ${id} treated as already deleted (404 or not configured: ${msg || status}); proceeding to hard-delete DB row.`,
+          );
+          // fall through to hard delete — do NOT return cleanupPending
+        } else {
+          this.logger.error(
+            `Failed to delete ${recording.provider ?? 'mux'} asset ${recording.mux_asset_id} for recording ${id}: ${(err as Error).message}. Cleanup_pending set to true; a reconciliation job should retry provider deletion.`,
+          );
 
-        await this.redisCache.invalidateRecordingsCache();
+          logEntityEvent(
+            this.observabilityService,
+            'RECORDING_CLEANUP_PENDING',
+            'recording',
+            id,
+            'system',
+            { title: recording.title, mux_asset_id: recording.mux_asset_id, error: (err as Error).message },
+          ).catch(() => {});
 
-        return { deleted: true, cleanupPending: true };
+          await invalidateForAffected();
+
+          return { deleted: true, cleanupPending: true };
+        }
       }
     }
 
@@ -900,7 +944,7 @@ export class RecordingsService {
         `Failed to delete recording row ${id} after Mux cleanup: ${deleteError.message}. Cleanup_pending remains true.`,
       );
 
-      await this.redisCache.invalidateRecordingsCache();
+      await invalidateForAffected();
 
       return { deleted: true, cleanupPending: true };
     }
@@ -914,9 +958,101 @@ export class RecordingsService {
       { title: recording.title },
     ).catch(() => {});
 
-    await this.redisCache.invalidateRecordingsCache();
+    await invalidateForAffected();
 
     return { deleted: true };
+  }
+
+  /**
+   * Bulk delete recordings — one server-side operation for N IDs.
+   * - Validates admin already via controller guard.
+   * - Deduplicates IDs, validates UUID format.
+   * - Loads recordings itself (never trusts client provider IDs).
+   * - Per-recording: runs same two-phase flow as deleteRecording (transaction → provider → hard delete).
+   * - Collects per-record success/failure; does NOT abort entire batch on single provider failure.
+   * - Targeted cache invalidation for affected users only.
+   */
+  async bulkDeleteRecordings(recordingIds: string[]): Promise<{
+    deleted: string[];
+    failed: { id: string; error: string }[];
+    total: number;
+  }> {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const uniqueIds = [...new Set((recordingIds ?? []).filter(Boolean))];
+
+    if (uniqueIds.length === 0) {
+      throw new BadRequestException('At least one recording ID is required');
+    }
+
+    for (const id of uniqueIds) {
+      if (!uuidRegex.test(id)) {
+        throw new BadRequestException(`Invalid recording ID format: "${id}". Expected UUID.`);
+      }
+    }
+
+    // Load all recordings in one query
+    const { data: recordings, error } = await this.supabaseService.client
+      .from(TABLES.RECORDINGS)
+      .select('id, mux_asset_id, provider, title')
+      .in('id', uniqueIds);
+
+    if (error) {
+      throw new BadRequestException(`Failed to load recordings: ${error.message}`);
+    }
+
+    const foundById = new Map((recordings ?? []).map((r: any) => [r.id, r]));
+    const missing = uniqueIds.filter((id) => !foundById.has(id));
+
+    // Collect affected users across all found recordings (for targeted invalidation)
+    let affectedUserIds: string[] = [];
+    try {
+      const { data: links } = await this.supabaseService.client
+        .from(TABLES.RECORDING_BATCHES)
+        .select('batch_id')
+        .in('recording_id', uniqueIds);
+      const batchIds = [...new Set((links ?? []).map((r: any) => r.batch_id))];
+      if (batchIds.length > 0) {
+        const { data: students } = await this.supabaseService.client
+          .from(TABLES.BATCH_STUDENTS)
+          .select('user_id')
+          .in('batch_id', batchIds);
+        affectedUserIds = [...new Set((students ?? []).map((s: any) => s.user_id))];
+      }
+    } catch {}
+
+    const deleted: string[] = [];
+    const failed: { id: string; error: string }[] = [];
+
+    // Missing IDs are failures
+    for (const id of missing) {
+      failed.push({ id, error: 'Recording not found' });
+    }
+
+    // Process each found recording individually (per-recording transaction + provider)
+    for (const id of uniqueIds) {
+      const rec = foundById.get(id);
+      if (!rec) continue; // already counted as missing
+      try {
+        const result = await this.deleteRecording(id);
+        // deleteRecording returns cleanupPending true if provider failed retriably
+        if ((result as any).cleanupPending) {
+          failed.push({ id, error: 'Provider deletion pending — will retry via cleanup job' });
+        } else {
+          deleted.push(id);
+        }
+      } catch (err: any) {
+        failed.push({ id, error: err.message ?? 'Unknown error' });
+      }
+    }
+
+    // Targeted invalidation for affected users (covers both deleted and pending cases)
+    if (affectedUserIds.length > 0) {
+      await this.redisCache.invalidateRecordingsCacheForUsers(affectedUserIds).catch(() => {});
+    } else {
+      await this.redisCache.invalidateRecordingsCache().catch(() => {});
+    }
+
+    return { deleted, failed, total: uniqueIds.length };
   }
 
   // ── Admin List (paginated, with batch info) ───────────────

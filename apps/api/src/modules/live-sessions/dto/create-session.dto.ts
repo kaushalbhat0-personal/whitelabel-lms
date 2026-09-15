@@ -52,7 +52,10 @@ export class CreateSessionDto {
   @ArrayMinSize(1, { message: 'At least one batch must be selected' })
   batchIds: string[];
 
-  /** The teacher who will host — must have a zoomUserId set in their profile */
+  /** The host who will run the session — must have a zoomUserId set in their profile.
+   *  Optional: when omitted, the host is resolved automatically (default host or first
+   *  profile with a configured Zoom user). */
+  @IsOptional()
   @IsUUID('4', { message: 'Teacher ID must be a valid UUID' })
-  teacherId: string;
+  teacherId?: string;
 }

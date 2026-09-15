@@ -14,10 +14,11 @@
 import { Module } from '@nestjs/common';
 import { ZoomController } from './zoom.controller';
 import { ZoomService } from './zoom.service';
+import { ZoomWebhookHandler } from './zoom-webhook.handler';
 
 @Module({
   controllers: [ZoomController],
-  providers: [ZoomService],
-  exports: [ZoomService],
+  providers: [ZoomService, ZoomWebhookHandler],
+  exports: [ZoomService, ZoomWebhookHandler],
 })
 export class ZoomModule {}

@@ -82,6 +82,7 @@ export class AttendanceController {
    * Get the currently logged-in student's own attendance.
    * Students don't need to pass their user ID — @CurrentUser() provides it.
    */
+  @Roles(UserRole.STUDENT)
   @Get('me')
   getMyAttendance(
     @CurrentUser() user: { id: string },

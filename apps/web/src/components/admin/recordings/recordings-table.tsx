@@ -11,7 +11,7 @@ import {
   Loader2,
   Hourglass,
 } from 'lucide-react';
-import { type AdminVideo, type Topic, deleteVideo } from '@/lib/api/videos';
+import { type AdminVideo, type Topic, deleteVideo, bulkDeleteVideos } from '@/lib/api/videos';
 import { EditVideoModal } from './edit-video-modal';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
@@ -59,9 +59,28 @@ export function RecordingsTable({
   const [editingVideo, setEditingVideo] = useState<AdminVideo | null>(null);
   const [deleteError, setDeleteError] = useState('');
 
+  // Bulk selection — page-local (visible rows only)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [showBulkConfirm, setShowBulkConfirm] = useState(false);
+  const allVisibleSelected = videos.length > 0 && videos.every((v) => selectedIds.has(v.id));
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const toggleSelectAll = () => {
+    if (allVisibleSelected) setSelectedIds(new Set());
+    else setSelectedIds(new Set(videos.map((v) => v.id)));
+  };
+
   // Sync local state when parent refreshes (search/filter/pagination)
   useEffect(() => {
     setVideos(initialVideos);
+    setSelectedIds(new Set());
   }, [initialVideos]);
 
   const confirmDelete = async () => {
@@ -79,6 +98,31 @@ export function RecordingsTable({
       setDeleteTarget(null);
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const confirmBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    setBulkDeleting(true);
+    setDeleteError('');
+    try {
+      const ids = Array.from(selectedIds);
+      const res = await bulkDeleteVideos(ids);
+      const deletedSet = new Set(res.deleted ?? ids);
+      // Remove successfully deleted; keep failed ones visible
+      setVideos((prev) => prev.filter((v) => !deletedSet.has(v.id)));
+      setSelectedIds(new Set());
+      setShowBulkConfirm(false);
+      if ((res.failed ?? []).length > 0) {
+        const failedMsg = res.failed.map((f: any) => f.id).join(', ');
+        setDeleteError(`Some recordings could not be deleted (${res.failed.length}): ${failedMsg}`);
+      }
+      onChanged?.();
+    } catch {
+      setDeleteError('Bulk delete failed. Please try again.');
+      setShowBulkConfirm(false);
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -103,8 +147,23 @@ export function RecordingsTable({
     );
   }
 
+  const bulkCount = selectedIds.size;
+
   return (
     <>
+      {bulkCount > 0 && (
+        <div className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <span className="text-sm font-medium text-amber-900">{bulkCount} selected</span>
+          <button
+            onClick={() => setShowBulkConfirm(true)}
+            disabled={bulkDeleting}
+            className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+          >
+            {bulkDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            Delete Selected ({bulkCount})
+          </button>
+        </div>
+      )}
       <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
         {loading && (
           <div className="flex items-center gap-2 border-b border-gray-100 bg-gray-50 px-4 py-2 text-xs text-gray-500">
@@ -115,6 +174,15 @@ export function RecordingsTable({
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
+              <th className="px-4 py-3">
+                <input
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  onChange={toggleSelectAll}
+                  title={allVisibleSelected ? 'Deselect all visible' : 'Select all visible'}
+                  className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                />
+              </th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
                 Video
               </th>
@@ -151,7 +219,15 @@ export function RecordingsTable({
                 .filter(Boolean);
 
               return (
-                <tr key={video.id} className={`hover:bg-gray-50 transition-colors ${pending ? 'opacity-70' : ''}`}>
+                <tr key={video.id} className={`hover:bg-gray-50 transition-colors ${pending ? 'opacity-70' : ''} ${selectedIds.has(video.id) ? 'bg-amber-50/40' : ''}`}>
+                  <td className="px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(video.id)}
+                      onChange={() => toggleSelect(video.id)}
+                      className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                    />
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${pending ? 'bg-yellow-50' : 'bg-brand-50'}`}>
@@ -272,13 +348,23 @@ export function RecordingsTable({
         title="Delete Recording"
         message={
           deleteTarget
-            ? `Delete "${deleteTarget.title}"? The video will be deleted from both the LMS and Mux. This cannot be undone.`
+            ? `Delete "${deleteTarget.title}"? The video will be deleted from both the LMS and provider. Student access will be removed. This cannot be undone.`
             : ''
         }
         confirmLabel="Delete"
         loading={deletingId !== null}
         onCancel={() => setDeleteTarget(null)}
         onConfirm={confirmDelete}
+      />
+
+      <ConfirmDialog
+        isOpen={showBulkConfirm}
+        title={`Delete ${bulkCount} Recording${bulkCount !== 1 ? 's' : ''}?`}
+        message={`This will permanently delete ${bulkCount} selected recording${bulkCount !== 1 ? 's' : ''}. Student access will be removed and associated provider video assets may be deleted. This cannot be easily undone.`}
+        confirmLabel={bulkDeleting ? 'Deleting...' : `Delete ${bulkCount}`}
+        loading={bulkDeleting}
+        onCancel={() => setShowBulkConfirm(false)}
+        onConfirm={confirmBulkDelete}
       />
 
       {editingVideo && (

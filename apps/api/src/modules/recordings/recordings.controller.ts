@@ -15,6 +15,7 @@ import { UserRole } from '@lms/shared-types';
 import { RecordingsService } from './recordings.service';
 import { CreateRecordingDto } from './dto/create-recording.dto';
 import { UpdateRecordingDto } from './dto/update-recording.dto';
+import { BulkDeleteRecordingsDto } from './dto/bulk-delete-recordings.dto';
 import { CreateTopicDto } from '../videos/dto/create-topic.dto';
 import { RequestUploadDto } from '../videos/dto/request-upload.dto';
 import { UpdateVideoProgressDto } from '../videos/dto/update-video-progress.dto';
@@ -126,6 +127,18 @@ export class RecordingsController {
     @Body() dto: UpdateRecordingDto,
   ) {
     return this.recordingsService.updateRecording(id, dto);
+  }
+
+  @Roles(UserRole.ADMIN)
+  @Post('admin/recordings/bulk')
+  bulkDelete(@Body() dto: BulkDeleteRecordingsDto) {
+    return this.recordingsService.bulkDeleteRecordings(dto.recordingIds);
+  }
+
+  @Roles(UserRole.ADMIN)
+  @Delete('admin/recordings/bulk')
+  bulkDeleteViaDelete(@Body() dto: BulkDeleteRecordingsDto) {
+    return this.recordingsService.bulkDeleteRecordings(dto.recordingIds);
   }
 
   @Roles(UserRole.ADMIN)

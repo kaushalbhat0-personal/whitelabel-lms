@@ -276,7 +276,7 @@ export class AttendanceService {
       .select('user_id, profiles!inner(id, name, email)')
       .eq('batch_id', batchId);
 
-    const students = (studentLinks ?? []).map((s: any) => s.users);
+    const students = (studentLinks ?? []).map((s: any) => s.profiles);
 
     // Get all attendance records for this batch's sessions
     const { data: allRecords } = await this.supabaseService.client

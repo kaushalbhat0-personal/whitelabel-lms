@@ -568,16 +568,23 @@ describe('RecordingsService', () => {
             error: null,
           });
         } else if (idx === 1) {
+          // Affected batches lookup for targeted cache invalidation
+          q.select.mockReturnValue(q);
+          q.eq.mockReturnValue(q);
+          // The chain is thenable; return empty links
+          (q as any).then = (fn: any) => Promise.resolve({ data: [], error: null }).then(fn);
+          return q;
+        } else if (idx === 2) {
           // Transaction step 1: delete curriculum (delete + eq + eq)
           q.delete.mockReturnValue(q);
           q.eq
             .mockImplementationOnce(() => q)
             .mockResolvedValueOnce({ data: null, error: null });
-        } else if (idx === 2) {
+        } else if (idx === 3) {
           // Transaction step 2: delete batch links (delete + eq)
           q.delete.mockReturnValue(q);
           q.eq.mockResolvedValue({ data: null, error: null });
-        } else if (idx === 3) {
+        } else if (idx === 4) {
           // Transaction step 3: update cleanup_pending (update + eq)
           q.update.mockReturnValue(q);
           q.eq.mockResolvedValue({ data: null, error: null });
@@ -631,14 +638,20 @@ describe('RecordingsService', () => {
             error: null,
           });
         } else if (idx === 1) {
+          // affected batches lookup
+          q.select.mockReturnValue(q);
+          q.eq.mockReturnValue(q);
+          (q as any).then = (fn: any) => Promise.resolve({ data: [], error: null }).then(fn);
+          return q;
+        } else if (idx === 2) {
           q.delete.mockReturnValue(q);
           q.eq
             .mockImplementationOnce(() => q)
             .mockResolvedValueOnce({ data: null, error: null });
-        } else if (idx === 2) {
+        } else if (idx === 3) {
           q.delete.mockReturnValue(q);
           q.eq.mockResolvedValue({ data: null, error: null });
-        } else if (idx === 3) {
+        } else if (idx === 4) {
           q.update.mockReturnValue(q);
           q.eq.mockResolvedValue({ data: null, error: null });
         } else {
@@ -652,6 +665,81 @@ describe('RecordingsService', () => {
 
       expect(result.deleted).toBe(true);
       expect(fakeProvider.deleteAsset).not.toHaveBeenCalled();
+    });
+
+    it('should hard-delete DB row even when provider reports 404', async () => {
+      const { recordingId } = setupRecordingMuxMock(5);
+      fakeProvider.deleteAsset.mockRejectedValueOnce({ status: 404, message: 'Not found' } as any);
+
+      const result = await service.deleteRecording(recordingId);
+
+      expect(result.deleted).toBe(true);
+      expect(result.cleanupPending).toBeUndefined();
+    });
+
+    it('should hard-delete DB row when provider not configured (ServiceUnavailable)', async () => {
+      const { recordingId } = setupRecordingMuxMock(5);
+      const err: any = new Error('Bunny video provider is not enabled/configured');
+      err.name = 'ServiceUnavailableException';
+      fakeProvider.deleteAsset.mockRejectedValueOnce(err);
+
+      const result = await service.deleteRecording(recordingId);
+
+      expect(result.deleted).toBe(true);
+      expect(result.cleanupPending).toBeUndefined();
+    });
+  });
+
+  describe('bulkDeleteRecordings', () => {
+    const A = '550e8400-e29b-41d4-a716-44665544000a';
+    const B = '550e8400-e29b-41d4-a716-44665544000b';
+    const C = '550e8400-e29b-41d4-a716-44665544000c';
+
+    it('should deduplicate duplicate IDs and process once', async () => {
+      // Mock initial load: recordings + links + students + per-id deletes
+      // For brevity, mock bulkDelete to use spied deleteRecording
+      const ids = [A, B, B, C];
+      // Mock load recordings
+      chain.from.mockImplementation((table: string) => {
+        const q = mockChain();
+        if (table === 'recordings') {
+          q.in.mockResolvedValue({ data: [{ id: A, mux_asset_id: 'a1', provider: 'mux', title: 'A' }, { id: B, mux_asset_id: 'b1', provider: 'mux', title: 'B' }, { id: C, mux_asset_id: null, provider: 'mux', title: 'C' }], error: null });
+        } else if (table === 'recording_batches') {
+          q.in.mockResolvedValue({ data: [{ batch_id: 'b1' }], error: null });
+        } else if (table === 'batch_students') {
+          q.in.mockResolvedValue({ data: [{ user_id: 'u1' }], error: null });
+        }
+        return q;
+      });
+      const spy = jest.spyOn(service as any, 'deleteRecording').mockResolvedValue({ deleted: true });
+
+      const result = await (service as any).bulkDeleteRecordings(ids);
+      expect(spy).toHaveBeenCalledTimes(3); // deduplicated
+      expect(result.total).toBe(3);
+      expect(result.deleted).toHaveLength(3);
+      expect(result.failed).toHaveLength(0);
+      spy.mockRestore();
+    });
+
+    it('should collect per-record failures without aborting batch', async () => {
+      chain.from.mockImplementation((table: string) => {
+        const q = mockChain();
+        if (table === 'recordings') {
+          q.in.mockResolvedValue({ data: [{ id: A, mux_asset_id: 'a1', provider: 'mux', title: 'A' }], error: null });
+        } else if (table === 'recording_batches') {
+          q.in.mockResolvedValue({ data: [], error: null });
+        } else if (table === 'batch_students') {
+          q.in.mockResolvedValue({ data: [], error: null });
+        }
+        return q;
+      });
+      // A will succeed, missing B will be reported
+      const spy = jest.spyOn(service as any, 'deleteRecording').mockResolvedValue({ deleted: true, cleanupPending: true });
+
+      const result = await (service as any).bulkDeleteRecordings([A, B]);
+      expect(result.deleted).toHaveLength(0);
+      expect(result.failed).toEqual(expect.arrayContaining([expect.objectContaining({ id: A }), expect.objectContaining({ id: B })]));
+      spy.mockRestore();
     });
   });
 

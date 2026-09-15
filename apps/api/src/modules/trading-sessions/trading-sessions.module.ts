@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
 import { TradingSessionsController } from './trading-sessions.controller';
 import { TradingSessionsService } from './trading-sessions.service';
-import { ZoomModule } from '../zoom/zoom.module';
+import { LiveSessionsModule } from '../live-sessions/live-sessions.module';
 
 @Module({
-  imports: [ZoomModule],
+  imports: [LiveSessionsModule],
   controllers: [TradingSessionsController],
   providers: [TradingSessionsService],
 })

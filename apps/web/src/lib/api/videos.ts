@@ -172,6 +172,16 @@ export async function deleteVideo(videoId: string) {
   });
 }
 
+export async function bulkDeleteVideos(recordingIds: string[]) {
+  return fetchApi<{ deleted: string[]; failed: { id: string; error: string }[]; total: number }>(
+    `${API_ROUTES.ADMIN_RECORDINGS}/bulk`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ recordingIds }),
+    },
+  );
+}
+
 export async function getMyVideos(topicId?: string) {
   const params = topicId ? `?topicId=${topicId}` : '';
   return fetchApi<StudentVideo[]>(`${API_ROUTES.RECORDINGS}/my${params}`);

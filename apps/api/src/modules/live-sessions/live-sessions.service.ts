@@ -22,6 +22,7 @@ import {
   UnauthorizedException,
   Logger,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { SessionStatus } from '@lms/shared-types';
 import { RedisService } from '@liaoliaots/nestjs-redis';
 import Redis from 'ioredis';
@@ -54,6 +55,7 @@ export class LiveSessionsService {
     private readonly batchesService: BatchesService,
     private readonly zoomService: ZoomService,
     private readonly observabilityService: ObservabilityService,
+    private readonly configService: ConfigService,
     redisService: RedisService,
   ) {
     try {
@@ -82,7 +84,7 @@ export class LiveSessionsService {
    * Create a new live session — this is the main orchestration method.
    *
    * Steps:
-   *   1. Fetch the teacher and verify they have a zoomUserId set
+   *   1. Resolve the host (explicit host or default) with a zoom_user_id
    *   2. Verify all batchIds exist
    *   3. Create the Zoom webinar via ZoomService
    *   4. Insert the session into TABLES.LIVE_SESSIONS
@@ -93,26 +95,8 @@ export class LiveSessionsService {
    *   9. Return the created session with counts
    */
   async create(dto: CreateSessionDto) {
-    // ── Step 1: Verify teacher ─────────────────────────────────
-    const { data: teacher, error: teacherError } = await this.supabaseService.client
-      .from(TABLES.PROFILES)
-      .select('id, name, email, role, zoom_user_id')
-      .eq('id', dto.teacherId)
-      .single();
-
-    if (teacherError || !teacher) {
-      throw new BadRequestException('Teacher not found');
-    }
-
-    if (teacher.role !== 'teacher') {
-      throw new BadRequestException('Selected user is not a teacher');
-    }
-
-    if (!teacher.zoom_user_id) {
-      throw new BadRequestException(
-        'Teacher does not have a Zoom user ID configured. Update their profile first.',
-      );
-    }
+    // ── Step 1: Resolve host (explicit host → default → reject) ─
+    const hostUserId = await this.resolveHost(dto.teacherId);
 
     // ── Step 2: Verify all batchIds exist ──────────────────────
     for (const batchId of dto.batchIds) {
@@ -132,13 +116,12 @@ export class LiveSessionsService {
       .from(TABLES.LIVE_SESSIONS)
       .insert({
         zoom_webinar_id: webinar.webinarId,
-        zoom_join_url: webinar.joinUrl,
-        zoom_start_url: webinar.startUrl,
+        zoom_webinar_join_url: webinar.joinUrl,
         topic: dto.topic,
         agenda: dto.agenda ?? null,
         start_time: dto.startTime,
         duration_minutes: dto.durationMinutes,
-        host_user_id: dto.teacherId,
+        teacher_id: hostUserId,
         status: 'scheduled',
       })
       .select()
@@ -151,30 +134,11 @@ export class LiveSessionsService {
 
     const sessionId = session.id;
 
-    // ── Step 5: Insert batch associations ──────────────────────
+    // ── Step 5: Prepare batch associations ─────────────────────
     const batchRecords = dto.batchIds.map((batchId) => ({
       session_id: sessionId,
       batch_id: batchId,
     }));
-
-    const tx = new Transaction();
-    await tx.run([
-      {
-        name: 'insert session batch links',
-        execute: async () => {
-          const { error: batchError } = await this.supabaseService.client
-            .from(TABLES.SESSION_BATCHES)
-            .insert(batchRecords);
-          if (batchError) throw batchError;
-        },
-        rollback: async () => {
-          await this.supabaseService.client
-            .from(TABLES.LIVE_SESSIONS)
-            .delete()
-            .eq('id', sessionId);
-        },
-      },
-    ]);
 
     // ── Step 6: Fetch all students from assigned batches ───────
     // Use allSettled so one batch failure doesn't crash the entire operation
@@ -208,7 +172,7 @@ export class LiveSessionsService {
     const students = Array.from(studentMap.values());
     let registrantCount = 0;
 
-    // ── Steps 7–8: Register each student with Zoom ────────────
+    // ── Step 7: Register each student with Zoom ────────────────
     const registrantRecords: any[] = [];
     for (const student of students) {
       try {
@@ -220,8 +184,8 @@ export class LiveSessionsService {
         registrantRecords.push({
           session_id: sessionId,
           user_id: student.id,
-          join_url: joinUrl,
-          registered_at: new Date().toISOString(),
+          personal_join_url: joinUrl,
+          zoom_registrant_id: null,
         });
         registrantCount++;
       } catch (error: any) {
@@ -232,19 +196,51 @@ export class LiveSessionsService {
       }
     }
 
-    // Batch-insert registrant records
-    if (registrantRecords.length > 0) {
-      await this.supabaseService.client
-        .from(TABLES.SESSION_REGISTRANTS)
-        .insert(registrantRecords);
-    }
+    // ── Step 8: Insert batch links + registrants atomically ───
+    // A failure in either insert rolls back the session (cascades to
+    // session_batches + session_registrants) so no partial writes remain.
+    const tx = new Transaction();
+    await tx.run([
+      {
+        name: 'insert session batch links',
+        execute: async () => {
+          const { error: batchError } = await this.supabaseService.client
+            .from(TABLES.SESSION_BATCHES)
+            .insert(batchRecords);
+          if (batchError) throw batchError;
+        },
+        rollback: async () => {
+          await this.supabaseService.client
+            .from(TABLES.LIVE_SESSIONS)
+            .delete()
+            .eq('id', sessionId);
+        },
+      },
+      {
+        name: 'insert registrant records',
+        execute: async () => {
+          if (registrantRecords.length > 0) {
+            const { error: regError } = await this.supabaseService.client
+              .from(TABLES.SESSION_REGISTRANTS)
+              .insert(registrantRecords);
+            if (regError) throw regError;
+          }
+        },
+        rollback: async () => {
+          await this.supabaseService.client
+            .from(TABLES.LIVE_SESSIONS)
+            .delete()
+            .eq('id', sessionId);
+        },
+      },
+    ]);
 
     logEntityEvent(
       this.observabilityService,
       'LIVE_SESSION_CREATED',
       'live_session',
       sessionId,
-      dto.teacherId,
+      hostUserId,
       { topic: dto.topic, batchIds: dto.batchIds, startTime: dto.startTime },
     ).catch(() => {});
 
@@ -312,8 +308,29 @@ export class LiveSessionsService {
       throw new BadRequestException('Could not retrieve sessions');
     }
 
+    const items = data ?? [];
+    // Enrich each item with batch names (needed by the admin compatibility layer).
+    if (items.length > 0) {
+      const ids = items.map((s: any) => s.id);
+      const { data: batchLinks } = await this.supabaseService.client
+        .from(TABLES.SESSION_BATCHES)
+        .select('session_id, batches(name)')
+        .in('session_id', ids);
+
+      const batchNamesBySession = new Map<string, string[]>();
+      for (const link of batchLinks ?? []) {
+        const names = batchNamesBySession.get(link.session_id) ?? [];
+        const batch = Array.isArray(link.batches) ? link.batches[0] : link.batches;
+        if (batch?.name) names.push(batch.name);
+        batchNamesBySession.set(link.session_id, names);
+      }
+      for (const item of items) {
+        (item as any).batchNames = batchNamesBySession.get(item.id) ?? [];
+      }
+    }
+
     return {
-      items: data ?? [],
+      items,
       total: count ?? 0,
       page,
       limit,
@@ -357,7 +374,7 @@ export class LiveSessionsService {
     const { data: teacher } = await this.supabaseService.client
       .from(TABLES.PROFILES)
       .select('id, name, email')
-      .eq('id', session.host_user_id)
+      .eq('id', session.teacher_id)
       .single();
 
     return {
@@ -485,12 +502,12 @@ export class LiveSessionsService {
     // Step 7: Fetch the join URL from session_registrants
     const { data: registrant } = await this.supabaseService.client
       .from(TABLES.SESSION_REGISTRANTS)
-      .select('join_url')
+      .select('personal_join_url')
       .eq('session_id', sessionId)
       .eq('user_id', userId)
       .single();
 
-    if (!registrant?.join_url) {
+    if (!registrant?.personal_join_url) {
       await this.logJoinAttempt(sessionId, userId, null, ip, userAgent, 'rejected_not_enrolled');
       throw new NotFoundException(
         'You are not registered for this session. Contact your admin.',
@@ -500,7 +517,7 @@ export class LiveSessionsService {
     // Step 8: Log granted attempt
     await this.logJoinAttempt(sessionId, userId, token, ip, userAgent, 'granted');
 
-    return { joinUrl: registrant.join_url, sessionId };
+    return { joinUrl: registrant.personal_join_url, sessionId };
   }
 
   // ──────────────────────────────────────────────────────────────
@@ -700,6 +717,70 @@ export class LiveSessionsService {
   //  Private helpers
   // ──────────────────────────────────────────────────────────────
 
+  /**
+   * Resolve the session host user.
+   *
+   * Resolution order:
+   *   1. Explicit host (dto.teacherId) — must exist and have a zoom_user_id.
+   *   2. Configured default host (env LIVE_SESSION_DEFAULT_HOST_ID) — must have a zoom_user_id.
+   *   3. First user with a zoom_user_id in the system.
+   *   4. Reject with a clear validation error.
+   *
+   * This deliberately does NOT require role === 'teacher', so admins (or any
+   * profile with a configured Zoom user) can host until a real teacher module
+   * exists. No fake teacher rows are ever created.
+   */
+  private async resolveHost(explicitHostId?: string): Promise<string> {
+    if (explicitHostId) {
+      const { data: host, error } = await this.supabaseService.client
+        .from(TABLES.PROFILES)
+        .select('id, zoom_user_id')
+        .eq('id', explicitHostId)
+        .single();
+
+      if (error || !host) {
+        throw new BadRequestException('Selected host not found');
+      }
+      if (!host.zoom_user_id) {
+        throw new BadRequestException(
+          'Selected host does not have a Zoom user ID configured. Update their profile first.',
+        );
+      }
+      return host.id;
+    }
+
+    const defaultHostId = this.configService.get<string>('LIVE_SESSION_DEFAULT_HOST_ID');
+    if (defaultHostId) {
+      const { data: defaultHost } = await this.supabaseService.client
+        .from(TABLES.PROFILES)
+        .select('id, zoom_user_id')
+        .eq('id', defaultHostId)
+        .single();
+
+      if (defaultHost?.zoom_user_id) {
+        return defaultHost.id;
+      }
+      this.logger.warn(
+        `Configured default host ${defaultHostId} has no zoom_user_id — falling through to first available host`,
+      );
+    }
+
+    const { data: firstHost } = await this.supabaseService.client
+      .from(TABLES.PROFILES)
+      .select('id, zoom_user_id')
+      .not('zoom_user_id', 'is', null)
+      .limit(1)
+      .single();
+
+    if (firstHost?.zoom_user_id) {
+      return firstHost.id;
+    }
+
+    throw new BadRequestException(
+      'No user with a Zoom user ID is configured. Set a Zoom user ID on a profile or configure LIVE_SESSION_DEFAULT_HOST_ID.',
+    );
+  }
+
   private async logJoinAttempt(
     sessionId: string,
     userId: string,
@@ -835,5 +916,50 @@ export class LiveSessionsService {
     }
 
     return data;
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  //  deleteSession
+  // ──────────────────────────────────────────────────────────────
+
+  /**
+   * Delete a session: cancel the Zoom webinar (best-effort), then remove the
+   * session row (cascades to session_batches/session_registrants/attendance).
+   *
+   * Used by the legacy compatibility layer (DELETE /admin/sessions/:id).
+   */
+  async deleteSession(id: string): Promise<{ deleted: boolean }> {
+    const { data: session, error: fetchError } = await this.supabaseService.client
+      .from(TABLES.LIVE_SESSIONS)
+      .select('zoom_webinar_id')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !session) {
+      throw new NotFoundException(`Session ${id} not found`);
+    }
+
+    // Cancel the Zoom webinar best-effort; proceed with DB cleanup regardless.
+    if (session.zoom_webinar_id) {
+      try {
+        await this.zoomService.deleteWebinar(session.zoom_webinar_id);
+      } catch (err) {
+        this.logger.warn(
+          `Failed to delete Zoom webinar ${session.zoom_webinar_id}: ${(err as Error).message}`,
+        );
+      }
+    }
+
+    const { error: deleteError } = await this.supabaseService.client
+      .from(TABLES.LIVE_SESSIONS)
+      .delete()
+      .eq('id', id);
+
+    if (deleteError) {
+      this.logger.error(`Failed to delete session ${id}: ${deleteError.message}`);
+      throw new BadRequestException('Failed to delete session');
+    }
+
+    return { deleted: true };
   }
 }
