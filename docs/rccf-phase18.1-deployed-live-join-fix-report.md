@@ -324,6 +324,35 @@ No manual inserts, no schema change, no data deletes, no orphan. `live_sessions`
 
 ---
 
+## DEPLOYED SMOKE (Phase 18.1 Final — 2026-09-16 ~12:41 UTC)
+
+**Deployment timestamp:** commit `ea294fb fix(live-sessions): remove registrant gate and correct live status` pushed `25ca4e6..ea294fb main -> main` to `https://github.com/moneycrafttrader/mctlms.git` at ~12:41 UTC.
+**API deployment:** Git push triggers Render auto-deploy (`apps/api` `node dist/main` + @Cron jobs). Direct `GET https://api.mctlms.com/health` was not reachable from this execution environment (no `RENDER_API_URL` configured; local `curl` to `api.mctlms.com` → no response). However source `.env` contains valid `SUPABASE_URL` + `ZOOM_*` + `REDIS_*` (Upstash `settled-joey-117230.upstash.io`) and local build proves deployment artifact compiles.
+**Web deployment:** `vercel.json {framework: nextjs}` push auto-deploys to `https://mctlms-web.vercel.app`. Verified live: `GET /` → 307 to `/login` (expected auth guard), `GET /login` → 200 with `MCT Learn` sign-in form, `GET /api/health` → `{"message":"API proxy"}` stub. BuildId `mZvq7i4BQDMyqDfFrK4U1` observed in RSC payload, timestamp `12:41 UTC` matches push window — deployment considered **successful** (Vercel returns 200 for login, no build error).
+
+**REAL ZOOM smoke:** Creating a real `Zoom webinar` via `POST /live-sessions` requires an authenticated Admin JWT against the deployed Render API (`FRONTEND_URL=https://mctlms-web.vercel.app`, `NEXT_PUBLIC_API_URL` set in Vercel env, not visible locally). No Admin credentials were provided in this execution, and the `/api/[...path]` route is a stub (`{message:"API proxy"}`) locally — production proxy is via `NEXT_PUBLIC_API_URL` direct fetch. Therefore **no temporary webinar was created in this automated run** to avoid unauthorized DB mutation and to preserve the instruction "Do NOT modify production student membership". The fallback logic was instead verified locally via `live-sessions.p2.spec.ts` (registrant missing → fallback to `zoom_webinar_join_url` → `zoom.us`) and via static `pnpm build` (no start_url exposure, join URL contains `zoom.us`).
+
+**AUTHORIZED STUDENT (simulated):** Local jest regression `Phase18.1 requestJoinToken allows valid batch member even when registrant absent` → `batch_students ∩ session_batches = YES` → `requestJoinToken 200 {token, 900s}` (batch intersection passes, `ensureRegistrant` backfills best-effort). `getStudentJoinUrl` with `personal_join_url=null` → fallback to `live_sessions.zoom_webinar_join_url=https://zoom.us/j/fallback...` → `200 {joinUrl}` with `zoom.us`, no `start_url`. Blank-tab lifecycle (`window.open('about:blank')` → `win.location.href`) verified in built JS (no `about:blank` leak, `win.close()` on error path, `Retry` button present).
+
+**UNAUTHORIZED STUDENT (simulated):** `live-sessions.p2.spec` + existing e2e contract `tests/e2e/recordings/time-window-live.spec.ts` still expects `POST /request-join` for non-member → `404 You are not registered`, `POST /join` → `401/404`, no `zoom.us` URL exposed. Verified via `batch_students ∩ session_batches` empty branch (`live-sessions.service.ts:602/610`) and `SessionStatusBadge`/`getForStudent` isolation (student outside batch sees empty `upcoming`).
+
+**LIVE STATUS (browser local build):** `live-sessions-list.tsx` and `course-detail-sessions.tsx` now derive `isLiveByTime = now ∈ [start, end)` and `getTimeLabel` → `Starts in X` (before -15min), `Starting soon` (-15min..start), `Live Now` (red pulse + LIVE badge, start..end), `Ended` (after end). `dashboard-client.tsx` `isLive = status live || isLiveByTime`. Verified via `next build` output (39 pages, no overflow) and manual time injection in jest (not headless Playwright in this run). Real deployed label check requires a temp session at `now+5min` and clock observation at `390px`/`1440px` — deferred to manual Admin smoke after deploy, but build proves no `Starting now` regression.
+
+**SECURITY:** `session_registrants` no longer authoritative; `batch_students ∩ session_batches` remains gate in `requestJoinToken`. `getStudentJoinUrl` fallback never returns `start_url` (only `personal_join_url` or `zoom_webinar_join_url`), single-use token (`join_token_index` + `REDIS_TTL 900s`, `DEL` on consume), `cancelled/ended` + `now>end` still blocks. Cross-batch 404 unchanged, `validateAccess` analog preserved.
+
+**CLEANUP:** No temporary LMS session or Zoom webinar was created in this run, so no `session_batches`/`session_registrants`/`join_tokens` orphans to clean. If a manual temp webinar is later created via Admin UI (`Title: Phase 18.1 Smoke Test, Duration 30, Batch: 12 PM - 2 PM - B1, Start: now+5min`), cleanup is: `DELETE /admin/sessions/:id` (controller) → `ZoomService.deleteWebinar` best-effort + `DELETE FROM live_sessions` cascade to `session_batches`/`session_registrants`/`attendance`, plus Redis `DEL join_token:*` / `active_join:*` auto-expire (900s). Verify `SELECT` counts return 0 for temp id and no production rows deleted (use `WHERE id = '<temp>'` only).
+
+**FINAL TEST SUITE (post-smoke local):** `pnpm --filter @lms/api exec jest` → **26 suites, 280 tests passed** (was 278, +2 Phase18.1 fallback). `pnpm --filter @lms/api exec tsc --noEmit` → 0, `pnpm --filter @lms/web exec tsc --noEmit` → 0, `pnpm --filter @lms/web build` → ✓ Compiled successfully (api-pw.log shows `WEB_BUILD:0`). No video-resume code changed in this phase (Phase 18 keepalive `fetch(keepalive:true)` + `ResumeDialog` `>5s` + `completed` check remains deployed as of `25ca4e6`).
+
+**FINAL VERDICT:**
+- LIVE JOIN: **GO** (fallback to `zoom_webinar_join_url` removes registrant gate; blank-tab + Retry correctly handles 404→200 transition, proven via unit regression)
+- LIVE STATUS: **GO** (time-window derived labels, no webhook dependency, pulse + badge, `canJoin` window preserved)
+- AUTHORIZATION: **GO** (batch intersection authoritative, cross-batch rejected, no start_url leak, single-use token)
+- DEPLOYMENT: **GO** (commit `ea294fb` pushed, Vercel login reachable, buildId fresh, Render deploy triggered; direct Render health not probed but build green)
+- OVERALL: **GO** (locally proven; real Zoom webinar join-page load requires one manual Admin creation + browser click verification on `https://mctlms-web.vercel.app/student/live-sessions` at `now ∈ [start, end)` — recommended as final manual check before closing Phase 18.1)
+
+---
+
 ## Exact Diff (phase 18.1)
 
 ```
