@@ -8,6 +8,12 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 export class ResultsController {
   constructor(private readonly resultsService: ResultsService) {}
 
+  @Roles(UserRole.ADMIN)
+  @Get('admin/overall')
+  getOverallAnalytics(@Query('batchId') batchId?: string) {
+    return this.resultsService.getOverallAnalytics({ batchId });
+  }
+
   @Roles(UserRole.STUDENT)
   @Get('my')
   getMyResults(
@@ -21,13 +27,10 @@ export class ResultsController {
     });
   }
 
-  @Roles(UserRole.STUDENT)
-  @Get(':attemptId')
-  getStudentResult(
-    @Param('attemptId') attemptId: string,
-    @CurrentUser() user: { id: string },
-  ) {
-    return this.resultsService.getStudentResult(attemptId, user.id);
+  @Roles(UserRole.ADMIN, UserRole.TEACHER)
+  @Get('test/:testId/analytics')
+  getTestAnalytics(@Param('testId') testId: string) {
+    return this.resultsService.getTestAnalytics(testId);
   }
 
   @Roles(UserRole.ADMIN, UserRole.TEACHER)
@@ -45,21 +48,18 @@ export class ResultsController {
     });
   }
 
-  @Roles(UserRole.ADMIN, UserRole.TEACHER)
-  @Get('test/:testId/analytics')
-  getTestAnalytics(@Param('testId') testId: string) {
-    return this.resultsService.getTestAnalytics(testId);
-  }
-
   @Roles(UserRole.ADMIN)
   @Get('student/:userId/analytics')
   getStudentAnalytics(@Param('userId') userId: string) {
     return this.resultsService.getStudentAnalytics(userId);
   }
 
-  @Roles(UserRole.ADMIN)
-  @Get('admin/overall')
-  getOverallAnalytics(@Query('batchId') batchId?: string) {
-    return this.resultsService.getOverallAnalytics({ batchId });
+  @Roles(UserRole.STUDENT)
+  @Get(':attemptId')
+  getStudentResult(
+    @Param('attemptId') attemptId: string,
+    @CurrentUser() user: { id: string },
+  ) {
+    return this.resultsService.getStudentResult(attemptId, user.id);
   }
 }

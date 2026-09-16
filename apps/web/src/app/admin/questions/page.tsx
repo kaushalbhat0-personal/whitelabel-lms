@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import {
   getQuestions, createQuestion, bulkImportQuestions,
-  archiveQuestion, unarchiveQuestion, deleteQuestion, getTopics,
+  archiveQuestion, unarchiveQuestion, deleteQuestion, getTopics, uploadQuestionImage,
 } from '@/lib/api/assessments';
 import { cn } from '@/lib/utils';
 import { AdminPageHeader } from '@/components/shared/AdminPageHeader';
@@ -171,6 +171,10 @@ export default function AdminQuestionsPage() {
           <option value="multiple_choice">Multiple Choice</option>
           <option value="true_false">True/False</option>
           <option value="numerical">Numerical</option>
+          <option value="short_answer">Short Answer</option>
+          <option value="long_answer">Long Answer</option>
+          <option value="image_upload">File Upload</option>
+          <option value="image_based">Image Based</option>
         </select>
       </div>
 
@@ -360,6 +364,8 @@ function AddQuestionModal({
   const [explanation, setExplanation] = useState('');
   const [difficulty, setDifficulty] = useState('medium');
   const [topicId, setTopicId] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [options, setOptions] = useState<OptionEntry[]>([
     { key: 'A', value: '' },
     { key: 'B', value: '' },
@@ -374,6 +380,8 @@ function AddQuestionModal({
     setExplanation('');
     setDifficulty('medium');
     setTopicId('');
+    setImageUrl('');
+    setUploadingImage(false);
     setOptions([{ key: 'A', value: '' }, { key: 'B', value: '' }]);
     setError('');
   };
@@ -412,11 +420,12 @@ function AddQuestionModal({
       await createQuestion({
         questionText: questionText.trim(),
         questionType,
-        options: (questionType === 'single_choice' || questionType === 'multiple_choice') ? optionsObj : undefined,
+        options: (questionType === 'single_choice' || questionType === 'multiple_choice' || questionType === 'image_based') ? optionsObj : undefined,
         correctAnswer: correctAnswer || undefined,
         explanation: explanation || undefined,
         difficulty,
         topicId: topicId || undefined,
+        imageUrl: imageUrl || undefined,
       });
       onSuccess();
       onClose();
@@ -466,6 +475,10 @@ function AddQuestionModal({
                 <option value="multiple_choice">Multiple Choice</option>
                 <option value="true_false">True/False</option>
                 <option value="numerical">Numerical</option>
+                <option value="short_answer">Short Answer</option>
+                <option value="long_answer">Long Answer</option>
+                <option value="image_upload">File Upload (Student uploads file)</option>
+                <option value="image_based">Image Based (Question with image)</option>
               </select>
             </div>
             <div>
@@ -573,6 +586,56 @@ function AddQuestionModal({
               />
             </div>
           )}
+
+          {(questionType === 'short_answer' || questionType === 'long_answer') && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              This question will be manually reviewed. Auto-grading is not applied. It will appear in Admin → Review Queue after submission.
+            </div>
+          )}
+
+          {questionType === 'image_upload' && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Student must upload a file (image/PDF). This requires manual review by admin.
+            </div>
+          )}
+
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-text-secondary">Reference Image / Attachment (optional)</label>
+            <div className="flex items-center gap-3">
+              <input
+                type="file"
+                accept="image/*,.pdf"
+                disabled={uploadingImage}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  if (file.size > 10 * 1024 * 1024) { setError('File must be < 10MB'); return; }
+                  setUploadingImage(true);
+                  try {
+                    const { uploadQuestionImage } = await import('@/lib/api/assessments');
+                    const res = await uploadQuestionImage(file);
+                    setImageUrl(res.url);
+                  } catch (err: any) {
+                    setError(err?.message || 'Upload failed');
+                  } finally {
+                    setUploadingImage(false);
+                  }
+                }}
+                className="flex-1 text-sm text-text-secondary file:mr-3 file:rounded-lg file:border-0 file:bg-brand-navy file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-brand-navyDark disabled:opacity-50"
+              />
+              {uploadingImage && <Loader2 className="h-4 w-4 animate-spin text-brand-navy" />}
+            </div>
+            {imageUrl && (
+              <div className="mt-2 flex items-center gap-2">
+                <span className="truncate text-xs text-text-muted">{imageUrl}</span>
+                <button type="button" onClick={() => setImageUrl('')} className="text-xs text-red-600 hover:underline">Remove</button>
+              </div>
+            )}
+            {imageUrl && imageUrl.startsWith('http') && (
+              <img src={imageUrl} alt="Reference" className="mt-2 max-h-40 rounded-lg border border-surface-border object-contain" />
+            )}
+            <p className="mt-1 text-[10px] text-text-muted">Accepted: PNG/JPG/WEBP/GIF/PDF, max 10MB. Shown to student during attempt.</p>
+          </div>
 
           <div>
             <label className="mb-1.5 block text-sm font-medium text-text-secondary">Explanation (optional)</label>

@@ -101,13 +101,18 @@ export default function TestResultPage() {
 
   const [result, setResult] = useState<ResultData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [expandedQuestion, setExpandedQuestion] = useState<string | null>(null);
   const [showAllTopics, setShowAllTopics] = useState(false);
+  const [pendingReview, setPendingReview] = useState(false);
 
   useEffect(() => {
     async function fetch() {
       try {
         const raw: any = await getStudentResult(attemptId);
+        if (raw.is_pending_review || raw.isPendingReview || raw.status === 'pending_review') {
+          setPendingReview(true);
+        }
         const answers: any[] = Array.isArray(raw.answers) ? raw.answers : [];
         const totalMarks = raw.totalMarks ?? raw.total_marks ?? 0;
         const score = raw.score ?? raw.marksAwarded ?? raw.obtained_marks ?? 0;
@@ -170,8 +175,9 @@ export default function TestResultPage() {
           teacherFeedback: raw.teacherFeedback ?? raw.teacher_feedback ?? null,
         };
         setResult(r);
-      } catch {
-        // silent
+        if (raw.is_pending_review || raw.pending_review_count > 0) setPendingReview(true);
+      } catch (err: any) {
+        setErrorMsg(err?.message || 'Result not found');
       } finally {
         setLoading(false);
       }
@@ -188,10 +194,12 @@ export default function TestResultPage() {
   }
 
   if (!result) {
+    const isInProgress = errorMsg?.toLowerCase().includes('in progress');
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-surface-page px-4 text-center">
         <BarChart3 className="h-10 w-10 text-text-muted" />
-        <p className="text-sm font-medium text-text-primary">Result not found</p>
+        <p className="text-sm font-medium text-text-primary">{isInProgress ? 'Attempt still in progress' : 'Result not found'}</p>
+        <p className="text-xs text-text-muted">{errorMsg ?? 'This result may still be processing. Please refresh.'}</p>
         <button
           onClick={() => router.push('/student/tests')}
           className="rounded-lg bg-brand-navy px-4 py-2 text-sm font-semibold text-white hover:bg-brand-navyDark"
@@ -219,6 +227,14 @@ export default function TestResultPage() {
         }
       />
       <div className="space-y-4 px-4 md:px-0">
+        {/* Pending Review Banner */}
+        {pendingReview && (
+          <div className="rounded-card border border-amber-200 bg-amber-50 p-3 text-center">
+            <p className="text-xs font-semibold text-amber-800">Result pending manual review</p>
+            <p className="mt-1 text-[11px] text-amber-700">Some answers require teacher review. Scores shown are interim and will update after review.</p>
+          </div>
+        )}
+
         {/* Score Header */}
         <div className="rounded-card border border-surface-border bg-surface-card p-6 text-center">
           <div className="mb-2 text-4xl font-bold text-text-primary">
@@ -297,7 +313,7 @@ export default function TestResultPage() {
         {result.questions.length > 0 && (
           <div className="rounded-card border border-surface-border bg-surface-card p-4">
             <h3 className="mb-3 text-sm font-semibold text-text-primary">Question Review</h3>
-            <div className="space-y-2">
+                    <div className="space-y-2">
               {result.questions.map((q, idx) => {
                 const isExpanded = expandedQuestion === q.id;
                 const options = q.options?.options ?? q.options?.choices ?? q.options ?? {};
@@ -305,6 +321,10 @@ export default function TestResultPage() {
 
                 const renderAnswer = (ans: any) => {
                   if (ans == null) return '—';
+                  if (ans && typeof ans === 'object' && ans.url) {
+                    const isPdf = ans.fileName?.toLowerCase().endsWith('.pdf') || ans.mimeType === 'application/pdf';
+                    return isPdf ? `PDF: ${ans.fileName}` : `Image: ${ans.fileName}`;
+                  }
                   if (Array.isArray(ans)) return ans.join(', ');
                   return String(ans);
                 };
@@ -342,6 +362,16 @@ export default function TestResultPage() {
                         {q.image_url && (
                           <div className="overflow-hidden rounded-lg border border-surface-border">
                             <img src={q.image_url} alt="Question" className="max-h-60 w-full object-contain" />
+                          </div>
+                        )}
+                        {q.student_answer && typeof q.student_answer === 'object' && q.student_answer.url && (
+                          <div className="rounded-lg border border-surface-border p-2">
+                            <p className="mb-1 text-xs font-medium text-text-muted">Your uploaded file:</p>
+                            {(q.student_answer.fileName?.toLowerCase().endsWith('.pdf') || q.student_answer.mimeType === 'application/pdf') ? (
+                              <a href={q.student_answer.url} target="_blank" rel="noopener noreferrer" className="text-xs text-brand-navy underline">Download / Preview PDF: {q.student_answer.fileName}</a>
+                            ) : (
+                              <img src={q.student_answer.url} alt="Your answer" className="max-h-60 w-full object-contain rounded" />
+                            )}
                           </div>
                         )}
 

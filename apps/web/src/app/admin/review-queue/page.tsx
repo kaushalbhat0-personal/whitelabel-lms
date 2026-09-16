@@ -132,14 +132,14 @@ export default function AdminReviewQueuePage() {
     }
   };
 
-  const maxMarks = (item: any) => item.test?.total_marks || 100;
+  const maxMarks = (item: any) => item.test_answers?.marks_possible ?? item.test?.total_marks ?? 10;
 
   const studentName = (item: any) =>
     item.test_attempts?.profiles?.name ||
     item.test_attempts?.user_id ||
     'Unknown Student';
 
-  const testTitle = (item: any) => item.test_id || 'Test';
+  const testTitle = (item: any) => item.test?.title ?? item.test_id ?? 'Test';
 
   const questionText = (item: any) =>
     item.test_answers?.question_bank?.question_text || 'Question not available';
@@ -255,9 +255,26 @@ export default function AdminReviewQueuePage() {
 
                     <div>
                       <p className="text-sm font-medium text-text-primary mb-1">Student&apos;s Answer:</p>
-                      <p className="text-sm text-text-secondary bg-surface-muted rounded-xl p-3">
-                        {answerText(item)}
-                      </p>
+                      <div className="text-sm text-text-secondary bg-surface-muted rounded-xl p-3">
+                        {(() => {
+                          const raw = item.test_answers?.answer;
+                          const isFile = raw && typeof raw === 'object' && (raw.url || raw.fileName);
+                          if (isFile) {
+                            const isPdf = raw.fileName?.toLowerCase().endsWith('.pdf') || raw.mimeType === 'application/pdf';
+                            return (
+                              <div className="space-y-2">
+                                <p className="text-xs">File: {raw.fileName}</p>
+                                {isPdf ? (
+                                  <a href={raw.url} target="_blank" rel="noopener noreferrer" className="text-brand-navy underline">Download / Preview PDF</a>
+                                ) : (
+                                  <img src={raw.url} alt="Student submission" className="max-h-60 rounded-lg border border-surface-border object-contain" />
+                                )}
+                              </div>
+                            );
+                          }
+                          return <p>{answerText(item)}</p>;
+                        })()}
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-4">

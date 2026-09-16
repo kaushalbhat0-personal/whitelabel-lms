@@ -33,16 +33,36 @@ function getGlobalTestState(test: TestResponse, now: number): string {
   return 'published';
 }
 
+function isCompletedStatus(s: string) {
+  return ['submitted', 'evaluated', 'published', 'partially_evaluated', 'graded', 'completed'].includes(s);
+}
+
 function getStudentDisplay(test: TestResponse, attemptsForTest: { status: string }[], now: number) {
-  const completed = attemptsForTest.find((a) => a.status === 'submitted' || a.status === 'graded' || a.status === 'evaluated');
-  if (completed) return { label: 'Completed', variant: 'text-status-success bg-status-success/10', cta: 'View Result', section: 'completed' as const };
+  const completedAttempts = attemptsForTest.filter((a) => isCompletedStatus(a.status));
+  const completedCount = completedAttempts.length;
+  const maxAttempts = (test as any).max_attempts ?? 1;
+  const hasReachedMax = maxAttempts > 0 && completedCount >= maxAttempts;
+
+  const latestCompleted = completedAttempts[completedAttempts.length - 1] ?? completedAttempts[0] ?? null;
+
   const inProgress = attemptsForTest.find((a) => a.status === 'in_progress');
-  if (inProgress) return { label: 'In Progress', variant: 'text-status-scheduled bg-status-scheduled/10', cta: 'Resume', section: 'available' as const };
+  if (inProgress) return { label: 'In Progress', variant: 'text-status-scheduled bg-status-scheduled/10', cta: 'Resume' as const, section: 'available' as const, completedCount, maxAttempts, hasReachedMax };
+
+  // If we have any completed attempt, show Completed (View Result) — max attempts also maps to Completed
+  if (completedCount > 0) {
+    if (hasReachedMax) {
+      return { label: 'Completed', variant: 'text-status-success bg-status-success/10', cta: 'View Result' as const, section: 'completed' as const, completedCount, maxAttempts, hasReachedMax };
+    }
+    // Not yet at max: CTA depends on whether another attempt is allowed
+    // But primary CTA remains View Result; secondary start is handled in TestCard via hasReachedMax check
+    return { label: 'Completed', variant: 'text-status-success bg-status-success/10', cta: 'View Result' as const, section: 'completed' as const, completedCount, maxAttempts, hasReachedMax };
+  }
+
   const global = getGlobalTestState(test, now);
-  if (global === 'scheduled') return { label: 'Scheduled', variant: 'text-status-scheduled bg-status-scheduled/10', cta: null, section: 'scheduled' as const };
-  if (global === 'ended') return { label: 'Ended', variant: 'text-status-ended bg-status-ended/10', cta: null, section: 'ended' as const };
-  if (global === 'draft') return { label: 'Draft', variant: 'text-text-muted bg-surface-muted', cta: null, section: 'scheduled' as const };
-  return { label: 'Available', variant: 'text-status-success bg-status-success/10', cta: 'Start Test', section: 'available' as const };
+  if (global === 'scheduled') return { label: 'Scheduled', variant: 'text-status-scheduled bg-status-scheduled/10', cta: null, section: 'scheduled' as const, completedCount, maxAttempts, hasReachedMax };
+  if (global === 'ended') return { label: 'Ended', variant: 'text-status-ended bg-status-ended/10', cta: null, section: 'ended' as const, completedCount, maxAttempts, hasReachedMax };
+  if (global === 'draft') return { label: 'Draft', variant: 'text-text-muted bg-surface-muted', cta: null, section: 'scheduled' as const, completedCount, maxAttempts, hasReachedMax };
+  return { label: 'Available', variant: 'text-status-success bg-status-success/10', cta: 'Start Test' as const, section: 'available' as const, completedCount, maxAttempts, hasReachedMax };
 }
 
 function getStatusLabel(status: string) {
@@ -78,11 +98,14 @@ interface TestCardProps {
 
 function TestCard({ test, attempts, onStart, onViewResult, now }: TestCardProps & { now: number }) {
   const testAttempts = (attempts as any[]).filter((a: any) => a.testId === test.id);
-  const completedAttempt = (testAttempts as any[]).find((a: any) => a.status === 'submitted' || a.status === 'graded' || a.status === 'evaluated');
+  const completedAttempts = (testAttempts as any[]).filter((a: any) => isCompletedStatus(a.status));
+  const completedAttempt = completedAttempts.length > 0 ? completedAttempts[completedAttempts.length - 1] : null;
   const inProgressAttempt = (testAttempts as any[]).find((a: any) => a.status === 'in_progress');
   const display = getStudentDisplay(test as any, testAttempts as any, now);
   const statusLabel = display.label;
   const statusVariant = display.variant;
+  const hasReachedMax = (display as any).hasReachedMax;
+  const canStartAnother = !hasReachedMax && completedAttempts.length > 0 && (test as any).max_attempts > completedAttempts.length;
 
   return (
     <div className="rounded-card border border-surface-border bg-surface-card p-4 transition-colors hover:border-brand-navy/20">
@@ -133,16 +156,8 @@ function TestCard({ test, attempts, onStart, onViewResult, now }: TestCardProps 
           )}
         </div>
 
-        <div className="shrink-0">
-          {completedAttempt ? (
-            <button
-              onClick={() => onViewResult(completedAttempt.id)}
-              className="flex items-center gap-1.5 rounded-lg bg-brand-navy px-3 py-2 text-xs font-semibold text-white hover:bg-brand-navyDark"
-            >
-              <Eye className="h-3.5 w-3.5" />
-              View Result
-            </button>
-          ) : inProgressAttempt ? (
+        <div className="shrink-0 flex flex-col gap-1.5 items-end">
+          {inProgressAttempt ? (
             <button
               onClick={() => onStart(test.id)}
               className="flex items-center gap-1.5 rounded-lg bg-brand-navy px-3 py-2 text-xs font-semibold text-white hover:bg-brand-navyDark"
@@ -150,6 +165,33 @@ function TestCard({ test, attempts, onStart, onViewResult, now }: TestCardProps 
               <Play className="h-3.5 w-3.5" />
               Resume
             </button>
+          ) : hasReachedMax && completedAttempt ? (
+            <button
+              onClick={() => onViewResult(completedAttempt.id)}
+              className="flex items-center gap-1.5 rounded-lg bg-brand-navy px-3 py-2 text-xs font-semibold text-white hover:bg-brand-navyDark"
+            >
+              <Eye className="h-3.5 w-3.5" />
+              View Result
+            </button>
+          ) : completedAttempt ? (
+            <>
+              <button
+                onClick={() => onViewResult(completedAttempt.id)}
+                className="flex items-center gap-1.5 rounded-lg bg-brand-navy px-3 py-2 text-xs font-semibold text-white hover:bg-brand-navyDark"
+              >
+                <Eye className="h-3.5 w-3.5" />
+                View Result
+              </button>
+              {canStartAnother && (
+                <button
+                  onClick={() => onStart(test.id)}
+                  className="flex items-center gap-1 rounded-md border border-brand-navy px-2.5 py-1 text-[10px] font-medium text-brand-navy hover:bg-brand-navy/5"
+                >
+                  <Play className="h-3 w-3" />
+                  Retake ({completedAttempts.length}/{ (test as any).max_attempts})
+                </button>
+              )}
+            </>
           ) : display.cta === 'Start Test' ? (
             <button
               onClick={() => onStart(test.id)}
@@ -166,15 +208,10 @@ function TestCard({ test, attempts, onStart, onViewResult, now }: TestCardProps 
               <Play className="h-3.5 w-3.5" />
               {display.cta}
             </button>
-          ) : completedAttempt ? (
-            <button
-              onClick={() => onViewResult(completedAttempt.id)}
-              className="flex items-center gap-1.5 rounded-lg border border-surface-border px-3 py-2 text-xs font-semibold text-text-secondary hover:bg-surface-muted"
-            >
-              <Eye className="h-3.5 w-3.5" />
-              View Result
-            </button>
           ) : null}
+          {hasReachedMax && (
+            <span className="text-[10px] text-text-muted">Max attempts reached</span>
+          )}
         </div>
       </div>
     </div>

@@ -160,22 +160,32 @@ function QuestionRenderer({
     case 'image_upload': {
       const isUploading = typeof value === 'object' && value !== null && '_uploading' in value;
       const hasValue = value && typeof value === 'object' && value.url;
+      const isPdf = hasValue && (value.fileName?.toLowerCase().endsWith('.pdf') || value.mimeType === 'application/pdf');
       return (
         <div className="flex flex-col items-center gap-2 rounded-lg border-2 border-dashed border-surface-border p-8 text-center">
           <input
             type="file"
-            accept="image/*"
+            accept="image/*,.pdf"
             disabled={isUploading}
             onChange={async (e) => {
               const file = e.target.files?.[0];
               if (!file) return;
+              const allowed = ['image/png','image/jpeg','image/jpg','image/webp','image/gif','application/pdf'];
+              if (!allowed.includes(file.type) && !file.name.toLowerCase().endsWith('.pdf')) {
+                toast.error('Unsupported file type. Use PNG/JPG/WEBP/GIF/PDF');
+                return;
+              }
+              if (file.size > 10 * 1024 * 1024) {
+                toast.error('File must be smaller than 10MB');
+                return;
+              }
               onChange({ _uploading: true, fileName: file.name });
               try {
                 const result = await uploadQuestionImage(file);
-                onChange({ url: result.url, fileName: result.fileName });
-                toast.success('Image uploaded');
-              } catch {
-                toast.error('Failed to upload image');
+                onChange({ url: result.url, fileName: result.fileName, mimeType: file.type, storagePath: (result as any).storagePath });
+                toast.success('File uploaded');
+              } catch (err: any) {
+                toast.error(err?.message || 'Failed to upload file');
                 onChange(undefined);
               }
             }}
@@ -190,9 +200,17 @@ function QuestionRenderer({
           {hasValue && (
             <div className="w-full space-y-2">
               <p className="text-xs text-text-muted">Uploaded: {value.fileName}</p>
-              <img src={value.url} alt="Uploaded answer" className="max-h-40 rounded-lg border border-surface-border object-contain" />
+              {isPdf ? (
+                <div className="rounded-lg border border-surface-border bg-surface-muted p-3 text-xs text-text-secondary">
+                  PDF uploaded — <a href={value.url} target="_blank" rel="noopener noreferrer" className="text-brand-navy underline">Preview / Download</a>
+                </div>
+              ) : (
+                <img src={value.url} alt="Uploaded answer" className="max-h-40 rounded-lg border border-surface-border object-contain" />
+              )}
+              <button type="button" onClick={() => onChange(undefined)} className="text-xs text-red-600 hover:underline">Remove / Replace</button>
             </div>
           )}
+          <p className="text-[10px] text-text-muted">PNG, JPG, WEBP, GIF or PDF — max 10MB</p>
         </div>
       );
     }

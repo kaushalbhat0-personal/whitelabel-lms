@@ -1,7 +1,19 @@
-import { Controller, Post, UseInterceptors, UploadedFile, Logger } from '@nestjs/common';
+import { Controller, Post, UseInterceptors, UploadedFile, Logger, BadRequestException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { SupabaseService } from '../../common/services/supabase.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+
+const ALLOWED_MIME_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/jpg',
+  'image/webp',
+  'image/gif',
+  'application/pdf',
+]);
+
+const ALLOWED_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'pdf']);
+const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 
 @Controller('uploads')
 export class UploadsController {
@@ -10,14 +22,24 @@ export class UploadsController {
   constructor(private readonly supabaseService: SupabaseService) {}
 
   @Post('question-image')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_FILE_SIZE_BYTES } }))
   async uploadQuestionImage(
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: { id: string },
   ) {
-    if (!file) throw new Error('No file provided');
+    if (!file) throw new BadRequestException('No file provided');
 
-    const ext = file.originalname.split('.').pop() ?? 'png';
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      throw new BadRequestException('File must be smaller than 10MB');
+    }
+
+    if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
+      throw new BadRequestException(`Unsupported file type: ${file.mimetype}. Allowed: PNG, JPG, WEBP, GIF, PDF`);
+    }
+
+    const rawExt = (file.originalname.split('.').pop() ?? 'png').toLowerCase();
+    const ext = ALLOWED_EXTENSIONS.has(rawExt) ? rawExt : 'png';
+
     const fileName = `q-${user.id}-${Date.now()}.${ext}`;
     const storagePath = `question-answers/${fileName}`;
 
@@ -31,14 +53,18 @@ export class UploadsController {
 
     if (uploadError) {
       this.logger.error(`Upload failed: ${uploadError.message}`);
-      throw new Error('Failed to upload image');
+      throw new BadRequestException('Failed to upload file');
     }
 
-    const { data: signedUrl } = await this.supabaseService.client
+    const { data: signedUrl, error: signedError } = await this.supabaseService.client
       .storage
       .from('uploads')
       .createSignedUrl(storagePath, 60 * 60 * 24 * 30);
 
-    return { url: signedUrl?.signedUrl ?? '', fileName };
+    if (signedError) {
+      this.logger.warn(`Signed URL creation failed for ${storagePath}: ${signedError.message}`);
+    }
+
+    return { url: signedUrl?.signedUrl ?? storagePath, fileName, storagePath, mimeType: file.mimetype };
   }
 }

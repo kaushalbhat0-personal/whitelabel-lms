@@ -9,10 +9,10 @@ export class ResultsService {
   constructor(private readonly supabaseService: SupabaseService) {}
 
   async getStudentResult(attemptId: string, userId: string) {
-    // Verify ownership
+    // Verify ownership and fetch full attempt for fallback
     const { data: attempt, error: attemptError } = await this.supabaseService.client
       .from(TABLES.TEST_ATTEMPTS)
-      .select('user_id, test_id')
+      .select('user_id, test_id, status, started_at, submitted_at, time_remaining_seconds')
       .eq('id', attemptId)
       .single();
 
@@ -24,10 +24,14 @@ export class ResultsService {
       throw new ForbiddenException('You do not own this attempt');
     }
 
+    if (attempt.status === 'in_progress') {
+      throw new NotFoundException('Result not available — attempt still in progress');
+    }
+
     // Fetch test to check result visibility
     const { data: test, error: testError } = await this.supabaseService.client
       .from(TABLES.TESTS)
-      .select('show_result_immediately')
+      .select('title, total_marks, passing_marks, duration_minutes, show_result_immediately')
       .eq('id', attempt.test_id)
       .single();
 
@@ -36,60 +40,128 @@ export class ResultsService {
     }
 
     // Fetch result with test join
-    const { data: result, error: resultError } = await this.supabaseService.client
+    const { data: result } = await this.supabaseService.client
       .from(TABLES.TEST_RESULTS)
       .select(`
         *,
         test:${TABLES.TESTS}(title, total_marks, passing_marks, duration_minutes, show_result_immediately)
       `)
       .eq('attempt_id', attemptId)
-      .single();
+      .maybeSingle();
 
-    if (resultError || !result) {
-      throw new NotFoundException('Result not found');
+    // If published result exists, return it (respect show_result_immediately)
+    if (result) {
+      const showResults = (result as any).test?.show_result_immediately !== false;
+
+      const base = {
+        obtained_marks: result.obtained_marks,
+        total_marks: result.total_marks,
+        percentage: result.percentage,
+        rank: result.rank,
+        total_attempts: result.total_attempts,
+        accuracy: result.accuracy,
+        topic_analysis: result.topic_analysis,
+        question_analysis: result.question_analysis,
+        teacher_feedback: result.teacher_feedback,
+        passed: result.passed,
+        duration_seconds: result.duration_seconds,
+        published_at: result.published_at,
+        status: 'published',
+        is_published: true,
+        attempt_status: attempt.status,
+      };
+
+      if (!showResults) {
+        return base;
+      }
+
+      const { data: answers } = await this.supabaseService.client
+        .from(TABLES.TEST_ANSWERS)
+        .select('*')
+        .eq('attempt_id', attemptId);
+
+      const sanitizedAnswers = (answers ?? []).map((a: any) => ({
+        id: a.id,
+        question_id: a.question_id,
+        question_type: a.question_type,
+        answer: a.answer,
+        marks_possible: a.marks_possible ?? null,
+        marks_awarded: showResults ? (a.marks_awarded ?? null) : null,
+        is_correct: showResults ? (a.is_correct ?? null) : null,
+        is_manual_review: a.is_manual_review ?? null,
+        feedback: a.feedback ?? null,
+      }));
+
+      return {
+        ...base,
+        answers: sanitizedAnswers,
+      };
     }
 
-    const showResults = (result as any).test?.show_result_immediately !== false;
-
-    const base = {
-      obtained_marks: result.obtained_marks,
-      total_marks: result.total_marks,
-      percentage: result.percentage,
-      rank: result.rank,
-      total_attempts: result.total_attempts,
-      accuracy: result.accuracy,
-      topic_analysis: result.topic_analysis,
-      question_analysis: result.question_analysis,
-      teacher_feedback: result.teacher_feedback,
-      passed: result.passed,
-      duration_seconds: result.duration_seconds,
-      published_at: result.published_at,
-    };
-
-    if (!showResults) {
-      return base;
-    }
-
-    // Fetch answers separately (no direct FK between test_results and test_answers)
+    // No published result yet — build interim result from graded answers
+    // This covers manual-review pending (partially_evaluated / evaluated without publish)
     const { data: answers } = await this.supabaseService.client
       .from(TABLES.TEST_ANSWERS)
       .select('*')
       .eq('attempt_id', attemptId);
 
-    const sanitizedAnswers = (answers ?? []).map((a: any) => ({
+    const answerRows = answers ?? [];
+    const manualPending = answerRows.some((a: any) => a.is_manual_review === true);
+    const hasAnyGrading = answerRows.some((a: any) => a.marks_awarded != null || a.is_correct != null);
+
+    // If submission hasn't been auto-graded at all, trigger hint for caller
+    if (!hasAnyGrading && !manualPending && attempt.status === 'submitted') {
+      // Still return interim with zero progress rather than 404
+      this.logger.warn(`Interim result: attempt ${attemptId} submitted but no grading yet`);
+    }
+
+    const obtainedMarks = answerRows.reduce((sum: number, a: any) => sum + (a.marks_awarded ?? 0), 0);
+    const totalMarks = (test as any).total_marks ?? 0;
+    const totalQuestions = answerRows.length;
+    const correctCount = answerRows.filter((a: any) => a.is_correct === true).length;
+    const incorrectCount = answerRows.filter((a: any) => a.is_correct === false).length;
+    const accuracy = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 10000) / 100 : 0;
+    const percentage = totalMarks > 0 ? Math.round((obtainedMarks / totalMarks) * 10000) / 100 : 0;
+    const durationSeconds =
+      attempt.started_at && attempt.submitted_at
+        ? Math.round((new Date(attempt.submitted_at).getTime() - new Date(attempt.started_at).getTime()) / 1000)
+        : null;
+
+    const sanitizedInterimAnswers = answerRows.map((a: any) => ({
       id: a.id,
       question_id: a.question_id,
       question_type: a.question_type,
       answer: a.answer,
       marks_possible: a.marks_possible ?? null,
-      marks_awarded: showResults ? (a.marks_awarded ?? null) : null,
-      is_correct: showResults ? (a.is_correct ?? null) : null,
+      marks_awarded: a.marks_awarded ?? null,
+      is_correct: a.is_correct ?? null,
       is_manual_review: a.is_manual_review ?? null,
+      feedback: a.feedback ?? null,
     }));
 
     return {
-      ...base,
-      answers: sanitizedAnswers,
+      obtained_marks: obtainedMarks,
+      total_marks: totalMarks,
+      percentage,
+      rank: null,
+      total_attempts: 1,
+      accuracy,
+      topic_analysis: null,
+      question_analysis: null,
+      teacher_feedback: null,
+      passed: totalMarks > 0 ? obtainedMarks >= ((test as any).passing_marks ?? 0) : false,
+      duration_seconds: durationSeconds,
+      published_at: attempt.submitted_at,
+      status: manualPending ? 'pending_review' : attempt.status,
+      is_published: false,
+      is_pending_review: manualPending,
+      attempt_status: attempt.status,
+      pending_review_count: answerRows.filter((a: any) => a.is_manual_review).length,
+      total_questions: totalQuestions,
+      correct_answers: correctCount,
+      incorrect_answers: incorrectCount,
+      answers: sanitizedInterimAnswers,
+      test_title: (test as any).title,
     };
   }
 
