@@ -48,6 +48,7 @@ interface ReviewQuestion {
   marks_awarded: number;
   marks: number;
   is_correct: boolean;
+  is_manual_review?: boolean;
   teacher_feedback?: string | null;
   image_url?: string | null;
 }
@@ -105,6 +106,7 @@ export default function TestResultPage() {
   const [expandedQuestion, setExpandedQuestion] = useState<string | null>(null);
   const [showAllTopics, setShowAllTopics] = useState(false);
   const [pendingReview, setPendingReview] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
     async function fetch() {
@@ -113,17 +115,37 @@ export default function TestResultPage() {
         if (raw.is_pending_review || raw.isPendingReview || raw.status === 'pending_review') {
           setPendingReview(true);
         }
+        if (raw.pending_review_count != null) setPendingCount(raw.pending_review_count);
         const answers: any[] = Array.isArray(raw.answers) ? raw.answers : [];
+        // Prefer server question_analysis if it has full data (published path), else fallback to answers
+        const hasQuestionAnalysis = Array.isArray(raw.question_analysis) && raw.question_analysis.length > 0;
+        const analysisForReview = hasQuestionAnalysis ? raw.question_analysis : null;
         const totalMarks = raw.totalMarks ?? raw.total_marks ?? 0;
         const score = raw.score ?? raw.marksAwarded ?? raw.obtained_marks ?? 0;
         const correctAnswers = raw.correctAnswers ?? raw.correct_answers ?? answers.filter((a) => a.is_correct === true).length;
         // API returns accuracy as a fraction (0..1); normalize to percent.
         const accuracyRaw = raw.accuracy ?? (answers.length > 0 ? correctAnswers / answers.length : 0);
         const accuracy = accuracyRaw > 1 ? accuracyRaw : Math.round(accuracyRaw * 100);
-        // Normalize API response
+        // Build questions from question_analysis if available (has correct_answer/options), else from answers
+        const questionsFromAnalysis = analysisForReview
+          ? analysisForReview.map((qa: any) => ({
+              id: qa.questionId ?? qa.id,
+              question_text: qa.questionText ?? qa.question_text ?? null,
+              question_type: qa.questionType ?? qa.question_type ?? null,
+              options: qa.options ?? null,
+              correct_answer: qa.correctAnswer ?? qa.correct_answer ?? null,
+              student_answer: qa.userAnswer ?? qa.student_answer ?? qa.answer ?? null,
+              marks_awarded: qa.marksAwarded ?? qa.marks_awarded ?? 0,
+              marks: qa.marksPossible ?? qa.marks_possible ?? qa.marks ?? 0,
+              is_correct: qa.isCorrect ?? qa.is_correct ?? false,
+              is_manual_review: qa.isManualReview ?? qa.is_manual_review ?? false,
+              teacher_feedback: qa.feedback ?? qa.teacher_feedback ?? null,
+              image_url: qa.imageUrl ?? qa.image_url ?? null,
+            }))
+          : null;
         const r: ResultData = {
           id: raw.id,
-          testTitle: raw.testTitle ?? raw.test?.title ?? raw.title ?? 'Test',
+          testTitle: raw.testTitle ?? raw.test?.title ?? raw.title ?? raw.test_title ?? 'Test',
           score,
           totalMarks,
           passingMarks: raw.passingMarks ?? raw.passing_marks ?? 0,
@@ -134,10 +156,10 @@ export default function TestResultPage() {
           totalQuestions: raw.totalQuestions ?? raw.total_questions ?? answers.length,
           correctAnswers,
           incorrectAnswers: raw.incorrectAnswers ?? raw.incorrect_answers ?? answers.filter((a) => a.is_correct === false).length,
-          unansweredCount: raw.unansweredCount ?? raw.unanswered_count ?? answers.filter((a) => a.is_correct == null && a.marks_awarded == null).length,
+          unansweredCount: raw.unansweredCount ?? raw.unanswered_count ?? raw.unansweredCount ?? answers.filter((a) => a.is_correct == null && a.is_manual_review !== true && (a.answer == null || a.answer === '' || (Array.isArray(a.answer) && a.answer.length === 0))).length,
           timeTakenSeconds: raw.timeTakenSeconds ?? raw.time_taken_seconds ?? raw.duration_seconds ?? 0,
           submittedAt: raw.submittedAt ?? raw.submitted_at ?? raw.published_at ?? raw.created_at ?? new Date().toISOString(),
-          questions: Array.isArray(raw.questions ?? raw.questionReview ?? [])
+          questions: Array.isArray(raw.questions ?? raw.questionReview ?? []) && (raw.questions ?? raw.questionReview ?? []).length > 0
             ? (raw.questions ?? raw.questionReview ?? []).map((q: any) => ({
                 id: q.id,
                 question_text: q.question_text,
@@ -148,21 +170,23 @@ export default function TestResultPage() {
                 marks_awarded: q.marks_awarded ?? q.marksAwarded ?? 0,
                 marks: q.marks ?? q.totalMarks ?? q.marks_possible ?? 0,
                 is_correct: q.is_correct ?? q.isCorrect ?? false,
+                is_manual_review: q.is_manual_review ?? false,
                 teacher_feedback: q.teacher_feedback ?? q.teacherFeedback ?? null,
                 image_url: q.image_url,
               }))
-            : answers.map((a: any) => ({
-                id: a.id,
-                question_text: a.question_text ?? null,
-                question_type: a.question_type,
-                options: null,
-                correct_answer: a.correct_answer ?? null,
-                student_answer: a.answer,
+            : questionsFromAnalysis ?? answers.map((a: any) => ({
+                id: a.id ?? a.question_id,
+                question_text: a.question_text ?? a.questionText ?? null,
+                question_type: a.question_type ?? a.questionType ?? null,
+                options: a.options ?? null,
+                correct_answer: a.correct_answer ?? a.correctAnswer ?? null,
+                student_answer: a.answer ?? a.student_answer ?? null,
                 marks_awarded: a.marks_awarded ?? 0,
                 marks: a.marks_possible ?? 0,
                 is_correct: a.is_correct === true,
-                teacher_feedback: null,
-                image_url: null,
+                is_manual_review: a.is_manual_review === true,
+                teacher_feedback: a.feedback ?? a.teacher_feedback ?? null,
+                image_url: a.image_url ?? null,
               })),
           topicBreakdown: Array.isArray(raw.topicBreakdown ?? raw.topic_breakdown ?? [])
             ? (raw.topicBreakdown ?? raw.topic_breakdown ?? []).map((t: any) => ({
@@ -230,8 +254,8 @@ export default function TestResultPage() {
         {/* Pending Review Banner */}
         {pendingReview && (
           <div className="rounded-card border border-amber-200 bg-amber-50 p-3 text-center">
-            <p className="text-xs font-semibold text-amber-800">Result pending manual review</p>
-            <p className="mt-1 text-[11px] text-amber-700">Some answers require teacher review. Scores shown are interim and will update after review.</p>
+            <p className="text-xs font-semibold text-amber-800">Result available — manual review pending ({pendingCount} pending)</p>
+            <p className="mt-1 text-[11px] text-amber-700">Some answers require teacher review. Scores shown are interim and will update after review. Final result after publishing.</p>
           </div>
         )}
 
@@ -269,6 +293,7 @@ export default function TestResultPage() {
           <StatCard icon={CheckCircle} label="Correct" value={String(result.correctAnswers)} color="bg-status-success/10 text-status-success" />
           <StatCard icon={XCircle} label="Incorrect" value={String(result.incorrectAnswers)} color="bg-status-live/10 text-status-live" />
           <StatCard icon={HelpCircle} label="Unanswered" value={String(result.unansweredCount)} color="bg-surface-muted text-text-muted" />
+          {pendingReview && <StatCard icon={Clock} label="Pending Review" value={String(pendingCount)} color="bg-amber-100 text-amber-700" />}
           <StatCard icon={Clock} label="Time Taken" value={formatTime(result.timeTakenSeconds)} color="bg-surface-muted text-text-secondary" />
         </div>
 
@@ -339,9 +364,13 @@ export default function TestResultPage() {
                         {idx + 1}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm text-text-primary line-clamp-2">{q.question_text}</p>
+                        <p className="text-sm text-text-primary line-clamp-2">{q.question_text ?? 'Question'}</p>
                         <div className="mt-1 flex items-center gap-2 text-xs text-text-muted">
-                          {q.is_correct ? (
+                          {q.is_manual_review ? (
+                            <span className="flex items-center gap-1 text-amber-600">
+                              <Clock className="h-3 w-3" /> Pending Review
+                            </span>
+                          ) : q.is_correct ? (
                             <span className="flex items-center gap-1 text-status-success">
                               <CheckCircle className="h-3 w-3" /> Correct
                             </span>
@@ -351,7 +380,7 @@ export default function TestResultPage() {
                             </span>
                           )}
                           <span>·</span>
-                          <span>{q.marks_awarded}/{q.marks} marks</span>
+                          <span>{q.is_manual_review && q.marks_awarded == null ? 'Pending' : `${q.marks_awarded ?? 0}/${q.marks} marks`}</span>
                         </div>
                       </div>
                       {isExpanded ? <ChevronUp className="h-4 w-4 shrink-0 text-text-muted" /> : <ChevronDown className="h-4 w-4 shrink-0 text-text-muted" />}
@@ -408,14 +437,21 @@ export default function TestResultPage() {
                         <div className="grid grid-cols-2 gap-3 text-xs">
                           <div>
                             <p className="text-text-muted">Your answer</p>
-                            <p className={cn('font-medium', q.is_correct ? 'text-status-success' : 'text-status-live')}>
-                              {renderAnswer(q.student_answer)}
+                            <p className={cn('font-medium', q.is_manual_review ? 'text-amber-600' : q.is_correct ? 'text-status-success' : 'text-status-live')}>
+                              {q.is_manual_review && (q.student_answer == null || q.student_answer === '') ? '—' : renderAnswer(q.student_answer)}
+                              {q.is_manual_review && <span className="ml-1 text-[10px] text-amber-600">(Awaiting review)</span>}
                             </p>
                           </div>
-                          {q.correct_answer != null && !q.is_correct && (
+                          {q.correct_answer != null && !q.is_correct && !q.is_manual_review && (
                             <div>
                               <p className="text-text-muted">Correct answer</p>
                               <p className="font-medium text-status-success">{renderAnswer(q.correct_answer)}</p>
+                            </div>
+                          )}
+                          {q.is_manual_review && (
+                            <div>
+                              <p className="text-text-muted">Status</p>
+                              <p className="font-medium text-amber-600">Pending manual review</p>
                             </div>
                           )}
                         </div>

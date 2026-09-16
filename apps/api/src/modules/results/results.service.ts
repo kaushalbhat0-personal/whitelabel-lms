@@ -75,26 +75,37 @@ export class ResultsService {
         return base;
       }
 
+      // Fetch answers with question_bank details for full review
       const { data: answers } = await this.supabaseService.client
         .from(TABLES.TEST_ANSWERS)
-        .select('*')
+        .select(`*, question_bank!inner(id, question_text, question_type, options, correct_answer, image_url, explanation, difficulty, topic_id)`)
         .eq('attempt_id', attemptId);
 
-      const sanitizedAnswers = (answers ?? []).map((a: any) => ({
-        id: a.id,
-        question_id: a.question_id,
-        question_type: a.question_type,
-        answer: a.answer,
-        marks_possible: a.marks_possible ?? null,
-        marks_awarded: showResults ? (a.marks_awarded ?? null) : null,
-        is_correct: showResults ? (a.is_correct ?? null) : null,
-        is_manual_review: a.is_manual_review ?? null,
-        feedback: a.feedback ?? null,
-      }));
+      const sanitizeWithQuestion = (rows: any[]) =>
+        (rows ?? []).map((a: any) => ({
+          id: a.id,
+          question_id: a.question_id,
+          question_type: a.question_type,
+          answer: a.answer,
+          marks_possible: a.marks_possible ?? null,
+          marks_awarded: showResults ? (a.marks_awarded ?? null) : null,
+          is_correct: showResults ? (a.is_correct ?? null) : null,
+          is_manual_review: a.is_manual_review ?? null,
+          feedback: a.feedback ?? null,
+          question_text: a.question_bank?.question_text ?? null,
+          options: a.question_bank?.options ?? null,
+          correct_answer: showResults ? (a.question_bank?.correct_answer ?? null) : null,
+          image_url: a.question_bank?.image_url ?? null,
+          explanation: showResults ? (a.question_bank?.explanation ?? null) : null,
+          difficulty: a.question_bank?.difficulty ?? null,
+          topic_id: a.question_bank?.topic_id ?? null,
+        }));
 
       return {
         ...base,
-        answers: sanitizedAnswers,
+        answers: sanitizeWithQuestion(answers ?? []),
+        question_analysis: (result as any).question_analysis ?? null,
+        topic_analysis: (result as any).topic_analysis ?? null,
       };
     }
 
@@ -102,7 +113,7 @@ export class ResultsService {
     // This covers manual-review pending (partially_evaluated / evaluated without publish)
     const { data: answers } = await this.supabaseService.client
       .from(TABLES.TEST_ANSWERS)
-      .select('*')
+      .select(`*, question_bank!inner(id, question_text, question_type, options, correct_answer, image_url, explanation, difficulty, topic_id)`)
       .eq('attempt_id', attemptId);
 
     const answerRows = answers ?? [];
@@ -120,6 +131,8 @@ export class ResultsService {
     const totalQuestions = answerRows.length;
     const correctCount = answerRows.filter((a: any) => a.is_correct === true).length;
     const incorrectCount = answerRows.filter((a: any) => a.is_correct === false).length;
+    const pendingCount = answerRows.filter((a: any) => a.is_manual_review === true).length;
+    const unansweredCount = answerRows.filter((a: any) => a.answer == null || a.answer === '' || (Array.isArray(a.answer) && a.answer.length === 0)).length;
     const accuracy = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 10000) / 100 : 0;
     const percentage = totalMarks > 0 ? Math.round((obtainedMarks / totalMarks) * 10000) / 100 : 0;
     const durationSeconds =
@@ -127,10 +140,30 @@ export class ResultsService {
         ? Math.round((new Date(attempt.submitted_at).getTime() - new Date(attempt.started_at).getTime()) / 1000)
         : null;
 
+    // Build question_analysis for interim so frontend can display per-question review even before publish
+    const interimQuestionAnalysis = answerRows.map((a: any) => ({
+      questionId: a.question_bank?.id ?? a.question_id,
+      questionText: a.question_bank?.question_text ?? null,
+      questionType: a.question_bank?.question_type ?? a.question_type,
+      options: a.question_bank?.options ?? null,
+      correctAnswer: a.question_bank?.correct_answer ?? null,
+      userAnswer: a.answer,
+      isCorrect: a.is_correct,
+      isManualReview: a.is_manual_review,
+      marksPossible: a.marks_possible ?? 1,
+      marksAwarded: a.marks_awarded ?? 0,
+      feedback: a.feedback ?? null,
+      imageUrl: a.question_bank?.image_url ?? null,
+    }));
+
     const sanitizedInterimAnswers = answerRows.map((a: any) => ({
       id: a.id,
       question_id: a.question_id,
       question_type: a.question_type,
+      question_text: a.question_bank?.question_text ?? null,
+      options: a.question_bank?.options ?? null,
+      correct_answer: a.question_bank?.correct_answer ?? null,
+      image_url: a.question_bank?.image_url ?? null,
       answer: a.answer,
       marks_possible: a.marks_possible ?? null,
       marks_awarded: a.marks_awarded ?? null,
@@ -147,7 +180,7 @@ export class ResultsService {
       total_attempts: 1,
       accuracy,
       topic_analysis: null,
-      question_analysis: null,
+      question_analysis: interimQuestionAnalysis,
       teacher_feedback: null,
       passed: totalMarks > 0 ? obtainedMarks >= ((test as any).passing_marks ?? 0) : false,
       duration_seconds: durationSeconds,
@@ -156,10 +189,11 @@ export class ResultsService {
       is_published: false,
       is_pending_review: manualPending,
       attempt_status: attempt.status,
-      pending_review_count: answerRows.filter((a: any) => a.is_manual_review).length,
+      pending_review_count: pendingCount,
       total_questions: totalQuestions,
       correct_answers: correctCount,
       incorrect_answers: incorrectCount,
+      unanswered_count: unansweredCount,
       answers: sanitizedInterimAnswers,
       test_title: (test as any).title,
     };

@@ -64,6 +64,13 @@ export class TestsService {
       .single();
 
     if (error) throw error;
+    // Validate marks arithmetic: sum of question marks should equal total_marks
+    if (questions?.length) {
+      const sumMarks = questions.reduce((s: number, q: any) => s + (q.marks ?? 1), 0);
+      if (sumMarks !== testData.totalMarks) {
+        this.logger.warn(`create test "${testData.title}" total_marks ${testData.totalMarks} != sum_marks ${sumMarks} (${questions.length} questions) — arithmetic mismatch will show as 11q/12m`);
+      }
+    }
     const result = await this.insertRelations(test.id, sections, questions, batches);
     logEntityEvent(
       this.observabilityService,

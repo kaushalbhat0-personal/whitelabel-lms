@@ -108,6 +108,22 @@ export class EvaluationService {
       const negativeMark = tqb.negative_mark ?? 0;
       summary.marksPossible += marksPossible;
 
+      // Idempotency: skip already evaluated answers (re-grade should not double-count)
+      // An answer is considered already auto-graded if evaluated_at is set and is_manual_review is false with is_correct not null
+      const alreadyGraded = answer.evaluated_at != null && answer.is_manual_review === false && answer.is_correct != null;
+      const alreadyQueued = answer.is_manual_review === true && answer.evaluated_at != null;
+      if (alreadyGraded || alreadyQueued) {
+        // Count toward summary but don't re-evaluate
+        if (alreadyGraded) {
+          summary.autoGraded++;
+          summary.marksAwarded += answer.marks_awarded ?? 0;
+          if (answer.is_correct) summary.correct++; else summary.incorrect++;
+        } else {
+          summary.manualReview++;
+        }
+        continue;
+      }
+
       const questionType = questionBank.question_type;
       const correctAnswer = questionBank.correct_answer;
 
@@ -141,6 +157,7 @@ export class EvaluationService {
         .update({
           is_correct: isCorrect,
           marks_awarded: marksAwarded,
+          is_manual_review: false,
           evaluated_at: new Date().toISOString(),
         })
         .eq('id', answer.id);
@@ -161,15 +178,16 @@ export class EvaluationService {
     }
 
     if (reviewQueueEntries.length > 0) {
+      // Use upsert to avoid duplicate unique violation on re-run (attempt_id, question_id)
       const { error: queueError } = await this.supabaseService.client
         .from(TABLES.TEST_REVIEW_QUEUE)
-        .insert(reviewQueueEntries.map((entry) => ({
+        .upsert(reviewQueueEntries.map((entry) => ({
           attempt_id: entry.attempt_id,
           answer_id: entry.answer_id,
           test_id: entry.test_id,
           question_id: entry.question_id,
           status: ReviewStatus.PENDING,
-        })));
+        })), { onConflict: 'attempt_id,question_id', ignoreDuplicates: true });
 
       if (queueError) this.logger.error('Failed to create review queue entries', queueError);
     }
@@ -253,21 +271,25 @@ export class EvaluationService {
           status,
           submitted_at,
           user_id,
+          test_id,
           profiles!inner(id, name, email)
         ),
         test_answers!inner(
           id,
           answer,
           marks_possible,
+          marks_awarded,
+          is_manual_review,
           question_id,
-          question_bank!inner(id, question_text, question_type)
-        )
-      `)
+          question_bank!inner(id, question_text, question_type, image_url)
+        ),
+        tests!inner(id, title)
+      `, { count: 'exact' })
       .order('created_at', { ascending: false });
 
     if (options.status) query = query.eq('status', options.status);
     if (options.assignedTo) query = query.eq('assigned_to', options.assignedTo);
-    if (options.testId) query = query.eq('test_attempts.test_id', options.testId);
+    if (options.testId) query = query.eq('test_id', options.testId);
 
     const page = options.page ?? 1;
     const limit = options.limit ?? 20;
@@ -275,10 +297,10 @@ export class EvaluationService {
     const to = from + limit - 1;
     query = query.range(from, to);
 
-    const { data, error } = await query;
+    const { data, count, error } = await query;
     if (error) throw error;
 
-    return { items: data ?? [], page, limit };
+    return { items: data ?? [], total: count ?? 0, page, limit };
   }
 
   async assignForReview(reviewId: string, reviewerId: string) {
@@ -440,7 +462,15 @@ export class EvaluationService {
     const answers = await this.fetchAnswersWithQuestions(attemptId, attempt.test_id);
     if (!answers.length) throw new NotFoundException('No answers found for this attempt');
 
-    const totalMarks = attempt.tests.total_marks;
+    // Guard: do not publish if manual review still pending unless force? Currently publish is allowed anytime but will include pending as 0.
+    // We enforce that publish while pending is allowed — it will publish interim scores (manual = 0/partial).
+    // Caller should use publish after all reviewed for final result.
+
+    // Use sum of marks_possible from test_question_bank as source of truth if test.total_marks mismatches
+    const sumMarksPossible = answers.reduce((sum, a) => sum + (a.tqb?.marks ?? a.marks_possible ?? 1), 0);
+    const totalMarks = sumMarksPossible !== (attempt.tests.total_marks ?? 0) && sumMarksPossible > 0
+      ? (() => { this.logger.warn(`publishResults: test.total_marks ${attempt.tests.total_marks} != sum_marks ${sumMarksPossible} for attempt ${attemptId}, using sum`); return sumMarksPossible; })()
+      : (attempt.tests.total_marks ?? sumMarksPossible);
     const obtainedMarks = answers.reduce((sum, a) => sum + (a.marks_awarded ?? 0), 0);
     const totalQuestions = answers.length;
     const correctAnswers = answers.filter((a) => a.is_correct === true).length;
