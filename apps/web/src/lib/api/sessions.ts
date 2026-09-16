@@ -9,10 +9,14 @@ export interface ScheduleSessionData {
 
 export interface ScheduledSession {
   id: string;
-  zoom_meeting_id: string;
+  zoom_meeting_id?: string;
+  zoom_webinar_id?: string;
   start_time: string;
   title: string;
-  is_live: boolean;
+  topic?: string;
+  is_live?: boolean;
+  status?: string;
+  duration_minutes?: number;
   created_at: string;
   updated_at: string;
   batchNames: string[];

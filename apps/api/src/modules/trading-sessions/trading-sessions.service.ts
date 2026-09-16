@@ -35,6 +35,8 @@ export class TradingSessionsService {
       title: session.topic ?? session.title,
       // Legacy boolean -> canonical 4-state status.
       is_live: session.status === 'live',
+      status: session.status,
+      duration_minutes: session.duration_minutes,
       created_at: session.created_at,
       updated_at: session.updated_at ?? session.created_at,
       batchNames: session.batchNames ?? (session.batch_ids ?? []),

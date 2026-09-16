@@ -57,10 +57,11 @@ function SessionCard({
     }
   };
 
-  const isUpcoming = session.status === 'scheduled' || session.status === 'live';
-  const canJoin = session.status === 'live' ||
-    (session.status === 'scheduled' &&
-      new Date(session.start_time).getTime() - Date.now() < 15 * 60 * 1000);
+  const start = new Date(session.start_time).getTime();
+  const end = start + (session.duration_minutes ?? 60) * 60000;
+  const now = Date.now();
+  const isUpcoming = (session.status === 'scheduled' || session.status === 'live') && now <= end;
+  const canJoin = session.status === 'live' || (session.status === 'scheduled' && now >= start - 15 * 60 * 1000 && now <= end);
 
   return (
     <div className="rounded-card border border-surface-border bg-surface-card p-4">

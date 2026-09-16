@@ -63,12 +63,14 @@ export default function AdminSessionsPage() {
     });
   };
 
-  const upcoming = sessions.filter(
-    (s) => new Date(s.start_time) > new Date(),
-  );
-  const past = sessions.filter(
-    (s) => new Date(s.start_time) <= new Date(),
-  );
+  const upcoming = sessions.filter((s) => {
+    const end = new Date(new Date(s.start_time).getTime() + (s.duration_minutes ?? 60) * 60000);
+    return end > new Date() && s.status !== 'ended' && s.status !== 'cancelled';
+  });
+  const past = sessions.filter((s) => {
+    const end = new Date(new Date(s.start_time).getTime() + (s.duration_minutes ?? 60) * 60000);
+    return end <= new Date() || s.status === 'ended' || s.status === 'cancelled';
+  });
 
   return (
     <div className="space-y-6">
@@ -183,30 +185,32 @@ function SessionTable({
                 {formatDateTime(session.start_time)}
               </td>
               <td className="px-5 py-4">
-                <span
-                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                    session.is_live
-                      ? 'bg-green-100 text-green-700'
-                      : new Date(session.start_time) > new Date()
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'bg-gray-100 text-gray-500'
-                  }`}
-                >
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full ${
-                      session.is_live
-                        ? 'bg-green-500'
-                        : new Date(session.start_time) > new Date()
-                          ? 'bg-blue-500'
-                          : 'bg-gray-400'
-                    }`}
-                  />
-                  {session.is_live
-                    ? 'Live'
-                    : new Date(session.start_time) > new Date()
-                      ? 'Scheduled'
-                      : 'Ended'}
-                </span>
+                {(() => {
+                  const end = new Date(new Date(session.start_time).getTime() + (session.duration_minutes ?? 60) * 60000);
+                  const isEnded = end <= new Date() || session.status === 'ended' || session.status === 'cancelled';
+                  return (
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                        session.is_live
+                          ? 'bg-green-100 text-green-700'
+                          : !isEnded
+                            ? 'bg-blue-100 text-blue-700'
+                            : 'bg-gray-100 text-gray-500'
+                      }`}
+                    >
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full ${
+                          session.is_live
+                            ? 'bg-green-500'
+                            : !isEnded
+                              ? 'bg-blue-500'
+                              : 'bg-gray-400'
+                        }`}
+                      />
+                      {session.is_live ? 'Live' : !isEnded ? 'Scheduled' : 'Ended'}
+                    </span>
+                  );
+                })()}
               </td>
               <td className="px-5 py-4">
                 {session.joinUrl ? (

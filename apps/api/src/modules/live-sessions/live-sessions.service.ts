@@ -129,6 +129,11 @@ export class LiveSessionsService {
 
     if (sessionError) {
       this.logger.error(`Failed to create session: ${sessionError.message}`);
+      try {
+        await this.zoomService.deleteWebinar(webinar.webinarId);
+      } catch (e) {
+        this.logger.warn(`Failed to clean up orphan webinar ${webinar.webinarId}: ${(e as Error).message}`);
+      }
       throw new BadRequestException('Failed to create session');
     }
 
@@ -350,7 +355,7 @@ export class LiveSessionsService {
    *   3. Fetch the host teacher's name
    *   4. Return combined result
    */
-  async findById(id: string) {
+  async findById(id: string, requester?: { id: string; role: string }) {
     // Fetch session
     const { data: session, error: sessionError } = await this.supabaseService.client
       .from(TABLES.LIVE_SESSIONS)
@@ -369,6 +374,19 @@ export class LiveSessionsService {
       .eq('session_id', id);
 
     const batchIds = (batchLinks ?? []).map((b: any) => b.batch_id);
+
+    // Student isolation: verify enrollment via batch_students ∩ session_batches
+    if (requester?.role === 'student') {
+      const { data: userBatches } = await this.supabaseService.client
+        .from(TABLES.BATCH_STUDENTS)
+        .select('batch_id')
+        .eq('user_id', requester.id);
+      const userBatchIds = new Set((userBatches ?? []).map((b: any) => b.batch_id));
+      const hasAccess = batchIds.some((bid: string) => userBatchIds.has(bid));
+      if (!hasAccess) {
+        throw new NotFoundException('Session not found');
+      }
+    }
 
     // Fetch host teacher info
     const { data: teacher } = await this.supabaseService.client
@@ -480,8 +498,12 @@ export class LiveSessionsService {
       throw new UnauthorizedException('This join token is not valid for your account.');
     }
 
-    // Step 3: Consume the token (delete from Redis — single use)
+    // Step 3: Consume the token (delete from Redis — single use) + clear index if it points here
     await this.redisDel(REDIS_KEYS.joinToken(token));
+    const idxVal = await this.redisGet(REDIS_KEYS.joinTokenIndex(sessionId, userId));
+    if (idxVal === token) {
+      await this.redisDel(REDIS_KEYS.joinTokenIndex(sessionId, userId));
+    }
 
     // Step 4: Revoke any previous active join for this user + session
     await this.redisDel(REDIS_KEYS.activeJoin(sessionId, userId));
@@ -539,10 +561,10 @@ export class LiveSessionsService {
     sessionId: string,
     userId: string,
   ): Promise<{ token: string; expiresInSeconds: number }> {
-    // Step 1: Validate session exists and is joinable
+    // Step 1: Validate session exists and is joinable — use end_time (start + duration) not start alone
     const { data: session, error: sessionError } = await this.supabaseService.client
       .from(TABLES.LIVE_SESSIONS)
-      .select('id, status, start_time, join_tokens_revoked_since')
+      .select('id, status, start_time, duration_minutes, join_tokens_revoked_since')
       .eq('id', sessionId)
       .single();
 
@@ -550,10 +572,17 @@ export class LiveSessionsService {
       throw new NotFoundException('Session not found.');
     }
 
-    const isLive = session.status === 'live';
+    const start = new Date(session.start_time).getTime();
+    const end = start + (session.duration_minutes ?? 60) * 60000;
+    const now = Date.now();
+
+    if (session.status === 'cancelled' || session.status === 'ended' || now > end) {
+      throw new BadRequestException('This session is no longer joinable.');
+    }
+
+    const isLive = session.status === 'live' && now <= end;
     const isWithinWindow =
-      session.status === 'scheduled' &&
-      new Date(session.start_time).getTime() - Date.now() < 15 * 60 * 1000;
+      session.status === 'scheduled' && now >= start - 15 * 60 * 1000 && now <= end;
 
     if (!isLive && !isWithinWindow) {
       throw new BadRequestException(
@@ -561,31 +590,35 @@ export class LiveSessionsService {
       );
     }
 
-    // Step 2: Validate student is enrolled
-    const { count } = await this.supabaseService.client
-      .from(TABLES.SESSION_REGISTRANTS)
-      .select('*', { count: 'exact', head: true })
-      .eq('session_id', sessionId)
+    // Step 2: Validate student is enrolled — authoritative model is batch_students ∩ session_batches
+    // (session_registrants is a snapshot for personal_join_url, not the auth gate; this fixes phantom-session drift
+    //  where getForStudent shows a session but requestJoinToken rejected due to missing registrant row)
+    const { data: userBatches } = await this.supabaseService.client
+      .from(TABLES.BATCH_STUDENTS)
+      .select('batch_id')
       .eq('user_id', userId);
-
-    if (!count || count === 0) {
-      throw new NotFoundException(
-        'You are not registered for this session. Contact your admin.',
-      );
+    const userBatchIds = new Set((userBatches ?? []).map((b: any) => b.batch_id));
+    if (userBatchIds.size === 0) {
+      throw new NotFoundException('You are not registered for this session. Contact your admin.');
+    }
+    const { data: sessionBatches } = await this.supabaseService.client
+      .from(TABLES.SESSION_BATCHES)
+      .select('batch_id')
+      .eq('session_id', sessionId)
+      .in('batch_id', [...userBatchIds]);
+    if (!sessionBatches || sessionBatches.length === 0) {
+      throw new NotFoundException('You are not registered for this session. Contact your admin.');
     }
 
-    // Step 3: Revoke any previous tokens for this user+session
-    const existingKeys = await this.redisScan('join_token:*');
-    for (const key of existingKeys) {
-      const raw = await this.redisGet(key);
-      if (raw) {
-        try {
-          const data = JSON.parse(raw);
-          if (data.userId === userId && data.sessionId === sessionId) {
-            await this.redisDel(key);
-          }
-        } catch { /* skip malformed */ }
-      }
+    // Ensure registrant row exists for personal_join_url (lazy backfill for post-creation enrollments)
+    await this.ensureRegistrant(sessionId, userId);
+
+    // Step 3: Revoke any previous token for this user+session via indexed lookup (no SCAN)
+    const indexKey = REDIS_KEYS.joinTokenIndex(sessionId, userId);
+    const previousToken = await this.redisGet(indexKey);
+    if (previousToken) {
+      await this.redisDel(REDIS_KEYS.joinToken(previousToken));
+      await this.redisDel(indexKey);
     }
 
     // Also mark existing DB tokens as used (force-expire)
@@ -601,12 +634,13 @@ export class LiveSessionsService {
     const expiresInSeconds = REDIS_TTL.JOIN_TOKEN;
     const expiresAt = new Date(Date.now() + expiresInSeconds * 1000).toISOString();
 
-    // Step 5: Store in Redis
+    // Step 5: Store in Redis + index
     await this.redisSetex(
       REDIS_KEYS.joinToken(token),
       expiresInSeconds,
       JSON.stringify({ userId, sessionId, expiresAt }),
     );
+    await this.redisSetex(indexKey, expiresInSeconds, token);
 
     // Also persist in DB for audit trail
     await this.supabaseService.client
@@ -769,6 +803,7 @@ export class LiveSessionsService {
       .from(TABLES.PROFILES)
       .select('id, zoom_user_id')
       .not('zoom_user_id', 'is', null)
+      .order('created_at', { ascending: true })
       .limit(1)
       .single();
 
@@ -779,6 +814,53 @@ export class LiveSessionsService {
     throw new BadRequestException(
       'No user with a Zoom user ID is configured. Set a Zoom user ID on a profile or configure LIVE_SESSION_DEFAULT_HOST_ID.',
     );
+  }
+
+  private async ensureRegistrant(sessionId: string, userId: string): Promise<void> {
+    const { count } = await this.supabaseService.client
+      .from(TABLES.SESSION_REGISTRANTS)
+      .select('*', { count: 'exact', head: true })
+      .eq('session_id', sessionId)
+      .eq('user_id', userId);
+    if (count && count > 0) return;
+
+    // Backfill: student is batch-enrolled but has no registrant (added after session creation)
+    // Create a minimal registrant so getStudentJoinUrl can return a personal_join_url.
+    // If Zoom webinar still exists, try to register; otherwise store without URL and let join still proceed via fallback.
+    const { data: session } = await this.supabaseService.client
+      .from(TABLES.LIVE_SESSIONS)
+      .select('zoom_webinar_id')
+      .eq('id', sessionId)
+      .single();
+    let personalJoinUrl: string | null = null;
+    if (session?.zoom_webinar_id) {
+      try {
+        const { data: profile } = await this.supabaseService.client
+          .from(TABLES.PROFILES)
+          .select('name, email')
+          .eq('id', userId)
+          .single();
+        if (profile?.email) {
+          personalJoinUrl = await this.zoomService.registerAttendee(session.zoom_webinar_id, {
+            name: profile.name ?? 'Student',
+            email: profile.email,
+          });
+        }
+      } catch (e) {
+        this.logger.warn(`ensureRegistrant: Zoom register failed for ${userId} session ${sessionId}: ${(e as Error).message}`);
+      }
+    }
+    try {
+      await this.supabaseService.client.from(TABLES.SESSION_REGISTRANTS).insert({
+        session_id: sessionId,
+        user_id: userId,
+        personal_join_url: personalJoinUrl,
+        zoom_registrant_id: null,
+      });
+    } catch (e) {
+      // Ignore unique violation race
+      if ((e as any)?.code !== '23505') this.logger.warn(`ensureRegistrant insert failed: ${(e as Error).message}`);
+    }
   }
 
   private async logJoinAttempt(
@@ -849,13 +931,15 @@ export class LiveSessionsService {
       .in('id', sessionIds)
       .order('start_time', { ascending: false });
 
-    // Split into upcoming and past
-    const now = new Date().toISOString();
+    // Split into upcoming and past — use end_time (start + duration) so a 60-min session at 16:40 remains upcoming until 17:40
+    const nowMs = Date.now();
+    const isEndedByTime = (s: any) =>
+      new Date(s.start_time).getTime() + (s.duration_minutes ?? 60) * 60000 <= nowMs;
     const upcoming = (sessions ?? []).filter(
-      (s: any) => s.status === 'scheduled' || s.status === 'live',
+      (s: any) => (s.status === 'scheduled' || s.status === 'live') && !isEndedByTime(s),
     );
     const past = (sessions ?? []).filter(
-      (s: any) => s.status === 'ended' || s.status === 'cancelled',
+      (s: any) => s.status === 'ended' || s.status === 'cancelled' || isEndedByTime(s),
     );
 
     // Include attendance status for past sessions
@@ -892,6 +976,27 @@ export class LiveSessionsService {
    *   2. Return the updated session
    */
   async updateStatus(id: string, status: SessionStatus) {
+    const allowed: SessionStatus[] = [SessionStatus.SCHEDULED, SessionStatus.LIVE, SessionStatus.ENDED, SessionStatus.CANCELLED];
+    if (!allowed.includes(status)) {
+      throw new BadRequestException(`Invalid status: ${status}`);
+    }
+
+    // If cancelling, delete Zoom webinar best-effort but keep row for audit
+    if (status === 'cancelled') {
+      const { data: existing } = await this.supabaseService.client
+        .from(TABLES.LIVE_SESSIONS)
+        .select('zoom_webinar_id')
+        .eq('id', id)
+        .single();
+      if (existing?.zoom_webinar_id) {
+        try {
+          await this.zoomService.deleteWebinar(existing.zoom_webinar_id);
+        } catch (e) {
+          this.logger.warn(`Failed to delete Zoom webinar on cancel ${existing.zoom_webinar_id}: ${(e as Error).message}`);
+        }
+      }
+    }
+
     const { data, error } = await this.supabaseService.client
       .from(TABLES.LIVE_SESSIONS)
       .update({ status })
