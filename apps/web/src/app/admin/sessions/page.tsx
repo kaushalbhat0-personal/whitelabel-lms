@@ -20,6 +20,11 @@ export default function AdminSessionsPage() {
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 20000);
+    return () => clearInterval(id);
+  }, []);
 
   const fetchSessions = useCallback(async () => {
     setLoading(true);
@@ -63,13 +68,16 @@ export default function AdminSessionsPage() {
     });
   };
 
+  // Time-aware derivation: cancelled stays cancelled, otherwise use wall-clock end
   const upcoming = sessions.filter((s) => {
-    const end = new Date(new Date(s.start_time).getTime() + (s.duration_minutes ?? 60) * 60000);
-    return end > new Date() && s.status !== 'ended' && s.status !== 'cancelled';
+    if (s.status === 'cancelled' || s.status === 'ended') return false;
+    const end = new Date(s.start_time).getTime() + (s.duration_minutes ?? 60) * 60000;
+    return end > now;
   });
   const past = sessions.filter((s) => {
-    const end = new Date(new Date(s.start_time).getTime() + (s.duration_minutes ?? 60) * 60000);
-    return end <= new Date() || s.status === 'ended' || s.status === 'cancelled';
+    if (s.status === 'cancelled' || s.status === 'ended') return true;
+    const end = new Date(s.start_time).getTime() + (s.duration_minutes ?? 60) * 60000;
+    return end <= now;
   });
 
   return (
@@ -107,6 +115,7 @@ export default function AdminSessionsPage() {
               </h2>
               <SessionTable
                 sessions={upcoming}
+                now={now}
                 onDelete={setDeleteTarget}
                 formatDateTime={formatDateTime}
               />
@@ -121,6 +130,7 @@ export default function AdminSessionsPage() {
               </h2>
               <SessionTable
                 sessions={past}
+                now={now}
                 onDelete={setDeleteTarget}
                 formatDateTime={formatDateTime}
               />
@@ -150,10 +160,12 @@ export default function AdminSessionsPage() {
 
 function SessionTable({
   sessions,
+  now,
   onDelete,
   formatDateTime,
 }: {
   sessions: ScheduledSession[];
+  now: number;
   onDelete: (id: string) => void;
   formatDateTime: (iso: string) => string;
 }) {
@@ -186,12 +198,15 @@ function SessionTable({
               </td>
               <td className="px-5 py-4">
                 {(() => {
-                  const end = new Date(new Date(session.start_time).getTime() + (session.duration_minutes ?? 60) * 60000);
-                  const isEnded = end <= new Date() || session.status === 'ended' || session.status === 'cancelled';
+                  const start = new Date(session.start_time).getTime();
+                  const end = start + (session.duration_minutes ?? 60) * 60000;
+                  const isLive = now >= start && now < end && session.status !== 'cancelled' && session.status !== 'ended';
+                  const isEnded = end <= now || session.status === 'ended' || session.status === 'cancelled';
+                  const label = session.status === 'cancelled' ? 'Cancelled' : isEnded ? 'Ended' : isLive ? 'Live Now' : 'Scheduled';
                   return (
                     <span
                       className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                        session.is_live
+                        isLive
                           ? 'bg-green-100 text-green-700'
                           : !isEnded
                             ? 'bg-blue-100 text-blue-700'
@@ -199,15 +214,9 @@ function SessionTable({
                       }`}
                     >
                       <span
-                        className={`h-1.5 w-1.5 rounded-full ${
-                          session.is_live
-                            ? 'bg-green-500'
-                            : !isEnded
-                              ? 'bg-blue-500'
-                              : 'bg-gray-400'
-                        }`}
+                        className={`h-1.5 w-1.5 rounded-full ${isLive ? 'bg-green-500 animate-pulse' : !isEnded ? 'bg-blue-500' : 'bg-gray-400'}`}
                       />
-                      {session.is_live ? 'Live' : !isEnded ? 'Scheduled' : 'Ended'}
+                      {label}
                     </span>
                   );
                 })()}

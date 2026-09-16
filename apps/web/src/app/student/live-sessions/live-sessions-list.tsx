@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Video, Calendar, Clock, ExternalLink, Loader2, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 import { type LiveSession, getSessionJoinUrl, requestJoinToken } from '@/lib/api/live-sessions';
 import { SessionStatusBadge } from '@/components/shared/SessionStatusBadge';
+import { deriveSessionState, getTimeLabel as sharedGetTimeLabel, getRelativeTime as sharedGetRelativeTime } from '@/lib/session-status';
 
 interface Props {
   upcoming: LiveSession[];
@@ -26,32 +27,12 @@ function formatDate(iso: string) {
   });
 }
 
-function getRelativeTime(startTime: string): string {
-  const diff = new Date(startTime).getTime() - Date.now();
-  const mins = Math.floor(diff / 60000);
-  const hours = Math.floor(mins / 60);
-  const days = Math.floor(hours / 24);
-  if (days > 0) return `Starts in ${days}d`;
-  if (hours > 0) return `Starts in ${hours}h`;
-  if (mins > 0) return `Starts in ${mins}m`;
-  return 'Starting now';
-}
-
-function getTimeLabel(session: LiveSession): string {
-  const start = new Date(session.start_time).getTime();
-  const end = start + (session.duration_minutes ?? 60) * 60000;
-  const now = Date.now();
-  if (session.status === 'cancelled') return 'Cancelled';
-  if (session.status === 'ended' || now >= end) return 'Ended';
-  if (now >= start) return 'Live Now';
-  if (now >= start - 15 * 60 * 1000) return 'Starting soon';
-  return getRelativeTime(session.start_time);
-}
-
 function SessionCard({
   session,
+  now,
 }: {
   session: LiveSession & { attendanceStatus?: string };
+  now: number;
 }) {
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
@@ -86,12 +67,12 @@ function SessionCard({
 
   const start = new Date(session.start_time).getTime();
   const end = start + (session.duration_minutes ?? 60) * 60000;
-  const now = Date.now();
-  // isUpcoming includes live-by-time even if Zoom webhook hasn't set status=live yet
-  const isUpcoming = (session.status === 'scheduled' || session.status === 'live') && now <= end;
-  const isLiveByTime = now >= start && now < end && session.status !== 'cancelled' && session.status !== 'ended';
-  const derivedStatus = isLiveByTime ? 'live' : session.status;
-  const canJoin = (session.status === 'live' || session.status === 'scheduled') && now >= start - 15 * 60 * 1000 && now <= end;
+  const state = deriveSessionState(session, now);
+  const isLiveByTime = state === 'live';
+  const derivedStatus = state === 'live' ? 'live' : state === 'starting_soon' ? 'scheduled' : state === 'cancelled' ? 'cancelled' : state === 'ended' ? 'ended' : session.status;
+  // Use derived upcoming: not ended/cancelled and time <= end
+  const isUpcoming = state !== 'ended' && state !== 'cancelled';
+  const canJoin = (session.status === 'live' || session.status === 'scheduled') && now >= start - 15 * 60 * 1000 && now <= end && state !== 'cancelled' && state !== 'ended';
 
   return (
     <div className="rounded-card border border-surface-border bg-surface-card p-4">
@@ -116,7 +97,7 @@ function SessionCard({
           </div>
           <p className={`mt-1 flex items-center gap-1.5 text-xs font-semibold ${isLiveByTime ? 'text-red-600' : derivedStatus === 'ended' ? 'text-text-muted' : derivedStatus === 'cancelled' ? 'text-gray-500' : 'text-text-muted'}`}>
             {isLiveByTime && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-600" />}
-            {getTimeLabel(session)}
+            {sharedGetTimeLabel(session, now)}
           </p>
           {!isUpcoming && session.attendanceStatus && (
             <p
@@ -164,11 +145,27 @@ function SessionCard({
 }
 
 export function LiveSessionsList({ upcoming, past, error }: Props) {
-  const todayStr = new Date().toDateString();
-  const todaySessions = upcoming.filter(
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 20000);
+    return () => clearInterval(id);
+  }, []);
+  // Re-derive upcoming/past based on wall-clock time so a session crossing start/end while page is open moves sections without reload
+  const all = [...upcoming, ...past];
+  const effectiveUpcoming = all.filter((s) => {
+    const st = deriveSessionState(s as any, now);
+    return st !== 'ended' && st !== 'cancelled';
+  });
+  const effectivePast = all.filter((s) => {
+    const st = deriveSessionState(s as any, now);
+    return st === 'ended' || st === 'cancelled' || s.status === 'ended' || s.status === 'cancelled';
+  });
+  // Deduplicate: prefer effectiveUpcoming for live sessions that were initially in past but time-based still live? Already covered.
+  const todayStr = new Date(now).toDateString();
+  const todaySessions = effectiveUpcoming.filter(
     (s) => new Date(s.start_time).toDateString() === todayStr,
   );
-  const laterSessions = upcoming.filter(
+  const laterSessions = effectiveUpcoming.filter(
     (s) => new Date(s.start_time).toDateString() !== todayStr,
   );
 
@@ -186,7 +183,7 @@ export function LiveSessionsList({ upcoming, past, error }: Props) {
     );
   }
 
-  if (upcoming.length === 0 && past.length === 0) {
+  if (effectiveUpcoming.length === 0 && effectivePast.length === 0) {
     return (
       <div className="flex flex-col items-center gap-3 py-16 text-center">
         <Video className="h-10 w-10 text-text-muted" />
@@ -203,13 +200,13 @@ export function LiveSessionsList({ upcoming, past, error }: Props) {
   return (
     <div className="space-y-6">
       {todaySessions.length > 0 && (
-        <Section title="Today" sessions={todaySessions} />
+        <Section title="Today" sessions={todaySessions} now={now} />
       )}
       {laterSessions.length > 0 && (
-        <Section title="Upcoming" sessions={laterSessions} />
+        <Section title="Upcoming" sessions={laterSessions} now={now} />
       )}
-      {past.length > 0 && (
-        <Section title="Past" sessions={past} past />
+      {effectivePast.length > 0 && (
+        <Section title="Past" sessions={effectivePast} now={now} past />
       )}
     </div>
   );
@@ -218,10 +215,12 @@ export function LiveSessionsList({ upcoming, past, error }: Props) {
 function Section({
   title,
   sessions,
+  now,
   past,
 }: {
   title: string;
   sessions: (LiveSession & { attendanceStatus?: string })[];
+  now: number;
   past?: boolean;
 }) {
   return (
@@ -231,7 +230,7 @@ function Section({
       </h3>
       <div className="space-y-2">
         {sessions.map((session) => (
-          <SessionCard key={session.id} session={session} />
+          <SessionCard key={session.id} session={session} now={now} />
         ))}
       </div>
     </div>
