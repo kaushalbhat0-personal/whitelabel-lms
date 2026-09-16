@@ -73,3 +73,61 @@ describe('Test timing timezone', () => {
     expect(new Date(endUTC).getTime() - new Date(startUTC).getTime()).toBe(3600000);
   });
 });
+
+describe('Student test status vs attempt', () => {
+  function getGlobalState(test:any, now:number){
+    if (test.status==='draft' || test.status==='archived' || test.status==='cancelled') return test.status;
+    if (!test.start_time) return test.status;
+    const start=new Date(test.start_time).getTime();
+    const end=test.end_time? new Date(test.end_time).getTime() : start + (test.duration_minutes??60)*60000;
+    if (now < start) return 'scheduled';
+    if (now > end) return 'ended';
+    return 'published';
+  }
+  function getStudentDisplay(test:any, attempts:any[], now:number){
+    const completed=attempts.find((a:any)=> a.status==='submitted' || a.status==='graded' || a.status==='evaluated');
+    if (completed) return {label:'Completed', section:'completed'};
+    const inProgress=attempts.find((a:any)=> a.status==='in_progress');
+    if (inProgress) return {label:'In Progress', section:'available'};
+    const global=getGlobalState(test, now);
+    if (global==='scheduled') return {label:'Scheduled', section:'scheduled'};
+    if (global==='ended') return {label:'Ended', section:'ended'};
+    return {label:'Available', section:'available'};
+  }
+  const baseTest = { id:'t1', status:'published', start_time:'2026-09-17T01:00:00.000Z', end_time:'2026-09-17T02:00:00.000Z', duration_minutes:60 };
+  it('no attempt -> Available', () => {
+    const now=new Date('2026-09-17T01:30:00.000Z').getTime();
+    expect(getStudentDisplay(baseTest, [], now).label).toBe('Available');
+  });
+  it('in_progress -> In Progress', () => {
+    const now=new Date('2026-09-17T01:30:00.000Z').getTime();
+    expect(getStudentDisplay(baseTest, [{status:'in_progress'}], now).label).toBe('In Progress');
+  });
+  it('submitted -> Completed (even though test still Available)', () => {
+    const now=new Date('2026-09-17T01:30:00.000Z').getTime();
+    // Global is Available, but student completed should be Completed
+    expect(getStudentDisplay(baseTest, [{status:'submitted'}], now).label).toBe('Completed');
+    // Ensure global still Available for other student
+    expect(getGlobalState(baseTest, now)).toBe('published');
+  });
+  it('scheduled before start', () => {
+    const now=new Date('2026-09-17T00:30:00.000Z').getTime();
+    expect(getStudentDisplay(baseTest, [], now).label).toBe('Scheduled');
+  });
+  it('ended after window', () => {
+    const now=new Date('2026-09-17T03:00:00.000Z').getTime();
+    expect(getStudentDisplay(baseTest, [], now).label).toBe('Ended');
+  });
+  it('completed still Completed after end', () => {
+    const now=new Date('2026-09-17T03:00:00.000Z').getTime();
+    expect(getStudentDisplay(baseTest, [{status:'submitted'}], now).label).toBe('Completed');
+  });
+  it('student completion does not change global test status', () => {
+    const now=new Date('2026-09-17T01:30:00.000Z').getTime();
+    const globalBefore=getGlobalState(baseTest, now);
+    getStudentDisplay(baseTest, [{status:'submitted'}], now);
+    const globalAfter=getGlobalState(baseTest, now);
+    expect(globalBefore).toBe(globalAfter);
+    expect(globalAfter).toBe('published');
+  });
+});

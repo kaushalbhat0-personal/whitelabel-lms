@@ -24,7 +24,19 @@ const statusColors: Record<string, string> = {
   active: 'bg-emerald-100 text-emerald-700',
   closed: 'bg-orange-100 text-orange-700',
   archived: 'bg-red-100 text-red-700',
+  ended: 'bg-orange-100 text-orange-700',
 };
+
+function deriveAdminStatus(test: TestResponse, now: number): string {
+  if (test.status === 'draft' || test.status === 'archived' || test.status === 'cancelled') return test.status;
+  if (!test.start_time) return test.status;
+  const start = new Date(test.start_time).getTime();
+  const end = test.end_time ? new Date(test.end_time).getTime() : start + (test.duration_minutes ?? 60) * 60000;
+  if (now < start) return 'scheduled';
+  if (now > end) return 'ended';
+  // within window and published/scheduled -> show published as Available
+  return test.status === 'published' ? 'published' : 'active';
+}
 
 export default function AdminTestsPage() {
   const router = useRouter();
@@ -36,6 +48,11 @@ export default function AdminTestsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const searchTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, []);
   const [confirmAction, setConfirmAction] = useState<{ type: 'archive' | 'delete'; id: string; title: string } | null>(null);
   const limit = 20;
 
@@ -118,10 +135,12 @@ export default function AdminTestsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-surface-border">
-                  {tests.map((test) => (
-                    <tr key={test.id} className="hover:bg-surface-muted/50">
-                      <td className="px-4 py-3 font-medium text-text-primary">{test.title}</td>
-                      <td className="px-4 py-3"><span className={cn('inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium capitalize', statusColors[test.status] || 'bg-gray-100 text-gray-700')}>{test.status}</span></td>
+                    {tests.map((test) => {
+                      const derived = deriveAdminStatus(test, now);
+                      return (
+                      <tr key={test.id} className="hover:bg-surface-muted/50">
+                        <td className="px-4 py-3 font-medium text-text-primary">{test.title}</td>
+                        <td className="px-4 py-3"><span className={cn('inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium capitalize', statusColors[derived] || 'bg-gray-100 text-gray-700')}>{derived}</span></td>
                       <td className="px-4 py-3 text-text-secondary">{test.test_question_bank?.length ?? 0}</td>
                       <td className="px-4 py-3 text-text-secondary">{test.total_marks}</td>
                       <td className="px-4 py-3 text-text-secondary">{test.duration_minutes ? `${test.duration_minutes} min` : '-'}</td>
@@ -135,7 +154,8 @@ export default function AdminTestsPage() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                      );
+                    })}
                 </tbody>
               </table>
             </div>

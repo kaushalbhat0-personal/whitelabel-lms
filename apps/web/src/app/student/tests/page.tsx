@@ -22,12 +22,37 @@ function formatDate(iso: string | null) {
   });
 }
 
+function getGlobalTestState(test: TestResponse, now: number): string {
+  if (test.status === 'draft' || test.status === 'archived') return test.status;
+  if (test.status === 'cancelled') return 'cancelled';
+  if (!test.start_time) return test.status === 'published' ? 'published' : test.status;
+  const start = new Date(test.start_time).getTime();
+  const end = test.end_time ? new Date(test.end_time).getTime() : start + (test.duration_minutes ?? 60) * 60000;
+  if (now < start) return 'scheduled';
+  if (now > end) return 'ended';
+  return 'published';
+}
+
+function getStudentDisplay(test: TestResponse, attemptsForTest: { status: string }[], now: number) {
+  const completed = attemptsForTest.find((a) => a.status === 'submitted' || a.status === 'graded' || a.status === 'evaluated');
+  if (completed) return { label: 'Completed', variant: 'text-status-success bg-status-success/10', cta: 'View Result', section: 'completed' as const };
+  const inProgress = attemptsForTest.find((a) => a.status === 'in_progress');
+  if (inProgress) return { label: 'In Progress', variant: 'text-status-scheduled bg-status-scheduled/10', cta: 'Resume', section: 'available' as const };
+  const global = getGlobalTestState(test, now);
+  if (global === 'scheduled') return { label: 'Scheduled', variant: 'text-status-scheduled bg-status-scheduled/10', cta: null, section: 'scheduled' as const };
+  if (global === 'ended') return { label: 'Ended', variant: 'text-status-ended bg-status-ended/10', cta: null, section: 'ended' as const };
+  if (global === 'draft') return { label: 'Draft', variant: 'text-text-muted bg-surface-muted', cta: null, section: 'scheduled' as const };
+  return { label: 'Available', variant: 'text-status-success bg-status-success/10', cta: 'Start Test', section: 'available' as const };
+}
+
 function getStatusLabel(status: string) {
   switch (status) {
     case 'published': return 'Available';
     case 'scheduled': return 'Scheduled';
     case 'active': return 'Active';
     case 'closed': return 'Completed';
+    case 'completed': return 'Completed';
+    case 'ended': return 'Ended';
     default: return status;
   }
 }
@@ -35,9 +60,11 @@ function getStatusLabel(status: string) {
 function getStatusVariant(status: string) {
   switch (status) {
     case 'published':
-    case 'active': return 'text-status-success bg-status-success/10';
+    case 'active':
+    case 'completed': return 'text-status-success bg-status-success/10';
     case 'scheduled': return 'text-status-scheduled bg-status-scheduled/10';
-    case 'closed': return 'text-status-ended bg-status-ended/10';
+    case 'closed':
+    case 'ended': return 'text-status-ended bg-status-ended/10';
     default: return 'text-text-muted bg-surface-muted';
   }
 }
@@ -49,10 +76,13 @@ interface TestCardProps {
   onViewResult: (attemptId: string) => void;
 }
 
-function TestCard({ test, attempts, onStart, onViewResult }: TestCardProps) {
-  const isAvailable = test.status === 'published' || test.status === 'scheduled' || test.status === 'active';
-  const testAttempts = attempts.filter((a) => a.testId === test.id);
-  const completedAttempt = testAttempts.find((a) => a.status === 'submitted' || a.status === 'graded');
+function TestCard({ test, attempts, onStart, onViewResult, now }: TestCardProps & { now: number }) {
+  const testAttempts = (attempts as any[]).filter((a: any) => a.testId === test.id);
+  const completedAttempt = (testAttempts as any[]).find((a: any) => a.status === 'submitted' || a.status === 'graded' || a.status === 'evaluated');
+  const inProgressAttempt = (testAttempts as any[]).find((a: any) => a.status === 'in_progress');
+  const display = getStudentDisplay(test as any, testAttempts as any, now);
+  const statusLabel = display.label;
+  const statusVariant = display.variant;
 
   return (
     <div className="rounded-card border border-surface-border bg-surface-card p-4 transition-colors hover:border-brand-navy/20">
@@ -62,8 +92,8 @@ function TestCard({ test, attempts, onStart, onViewResult }: TestCardProps) {
             <h3 className="text-sm font-semibold text-text-primary truncate">
               {test.title}
             </h3>
-            <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium', getStatusVariant(test.status))}>
-              {getStatusLabel(test.status)}
+            <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium', statusVariant)}>
+              {statusLabel}
             </span>
           </div>
 
@@ -104,24 +134,38 @@ function TestCard({ test, attempts, onStart, onViewResult }: TestCardProps) {
         </div>
 
         <div className="shrink-0">
-          {isAvailable ? (
-            completedAttempt ? (
-              <button
-                onClick={() => onViewResult(completedAttempt.id)}
-                className="flex items-center gap-1.5 rounded-lg bg-brand-navy px-3 py-2 text-xs font-semibold text-white hover:bg-brand-navyDark"
-              >
-                <Eye className="h-3.5 w-3.5" />
-                View Result
-              </button>
-            ) : (
-              <button
-                onClick={() => onStart(test.id)}
-                className="flex items-center gap-1.5 rounded-lg bg-brand-navy px-3 py-2 text-xs font-semibold text-white hover:bg-brand-navyDark"
-              >
-                <Play className="h-3.5 w-3.5" />
-                {testAttempts.some((a) => a.status === 'in_progress') ? 'Resume' : 'Start Test'}
-              </button>
-            )
+          {completedAttempt ? (
+            <button
+              onClick={() => onViewResult(completedAttempt.id)}
+              className="flex items-center gap-1.5 rounded-lg bg-brand-navy px-3 py-2 text-xs font-semibold text-white hover:bg-brand-navyDark"
+            >
+              <Eye className="h-3.5 w-3.5" />
+              View Result
+            </button>
+          ) : inProgressAttempt ? (
+            <button
+              onClick={() => onStart(test.id)}
+              className="flex items-center gap-1.5 rounded-lg bg-brand-navy px-3 py-2 text-xs font-semibold text-white hover:bg-brand-navyDark"
+            >
+              <Play className="h-3.5 w-3.5" />
+              Resume
+            </button>
+          ) : display.cta === 'Start Test' ? (
+            <button
+              onClick={() => onStart(test.id)}
+              className="flex items-center gap-1.5 rounded-lg bg-brand-navy px-3 py-2 text-xs font-semibold text-white hover:bg-brand-navyDark"
+            >
+              <Play className="h-3.5 w-3.5" />
+              Start Test
+            </button>
+          ) : display.cta ? (
+            <button
+              onClick={() => onStart(test.id)}
+              className="flex items-center gap-1.5 rounded-lg bg-brand-navy px-3 py-2 text-xs font-semibold text-white hover:bg-brand-navyDark"
+            >
+              <Play className="h-3.5 w-3.5" />
+              {display.cta}
+            </button>
           ) : completedAttempt ? (
             <button
               onClick={() => onViewResult(completedAttempt.id)}
@@ -142,6 +186,11 @@ export default function TestsPage() {
   const [tests, setTests] = useState<TestResponse[]>([]);
   const [attempts, setAttempts] = useState<{ testId: string; id: string; status: string }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     async function fetchData() {
@@ -161,8 +210,16 @@ export default function TestsPage() {
     fetchData();
   }, []);
 
-  const availableTests = tests.filter((t) => t.status === 'published' || t.status === 'scheduled' || t.status === 'active');
-  const completedTests = tests.filter((t) => t.status === 'closed');
+  const availableTests = (tests as any[]).filter((t: any) => {
+    const atts = (attempts as any[]).filter((a: any) => a.testId === t.id);
+    const disp = getStudentDisplay(t as any, atts as any, now);
+    return disp.section === 'available' || disp.section === 'scheduled';
+  });
+  const completedTests = (tests as any[]).filter((t: any) => {
+    const atts = (attempts as any[]).filter((a: any) => a.testId === t.id);
+    const disp = getStudentDisplay(t as any, atts as any, now);
+    return disp.section === 'completed' || disp.section === 'ended';
+  });
 
   const handleStart = (testId: string) => {
     router.push(`/student/tests/attempt/${testId}`);
@@ -213,6 +270,7 @@ export default function TestsPage() {
                       key={test.id}
                       test={test}
                       attempts={attempts}
+                      now={now}
                       onStart={handleStart}
                       onViewResult={handleViewResult}
                     />
@@ -232,6 +290,7 @@ export default function TestsPage() {
                       key={test.id}
                       test={test}
                       attempts={attempts}
+                      now={now}
                       onStart={handleStart}
                       onViewResult={handleViewResult}
                     />

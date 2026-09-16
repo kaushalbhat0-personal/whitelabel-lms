@@ -1,10 +1,11 @@
-import { Injectable, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, Logger, Inject, forwardRef, Optional } from '@nestjs/common';
 import { RedisService } from '@liaoliaots/nestjs-redis';
 import Redis from 'ioredis';
 import { SupabaseService } from '../../common/services/supabase.service';
 import { TABLES } from '../../common/constants/tables.constant';
 import { REDIS_KEYS, REDIS_TTL } from '../../common/constants/redis-keys.constant';
 import { StartAttemptDto, SaveAnswerDto, SubmitAttemptDto } from './dto/start-attempt.dto';
+import { EvaluationService } from '../evaluation/evaluation.service';
 
 const ATTEMPT_WITH_ANSWERS_SELECT = `
   *,
@@ -30,6 +31,7 @@ export class AttemptsService {
   constructor(
     private readonly supabaseService: SupabaseService,
     redisService: RedisService,
+    @Optional() private readonly evaluationService?: EvaluationService,
   ) {
     this.redis = redisService.getOrThrow();
   }
@@ -309,6 +311,22 @@ export class AttemptsService {
 
     await this.redis.del(REDIS_KEYS.attemptTimer(attemptId));
     await this.redis.del(REDIS_KEYS.attemptCheckpoint(attemptId));
+
+    // Instant results: auto-grade if test allows it
+    try {
+      const { data: testForGrade } = await this.supabaseService.client
+        .from(TABLES.TESTS)
+        .select('show_result_immediately')
+        .eq('id', attempt.test_id)
+        .single();
+      if (testForGrade?.show_result_immediately && this.evaluationService) {
+        await this.evaluationService.autoGradeAttempt(attemptId).catch((e) => {
+          this.logger.warn(`Auto-grade failed for attempt ${attemptId}: ${(e as Error).message}`);
+        });
+      }
+    } catch (e) {
+      this.logger.warn(`Auto-grade check failed for ${attemptId}: ${(e as Error).message}`);
+    }
 
     return updated;
   }
