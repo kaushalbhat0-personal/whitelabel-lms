@@ -20,6 +20,8 @@ export const REDIS_KEYS = {
   playbackSession: (sessionId: string) => `playback_session:${sessionId}`,
   /** Single-use join token bound to userId + sessionId */
   joinToken: (token: string) => `join_token:${token}`,
+  /** Index: current outstanding token for a user+session → avoids SCAN */
+  joinTokenIndex: (sessionId: string, userId: string) => `join_token_index:${sessionId}:${userId}`,
   /** Active join session for duplicate detection */
   activeJoin: (sessionId: string, userId: string) => `active_join:${sessionId}:${userId}`,
   /** Playback authorization token bound to userId + recordingId + deviceId */
