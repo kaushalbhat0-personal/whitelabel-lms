@@ -211,6 +211,7 @@ export class ZoomService {
       duration: dto.durationMinutes,
       timezone: 'Asia/Kolkata',
       settings: {
+        hd_video: true,
         practice_session: false,
         audio: 'voip',
         auto_recording: 'cloud',
