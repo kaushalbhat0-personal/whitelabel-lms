@@ -37,6 +37,24 @@ function formatTime(seconds: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
+function normalizeOptions(raw: any): { key: string; value: string }[] {
+  if (!raw) return [];
+  const arr = raw?.options ?? raw?.choices ?? raw;
+  if (Array.isArray(arr)) {
+    return arr.map((opt: any, idx: number) => {
+      if (typeof opt === 'string') return { key: opt, value: opt };
+      return { key: String(opt?.key ?? opt?.id ?? idx), value: String(opt?.value ?? opt?.label ?? opt) };
+    });
+  }
+  if (typeof arr === 'object') {
+    return Object.entries(arr).map(([k, v]) => ({
+      key: String(k),
+      value: typeof v === 'string' ? v : String((v as any)?.value ?? v),
+    }));
+  }
+  return [];
+}
+
 function QuestionRenderer({
   question,
   value,
@@ -53,13 +71,13 @@ function QuestionRenderer({
     case 'single_choice':
     case 'true_false': {
       const choices = question.question_type === 'true_false'
-        ? ['True', 'False']
-        : (Array.isArray(optArr) ? optArr : Object.values(optArr));
+        ? [{ key: 'True', value: 'True' }, { key: 'False', value: 'False' }].map(o=> ({key: o.key, value: o.value}))
+        : normalizeOptions(optArr);
       return (
         <div className="space-y-2">
           {choices.map((opt: any, idx: number) => {
-            const optVal = typeof opt === 'string' ? opt : opt?.value ?? opt?.label ?? String(opt);
-            const optKey = typeof opt === 'string' ? opt : opt?.key ?? opt?.id ?? String(idx);
+            const optVal = opt.value;
+            const optKey = opt.key;
             return (
               <label
                 key={optKey}
@@ -88,12 +106,12 @@ function QuestionRenderer({
 
     case 'multiple_choice': {
       const selected: string[] = Array.isArray(value) ? value : [];
-      const choices = Array.isArray(optArr) ? optArr : Object.values(optArr);
+      const choices = normalizeOptions(optArr);
       return (
         <div className="space-y-2">
           {choices.map((opt: any, idx: number) => {
-            const optVal = typeof opt === 'string' ? opt : opt?.value ?? opt?.label ?? String(opt);
-            const optKey = typeof opt === 'string' ? opt : opt?.key ?? opt?.id ?? String(idx);
+            const optVal = opt.value;
+            const optKey = opt.key;
             const isChecked = selected.includes(optKey);
             return (
               <label
@@ -228,9 +246,9 @@ function QuestionRenderer({
             </div>
           )}
           <div className="space-y-2">
-            {Array.isArray(optArr) ? optArr.map((opt: any, idx: number) => {
-              const optVal = typeof opt === 'string' ? opt : opt?.value ?? opt?.label ?? String(opt);
-              const optKey = typeof opt === 'string' ? opt : opt?.key ?? opt?.id ?? String(idx);
+            {normalizeOptions(optArr).map((opt: any, idx: number) => {
+              const optVal = opt.value;
+              const optKey = opt.key;
               return (
                 <label
                   key={optKey}
@@ -250,7 +268,7 @@ function QuestionRenderer({
                   <span className="text-sm text-text-primary">{optVal}</span>
                 </label>
               );
-            }) : null}
+            })}
           </div>
         </div>
       );

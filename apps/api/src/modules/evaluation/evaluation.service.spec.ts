@@ -311,4 +311,68 @@ describe('EvaluationService', () => {
       expect((result as any).pass_rate).toBe(100);
     });
   });
+
+  describe('ASSESS-001 MCQ answer-key contract', () => {
+    // Regression for ASSESS-001: frontend must persist option KEY (e.g. "C") not display text ("Weak trend").
+    // Backend evaluation expects keys: single_choice compare is exact String(userAnswer) === String(correctAnswer).
+    // Options shape is { "A": "Strong trend", "B": "Sideways", "C": "Weak trend" }, correct_answer = "C".
+    it('grades key "C" as correct and display text "Weak trend" as incorrect', async () => {
+      const attempt = { id: 'a1', test_id: 't1', user_id: 'u1', status: 'submitted' };
+      const test = { id: 't1', negative_marking: false, total_marks: 10, passing_marks: 5 };
+      // Correct key path
+      setupFrom(client, [
+        { data: attempt, error: null },
+        { data: test, error: null },
+        { data: [{ id: 'ans1', attempt_id: 'a1', question_id: 'qb1', answer: 'C', marks_possible: 1, question_bank: { id: 'qb1', question_type: 'single_choice', correct_answer: 'C' } }], error: null },
+        { data: [{ question_bank_id: 'qb1', marks: 1, negative_mark: 0 }], error: null },
+        { data: null, error: null },
+        { data: null, error: null },
+        // publish
+        { data: { ...attempt, status: 'submitted', tests: test }, error: null },
+        { data: [{ id: 'ans1', attempt_id: 'a1', question_id: 'qb1', answer: 'C', marks_awarded: 1, is_correct: true, question_bank: { id: 'qb1', question_type: 'single_choice', correct_answer: 'C' } }], error: null },
+        { data: [{ question_bank_id: 'qb1', marks: 1, negative_mark: 0 }], error: null },
+        { count: 0, data: null },
+        { data: { id: 'res1' }, error: null },
+        { data: null, error: null },
+      ]);
+      const ok = await service.autoGradeAttempt('a1');
+      expect(ok.summary.correct).toBe(1);
+      expect(ok.summary.incorrect).toBe(0);
+      expect(ok.summary.marksAwarded).toBe(1);
+
+      // Display-text path (buggy old frontend would send "Weak trend") must be graded incorrect
+      setupFrom(client, [
+        { data: attempt, error: null },
+        { data: test, error: null },
+        { data: [{ id: 'ans1', attempt_id: 'a1', question_id: 'qb1', answer: 'Weak trend', marks_possible: 1, question_bank: { id: 'qb1', question_type: 'single_choice', correct_answer: 'C' } }], error: null },
+        { data: [{ question_bank_id: 'qb1', marks: 1, negative_mark: 0 }], error: null },
+        { data: null, error: null },
+        { data: null, error: null },
+        // publish would not be reached in partially graded? but autoGrade still counts incorrect
+        { data: { ...attempt, status: 'submitted', tests: test }, error: null },
+        { data: [{ id: 'ans1', attempt_id: 'a1', question_id: 'qb1', answer: 'Weak trend', marks_awarded: 0, is_correct: false, question_bank: { id: 'qb1', question_type: 'single_choice', correct_answer: 'C' } }], error: null },
+        { data: [{ question_bank_id: 'qb1', marks: 1, negative_mark: 0 }], error: null },
+        { count: 0, data: null },
+        { data: { id: 'res1' }, error: null },
+        { data: null, error: null },
+      ]);
+      // Reset client for second call (need fresh module instance? reuse same service but setupFrom resets)
+      const result2 = await service.autoGradeAttempt('a1');
+      expect(result2.summary.correct).toBe(0);
+      expect(result2.summary.incorrect).toBe(1);
+      expect(result2.summary.marksAwarded).toBe(0);
+    });
+
+    it('documents that options object must be persisted as key, not via Object.values', () => {
+      // Simulate old buggy frontend: Object.values({A:"Strong",C:"Weak"}) => ["Strong","Weak"] loses keys.
+      const rawOptions = { A: 'Strong trend', B: 'Sideways', C: 'Weak trend' };
+      const buggyChoices = Object.values(rawOptions); // ["Strong trend", ...]
+      expect(buggyChoices).not.toContain('C');
+      expect(buggyChoices).toContain('Weak trend');
+      // Fixed helper normalizeOptions preserves keys
+      const fixed = Object.entries(rawOptions).map(([k, v]) => ({ key: k, value: v as string }));
+      expect(fixed.find(o => o.key === 'C')?.value).toBe('Weak trend');
+      expect(fixed.find(o => o.value === 'Weak trend')?.key).toBe('C');
+    });
+  });
 });
