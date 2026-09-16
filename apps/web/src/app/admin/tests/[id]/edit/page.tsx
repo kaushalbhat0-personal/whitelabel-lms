@@ -13,8 +13,10 @@ import {
   X,
 } from 'lucide-react';
 import { getTest, updateTest, getQuestions } from '@/lib/api/assessments';
+import { getAllBatches } from '@/lib/api/courses';
 import { ROUTES } from '@/lib/constants';
 import { cn } from '@/lib/utils';
+import { localInputToUTCISOString, utcToLocalInput, computeEndFromStartAndDuration } from '@/lib/date-utils';
 import type { QuestionResponse } from '@/lib/api/assessments';
 
 interface Section {
@@ -63,15 +65,27 @@ export default function EditTestPage() {
   const [loadingQuestions, setLoadingQuestions] = useState(false);
   const [showQuestionBank, setShowQuestionBank] = useState(false);
 
-  const availableBatches = [
-    { id: 'batch-1', name: 'Morning Batch' },
-    { id: 'batch-2', name: 'Evening Batch' },
-    { id: 'batch-3', name: 'Weekend Batch' },
-  ];
+  const [availableBatches, setAvailableBatches] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    getAllBatches({ isActive: true, limit: 200 })
+      .then((r) => setAvailableBatches(r.items ?? []))
+      .catch(() => setAvailableBatches([]));
+  }, []);
 
   useEffect(() => {
     fetchTest();
   }, [testId]);
+
+  // Auto-sync end = start + duration
+  useEffect(() => {
+    if (!startTime || !durationMinutes) return;
+    const startUTC = localInputToUTCISOString(startTime);
+    const computedEndUTC = computeEndFromStartAndDuration(startUTC, Number(durationMinutes));
+    if (!computedEndUTC) return;
+    const localEnd = utcToLocalInput(computedEndUTC);
+    if (localEnd && localEnd !== endTime) setEndTime(localEnd);
+  }, [startTime, durationMinutes]);
 
   useEffect(() => {
     fetchQuestions();
@@ -85,8 +99,8 @@ export default function EditTestPage() {
       setDescription(test.description || '');
       setInstructions(test.instructions || '');
       setDurationMinutes(test.duration_minutes ? String(test.duration_minutes) : '');
-      setStartTime(test.start_time ? test.start_time.slice(0, 16) : '');
-      setEndTime(test.end_time ? test.end_time.slice(0, 16) : '');
+      setStartTime(utcToLocalInput(test.start_time));
+      setEndTime(utcToLocalInput(test.end_time));
       setMaxAttempts(String(test.max_attempts || 1));
       setTotalMarks(String(test.total_marks));
       setPassingMarks(test.passing_marks ? String(test.passing_marks) : '');
@@ -179,13 +193,15 @@ export default function EditTestPage() {
     setError('');
 
     try {
+      const startUTC = localInputToUTCISOString(startTime);
+      const endUTC = startUTC && durationMinutes ? computeEndFromStartAndDuration(startUTC, Number(durationMinutes)) : localInputToUTCISOString(endTime);
       await updateTest(testId, {
         title: title.trim(),
         description: description || undefined,
         instructions: instructions || undefined,
         durationMinutes: durationMinutes ? Number(durationMinutes) : undefined,
-        startTime: startTime || undefined,
-        endTime: endTime || undefined,
+        startTime: startUTC,
+        endTime: endUTC,
         maxAttempts: maxAttempts ? Number(maxAttempts) : undefined,
         totalMarks: Number(totalMarks),
         passingMarks: passingMarks ? Number(passingMarks) : undefined,

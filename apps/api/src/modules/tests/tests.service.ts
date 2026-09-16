@@ -29,6 +29,17 @@ export class TestsService {
   async create(dto: CreateTestDto, createdBy: string) {
     const { sections, questions, batches, ...testData } = dto;
 
+    // Enforce invariant: end = start + duration (IST round-trip already handled by frontend to UTC)
+    let startISO = testData.startTime ?? null;
+    let endISO = testData.endTime ?? null;
+    if (startISO && testData.durationMinutes) {
+      const computed = new Date(new Date(startISO).getTime() + testData.durationMinutes * 60000).toISOString();
+      if (endISO && Math.abs(new Date(endISO).getTime() - new Date(computed).getTime()) > 60000) {
+        this.logger.warn(`create test "${testData.title}" end_time corrected from ${endISO} to ${computed} to match duration ${testData.durationMinutes}`);
+      }
+      endISO = computed;
+    }
+
     const { data: test, error } = await this.supabaseService.client
       .from(TABLES.TESTS)
       .insert({
@@ -37,9 +48,9 @@ export class TestsService {
         duration_minutes: testData.durationMinutes ?? null,
         total_marks: testData.totalMarks,
         passing_marks: testData.passingMarks ?? Math.ceil(testData.totalMarks * 0.4),
-        status: testData.startTime ? 'scheduled' : 'draft',
-        start_time: testData.startTime ?? null,
-        end_time: testData.endTime ?? null,
+        status: startISO ? 'scheduled' : 'draft',
+        start_time: startISO,
+        end_time: endISO,
         shuffle_questions: testData.shuffleQuestions ?? false,
         shuffle_options: testData.shuffleOptions ?? false,
         show_result_immediately: testData.showResultImmediately ?? true,
@@ -229,6 +240,19 @@ export class TestsService {
       if (testData.instructions !== undefined) updates.instructions = testData.instructions;
       if (testData.startTime !== undefined) updates.start_time = testData.startTime;
       if (testData.endTime !== undefined) updates.end_time = testData.endTime;
+      // Enforce end = start + duration when both known
+      const finalStart = testData.startTime !== undefined ? testData.startTime : (existing as any).start_time;
+      const finalDuration = testData.durationMinutes !== undefined ? testData.durationMinutes : (existing as any).duration_minutes;
+      if (finalStart && finalDuration) {
+        const computed = new Date(new Date(finalStart).getTime() + finalDuration * 60000).toISOString();
+        if (updates.end_time && Math.abs(new Date(updates.end_time).getTime() - new Date(computed).getTime()) > 60000) {
+          this.logger.warn(`update test "${existing.title}" end_time corrected from ${updates.end_time} to ${computed} to match duration ${finalDuration}`);
+        }
+        updates.end_time = computed;
+        if (testData.startTime === undefined && finalStart !== (existing as any).start_time) {
+          updates.start_time = finalStart;
+        }
+      }
       updates.updated_at = new Date().toISOString();
 
       const { error } = await this.supabaseService.client

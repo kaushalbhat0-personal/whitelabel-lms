@@ -16,6 +16,7 @@ import { createTest, getQuestions } from '@/lib/api/assessments';
 import { getAllBatches } from '@/lib/api/courses';
 import { ROUTES } from '@/lib/constants';
 import { cn } from '@/lib/utils';
+import { localInputToUTCISOString, computeEndFromStartAndDuration } from '@/lib/date-utils';
 import type { QuestionResponse } from '@/lib/api/assessments';
 
 interface Section {
@@ -66,6 +67,19 @@ export default function CreateTestPage() {
       .then((result) => setAvailableBatches(result.items ?? []))
       .catch(() => setAvailableBatches([]));
   }, []);
+
+  // Auto-sync end = start + duration (IST input → keep end consistent)
+  useEffect(() => {
+    if (!startTime || !durationMinutes) return;
+    const startUTC = localInputToUTCISOString(startTime);
+    const computedEndUTC = computeEndFromStartAndDuration(startUTC, Number(durationMinutes));
+    if (!computedEndUTC) return;
+    // Convert computed UTC back to local input string for the End field
+    const d = new Date(computedEndUTC);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const localEnd = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    if (localEnd !== endTime) setEndTime(localEnd);
+  }, [startTime, durationMinutes]);
 
   useEffect(() => {
     fetchQuestions();
@@ -133,13 +147,15 @@ export default function CreateTestPage() {
     setError('');
 
     try {
+      const startUTC = localInputToUTCISOString(startTime);
+      const endUTC = startUTC && durationMinutes ? computeEndFromStartAndDuration(startUTC, Number(durationMinutes)) : localInputToUTCISOString(endTime);
       await createTest({
         title: title.trim(),
         description: description || undefined,
         instructions: instructions || undefined,
         durationMinutes: durationMinutes ? Number(durationMinutes) : undefined,
-        startTime: startTime || undefined,
-        endTime: endTime || undefined,
+        startTime: startUTC,
+        endTime: endUTC,
         maxAttempts: maxAttempts ? Number(maxAttempts) : undefined,
         totalMarks: Number(totalMarks),
         passingMarks: passingMarks ? Number(passingMarks) : undefined,
