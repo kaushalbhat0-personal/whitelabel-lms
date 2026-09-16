@@ -180,6 +180,8 @@ export class AttemptsService {
 
     await this.validateQuestionsBelongToTest(attempt.test_id, [dto.questionId]);
 
+    const marksPossible = await this.resolveMarksPossible(attempt.test_id, dto.questionId);
+
     const { error: upsertError } = await this.supabaseService.client
       .from(TABLES.TEST_ANSWERS)
       .upsert(
@@ -188,7 +190,7 @@ export class AttemptsService {
           question_id: dto.questionId,
           question_type: dto.questionType,
           answer: dto.answer,
-          marks_possible: dto.answer?.marks_possible,
+          marks_possible: marksPossible,
         },
         { onConflict: 'attempt_id,question_id' },
       )
@@ -199,7 +201,9 @@ export class AttemptsService {
 
     const updates: Record<string, any> = { last_saved_at: new Date().toISOString() };
     if (dto.currentQuestionIndex !== undefined) updates.current_question_index = dto.currentQuestionIndex;
-    if (dto.timeRemainingSeconds !== undefined) updates.time_remaining_seconds = dto.timeRemainingSeconds;
+    if (dto.timeRemainingSeconds !== undefined) {
+      updates.time_remaining_seconds = this.clampTimeRemaining(dto.timeRemainingSeconds, attempt);
+    }
 
     await this.supabaseService.client
       .from(TABLES.TEST_ATTEMPTS)
@@ -220,6 +224,8 @@ export class AttemptsService {
 
     await this.validateQuestionsBelongToTest(attempt.test_id, answers.map((a) => a.questionId));
 
+    const marksMap = await this.resolveMarksMap(attempt.test_id, answers.map((a) => a.questionId));
+
     for (const answer of answers) {
       const { error } = await this.supabaseService.client
         .from(TABLES.TEST_ANSWERS)
@@ -229,7 +235,7 @@ export class AttemptsService {
             question_id: answer.questionId,
             question_type: answer.questionType,
             answer: answer.answer,
-            marks_possible: answer.answer?.marks_possible,
+            marks_possible: marksMap.get(answer.questionId) ?? 1,
           },
           { onConflict: 'attempt_id,question_id' },
         );
@@ -240,7 +246,9 @@ export class AttemptsService {
     const lastAnswer = answers[answers.length - 1];
     const updates: Record<string, any> = { last_saved_at: new Date().toISOString() };
     if (lastAnswer?.currentQuestionIndex !== undefined) updates.current_question_index = lastAnswer.currentQuestionIndex;
-    if (lastAnswer?.timeRemainingSeconds !== undefined) updates.time_remaining_seconds = lastAnswer.timeRemainingSeconds;
+    if (lastAnswer?.timeRemainingSeconds !== undefined) {
+      updates.time_remaining_seconds = this.clampTimeRemaining(lastAnswer.timeRemainingSeconds, attempt);
+    }
 
     await this.supabaseService.client
       .from(TABLES.TEST_ATTEMPTS)
@@ -261,6 +269,8 @@ export class AttemptsService {
 
     await this.validateQuestionsBelongToTest(attempt.test_id, dto.answers.map((a) => a.questionId));
 
+    const submitMarksMap = await this.resolveMarksMap(attempt.test_id, dto.answers.map((a) => a.questionId));
+
     for (const answer of dto.answers) {
       const { error } = await this.supabaseService.client
         .from(TABLES.TEST_ANSWERS)
@@ -270,6 +280,7 @@ export class AttemptsService {
             question_id: answer.questionId,
             question_type: answer.questionType,
             answer: answer.answer,
+            marks_possible: submitMarksMap.get(answer.questionId) ?? 1,
           },
           { onConflict: 'attempt_id,question_id' },
         );
@@ -277,12 +288,17 @@ export class AttemptsService {
       if (error) throw error;
     }
 
+    const clampedRemaining =
+      dto.timeRemainingSeconds !== undefined
+        ? this.clampTimeRemaining(dto.timeRemainingSeconds, attempt)
+        : attempt.time_remaining_seconds;
+
     const { data: updated, error: updateError } = await this.supabaseService.client
       .from(TABLES.TEST_ATTEMPTS)
       .update({
         status: 'submitted',
         submitted_at: new Date().toISOString(),
-        time_remaining_seconds: dto.timeRemainingSeconds ?? attempt.time_remaining_seconds,
+        time_remaining_seconds: clampedRemaining,
         last_saved_at: new Date().toISOString(),
       })
       .eq('id', attemptId)
@@ -427,5 +443,39 @@ export class AttemptsService {
     // test_question_bank.sort_order order at attempt creation, so order is
     // already correct (incl. after question shuffling).
     return attempt.test_answers;
+  }
+
+  private async resolveMarksPossible(testId: string, questionId: string): Promise<number> {
+    const map = await this.resolveMarksMap(testId, [questionId]);
+    return map.get(questionId) ?? 1;
+  }
+
+  private async resolveMarksMap(testId: string, questionIds: string[]): Promise<Map<string, number>> {
+    if (!questionIds.length) return new Map();
+    const { data } = await this.supabaseService.client
+      .from(TABLES.TEST_QUESTION_BANK)
+      .select('question_bank_id, marks')
+      .eq('test_id', testId)
+      .in('question_bank_id', questionIds);
+    const map = new Map<string, number>();
+    const rows: any[] = Array.isArray(data) ? data : [];
+    for (const row of rows) {
+      if (row?.question_bank_id) map.set(row.question_bank_id, row.marks ?? 1);
+    }
+    return map;
+  }
+
+  private clampTimeRemaining(clientValue: number, attempt: any): number {
+    const raw = Math.floor(clientValue);
+    if (!attempt?.started_at) return Math.max(0, raw);
+    // Derive server-side lower bound: started_at + duration
+    const duration = attempt.test?.duration_minutes ?? attempt.duration_minutes ?? null;
+    // attempt loaded via verifyOwnership has no joined test; fallback to column
+    // Heuristic: if we cannot resolve duration, just clamp to non-negative.
+    if (!duration) return Math.max(0, raw);
+    const elapsed = (Date.now() - new Date(attempt.started_at).getTime()) / 1000;
+    const serverRemaining = Math.max(0, Math.floor(duration * 60 - elapsed));
+    // Client cannot extend beyond server truth: take min
+    return Math.min(raw, serverRemaining);
   }
 }

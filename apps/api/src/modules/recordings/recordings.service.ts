@@ -1101,7 +1101,7 @@ export class RecordingsService {
 
     // ── Search: title OR description (case-insensitive) ──
     if (filters.search) {
-      const term = filters.search.replace(/[*%\\]/g, '\\$&').replace(/'/g, "''");
+      const term = filters.search.replace(/[\\%_*,\"]/g, (m) => `\\${m}`).replace(/'/g, "''").replace(/\*/g, '\\*');
       query = query.or(`title.ilike.*${term}*,description.ilike.*${term}*`);
     }
 
@@ -1618,6 +1618,8 @@ export class RecordingsService {
     recordingId: string,
     dto: UpdateVideoProgressDto,
   ) {
+    await this.validateAccess(recordingId, userId);
+
     const { data, error } = await this.supabaseService.client
       .from(TABLES.VIDEO_PROGRESS)
       .upsert(

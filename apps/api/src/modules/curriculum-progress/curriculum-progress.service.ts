@@ -47,11 +47,16 @@ export class CurriculumProgressService {
     const curriculumItems = curriculum ?? [];
     const totalItems = curriculumItems.length;
 
-    // 3. Fetch all progress records for these students
-    const { data: progress } = await this.supabaseService.client
-      .from(TABLES.BATCH_CURRICULUM_ITEM_PROGRESS)
-      .select('user_id, curriculum_id, completed')
-      .in('user_id', studentIds);
+    const curriculumIds = curriculumItems.map((i: any) => i.id);
+
+    // 3. Fetch all progress records for these students scoped to this batch's curriculum
+    const { data: progress } = curriculumIds.length
+      ? await this.supabaseService.client
+          .from(TABLES.BATCH_CURRICULUM_ITEM_PROGRESS)
+          .select('user_id, curriculum_id, completed')
+          .in('user_id', studentIds)
+          .in('curriculum_id', curriculumIds)
+      : { data: [] as any[] };
 
     const progressRows = progress ?? [];
 
@@ -139,54 +144,57 @@ export class CurriculumProgressService {
   }
 
   async getProgress(batchId: string, userId: string) {
-    const { data: curriculum } = await this.supabaseService.client
-      .from(TABLES.BATCH_RECORDING_CURRICULUM)
-      .select('*')
-      .eq('batch_id', batchId);
+    const [{ data: curriculum }, { data: rules }, { data: prerequisites }] = await Promise.all([
+      this.supabaseService.client.from(TABLES.BATCH_RECORDING_CURRICULUM).select('*').eq('batch_id', batchId),
+      this.supabaseService.client.from(TABLES.BATCH_CURRICULUM_RULES).select('*').eq('batch_id', batchId),
+      this.supabaseService.client.from(TABLES.BATCH_CURRICULUM_PREREQUISITES).select('*').eq('batch_id', batchId),
+    ]);
 
-    const { data: rules } = await this.supabaseService.client
-      .from(TABLES.BATCH_CURRICULUM_RULES)
-      .select('*')
-      .eq('batch_id', batchId);
-
-    const { data: prerequisites } = await this.supabaseService.client
-      .from(TABLES.BATCH_CURRICULUM_PREREQUISITES)
-      .select('*')
-      .eq('batch_id', batchId);
-
-    const categories = this.groupByCategory(curriculum ?? []);
-    const results: any[] = [];
-
-    for (const cat of categories) {
-      const rule = (rules ?? []).find((r: any) => r.category_name === cat.category);
-      const itemProgresses = await Promise.all(
-        cat.items.map((item: any) => this.getItemProgress(item, userId)),
-      );
-
-      const completedCount = itemProgresses.filter((p) => p.completed).length;
-      const totalCount = itemProgresses.length;
-      const isCompleted = this.evaluateCompletion(
-        rule?.rule_type ?? 'all_items',
-        rule?.threshold ?? null,
-        completedCount,
-        totalCount,
-      );
-
-      results.push({
-        category: cat.category,
-        totalItems: totalCount,
-        completedItems: completedCount,
-        isCompleted,
-        rule: rule?.rule_type ?? 'all_items',
-        items: itemProgresses,
-      });
+    const allItems: any[] = curriculum ?? [];
+    if (allItems.length === 0) {
+      return { batchId, categories: [], prerequisites: prerequisites ?? [] };
     }
 
-    return {
-      batchId,
-      categories: results,
-      prerequisites: prerequisites ?? [],
-    };
+    // Batched progress: 3 IN queries max instead of N per-item
+    const recordingContentIds = [...new Set(allItems.filter((i: any) => (i.content_type ?? 'recording') === 'recording' && i.content_id).map((i: any) => i.content_id))];
+    const testContentIds = [...new Set(allItems.filter((i: any) => i.content_type === 'test' && i.content_id).map((i: any) => i.content_id))];
+    const genericCurriculumIds = allItems.map((i: any) => i.id);
+
+    const safeFetch = async (fn: () => Promise<any>): Promise<any[]> => { try { const { data } = await fn(); return data ?? []; } catch { return []; } };
+    const [videoProgressRows, testResultRows, genericProgressRows] = await Promise.all([
+      recordingContentIds.length
+        ? safeFetch(() => (this.supabaseService.client.from(TABLES.VIDEO_PROGRESS).select('video_id, completed').eq('user_id', userId).in('video_id', recordingContentIds) as any))
+        : Promise.resolve([]),
+      testContentIds.length
+        ? safeFetch(() => (this.supabaseService.client.from(TABLES.TEST_RESULTS).select('test_id').eq('user_id', userId).eq('passed', true).in('test_id', testContentIds) as any))
+        : Promise.resolve([]),
+      safeFetch(() => (this.supabaseService.client.from(TABLES.BATCH_CURRICULUM_ITEM_PROGRESS).select('curriculum_id, completed').eq('user_id', userId).in('curriculum_id', genericCurriculumIds) as any)),
+    ]);
+
+    const videoDone = new Set((videoProgressRows as any[]).filter((r: any) => r.completed).map((r: any) => r.video_id));
+    const testDone = new Set((testResultRows as any[]).map((r: any) => r.test_id));
+    const genericDone = new Set((genericProgressRows as any[]).filter((r: any) => r.completed).map((r: any) => r.curriculum_id));
+
+    const categories = this.groupByCategory(allItems);
+    const results: any[] = [];
+    for (const cat of categories) {
+      const rule = (rules ?? []).find((r: any) => r.category_name === cat.category);
+      const itemProgresses = cat.items.map((item: any) => {
+        const type = item.content_type ?? 'recording';
+        const contentId = item.content_id;
+        let completed = false;
+        if (type === 'recording' && contentId) completed = videoDone.has(contentId);
+        else if (type === 'test' && contentId) completed = testDone.has(contentId);
+        else completed = genericDone.has(item.id);
+        return { curriculumId: item.id, contentId, contentType: type, completed };
+      });
+      const completedCount = itemProgresses.filter((p) => p.completed).length;
+      const totalCount = itemProgresses.length;
+      const isCompleted = this.evaluateCompletion(rule?.rule_type ?? 'all_items', rule?.threshold ?? null, completedCount, totalCount);
+      results.push({ category: cat.category, totalItems: totalCount, completedItems: completedCount, isCompleted, rule: rule?.rule_type ?? 'all_items', items: itemProgresses });
+    }
+
+    return { batchId, categories: results, prerequisites: prerequisites ?? [] };
   }
 
   async setRule(batchId: string, categoryName: string, ruleType: string, threshold?: number) {
@@ -292,7 +300,7 @@ export class CurriculumProgressService {
         .from(TABLES.VIDEO_PROGRESS)
         .select('completed')
         .eq('user_id', userId)
-        .eq('recording_id', contentId)
+        .eq('video_id', contentId)
         .maybeSingle();
       completed = data?.completed ?? false;
     } else if (type === 'test' && contentId) {

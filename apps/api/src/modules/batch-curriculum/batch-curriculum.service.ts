@@ -39,17 +39,63 @@ export class BatchCurriculumService {
       ? (data ?? []).filter((i: any) => i.is_published)
       : (data ?? []);
 
-    const enriched = await Promise.all(
-      items.map(async (item: any) => {
-        const content = await this.resolveContent(item);
-        return { ...item, content };
-      }),
-    );
+    if (items.length === 0) return [];
+
+    // Batch resolve: collect IDs per content type → single IN query per type
+    const idsByType: Record<string, string[]> = { test: [], session: [], recording: [] };
+    for (const it of items as any[]) {
+      const type = it.content_type ?? 'recording';
+      const id = it.content_id;
+      if (!id || type === 'pdf') continue;
+      if (type === 'test') idsByType.test.push(id);
+      else if (type === 'session') idsByType.session.push(id);
+      else idsByType.recording.push(id);
+    }
+
+    const unique = (arr: string[]) => [...new Set(arr)];
+    const testIds = unique(idsByType.test);
+    const sessionIds = unique(idsByType.session);
+    const recordingIds = unique(idsByType.recording);
+
+    const buildMap = async (table: string, ids: string[], select: string) => {
+      if (!ids.length) return new Map<string, any>();
+      try {
+        const { data } = await (this.supabaseService.client.from(table as any).select(select).in('id', ids) as any);
+        const m = new Map<string, any>();
+        for (const row of (data ?? []) as any[]) m.set(row.id, row);
+        return m;
+      } catch { return new Map<string, any>(); }
+    };
+    const [testsMap, sessionsMap, recordingsMap] = await Promise.all([
+      buildMap(TABLES.TESTS, testIds, 'id, title, description, duration_minutes, total_marks, passing_marks'),
+      buildMap(TABLES.LIVE_SESSIONS, sessionIds, 'id, topic as title, description, start_time, status'),
+      buildMap(TABLES.RECORDINGS, recordingIds, 'id, title, description, duration_seconds, status, created_at'),
+    ]);
+
+    const enriched = items.map((item: any) => {
+      const type = item.content_type ?? 'recording';
+      const id = item.content_id;
+      let content: any;
+      if (!id) {
+        if (type === 'pdf') content = { title: item.pdf_title ?? item.title_override ?? 'PDF Document', description: null, pdfUrl: item.pdf_url };
+        else content = { title: item.title_override ?? 'Unknown', description: null };
+      } else if (type === 'test') {
+        content = testsMap.get(id) ?? { title: item.title_override ?? 'Unknown Test' };
+      } else if (type === 'session') {
+        content = sessionsMap.get(id) ?? { title: item.title_override ?? 'Unknown Session' };
+      } else if (type === 'pdf') {
+        content = { title: item.pdf_title ?? item.title_override ?? 'PDF Document', description: null, pdfUrl: item.pdf_url };
+      } else {
+        content = recordingsMap.get(id) ?? { title: item.title_override ?? 'Unknown Recording' };
+      }
+      return { ...item, content };
+    });
 
     return enriched;
   }
 
   private async resolveContent(item: any): Promise<any> {
+    // Kept for backward compat / single-item paths; batched path above is preferred.
     const type = item.content_type ?? 'recording';
     const id = item.content_id;
 
@@ -310,63 +356,54 @@ export class BatchCurriculumService {
     const orphaned: any[] = [];
     const progressConflicts: any[] = [];
 
-    for (const item of items) {
+    if (items.length === 0) {
+      return { batchId, totalItems: 0, orphanedReferences: [], itemsWithProgress: [] };
+    }
+
+    // Batch orphan detection: 3 IN queries + 1 IN for progress counts
+    const idsByType: Record<string, string[]> = { test: [], session: [], recording: [] };
+    const itemByContentKey = new Map<string, any>();
+    for (const it of items as any[]) {
+      const type = it.content_type ?? 'recording';
+      const id = it.content_id;
+      if (id && type !== 'pdf') {
+        if (type === 'test') idsByType.test.push(id);
+        else if (type === 'session') idsByType.session.push(id);
+        else idsByType.recording.push(id);
+        itemByContentKey.set(`${type}:${id}`, it);
+      }
+    }
+    const uniq = (arr: string[]) => [...new Set(arr)];
+    const fetchIds = async (table: string, ids: string[]) => {
+      if (!ids.length) return new Set<string>();
+      try { const { data } = await (this.supabaseService.client.from(table as any).select('id').in('id', ids) as any); return new Set((data ?? []).map((x: any) => x.id)); } catch { return new Set<string>(); }
+    };
+    const fetchProgress = async () => {
+      try { const { data } = await (this.supabaseService.client.from(TABLES.BATCH_CURRICULUM_ITEM_PROGRESS).select('curriculum_id').in('curriculum_id', items.map((i: any) => i.id)) as any);
+        const m = new Map<string, number>(); for (const row of (data ?? []) as any[]) m.set(row.curriculum_id, (m.get(row.curriculum_id) ?? 0) + 1); return m; } catch { return new Map<string, number>(); }
+    };
+    const [testSet, sessionSet, recordingSet, progressCounts] = await Promise.all([
+      fetchIds(TABLES.TESTS, uniq(idsByType.test)),
+      fetchIds(TABLES.LIVE_SESSIONS, uniq(idsByType.session)),
+      fetchIds(TABLES.RECORDINGS, uniq(idsByType.recording)),
+      fetchProgress(),
+    ]);
+
+    for (const item of items as any[]) {
       const type = item.content_type ?? 'recording';
       const id = item.content_id;
-
-      // Checks 2-3: Orphan detection for each content type
       if (id && type !== 'pdf') {
-        let exists = false;
-        try {
-          if (type === 'test') {
-            const { data } = await this.supabaseService.client
-              .from(TABLES.TESTS)
-              .select('id')
-              .eq('id', id)
-              .maybeSingle();
-            exists = !!data;
-          } else if (type === 'session') {
-            const { data } = await this.supabaseService.client
-              .from(TABLES.LIVE_SESSIONS)
-              .select('id')
-              .eq('id', id)
-              .maybeSingle();
-            exists = !!data;
-          } else {
-            // recording
-            const { data } = await this.supabaseService.client
-              .from(TABLES.RECORDINGS)
-              .select('id')
-              .eq('id', id)
-              .maybeSingle();
-            exists = !!data;
-          }
-        } catch {
-          exists = false;
-        }
-
+        let exists = true;
+        if (type === 'test') exists = (testSet as Set<string>).has(id);
+        else if (type === 'session') exists = (sessionSet as Set<string>).has(id);
+        else exists = (recordingSet as Set<string>).has(id);
         if (!exists) {
-          orphaned.push({
-            curriculumId: item.id,
-            contentType: type,
-            contentId: id,
-            category: item.category_name,
-          });
+          orphaned.push({ curriculumId: item.id, contentType: type, contentId: id, category: item.category_name });
         }
       }
-
-      // Check for progress records on this item
-      const { count: progCount } = await this.supabaseService.client
-        .from(TABLES.BATCH_CURRICULUM_ITEM_PROGRESS)
-        .select('id', { count: 'exact', head: true })
-        .eq('curriculum_id', item.id);
-
-      if (progCount && progCount > 0) {
-        progressConflicts.push({
-          curriculumId: item.id,
-          contentType: type,
-          studentCount: progCount,
-        });
+      const cnt = (progressCounts as Map<string, number>).get(item.id) ?? 0;
+      if (cnt > 0) {
+        progressConflicts.push({ curriculumId: item.id, contentType: type, studentCount: cnt });
       }
     }
 

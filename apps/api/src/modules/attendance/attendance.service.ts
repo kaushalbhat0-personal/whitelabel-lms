@@ -125,13 +125,16 @@ export class AttendanceService {
       );
     }
 
-    // Upsert each entry
+    // Upsert each entry — schema uses marked_manually + updated_at trigger
+    const now = new Date().toISOString();
     const records = dto.entries.map((entry) => ({
       session_id: dto.sessionId,
       user_id: entry.userId,
       status: entry.status,
       marked_by: markedBy,
-      marked_at: new Date().toISOString(),
+      marked_manually: true,
+      join_time: now,
+      updated_at: now,
     }));
 
     const { error: upsertError } = await this.supabaseService.client
@@ -251,10 +254,10 @@ export class AttendanceService {
       throw new NotFoundException('Batch not found');
     }
 
-    // Get sessions (optionally filtered by sessionId)
+    // Get sessions (optionally filtered by sessionId) — only ended sessions must appear in batch attendance report
     let sessionsQuery = this.supabaseService.client
       .from(TABLES.SESSION_BATCHES)
-      .select('session_id, live_sessions!inner(id, topic, start_time)')
+      .select('session_id, live_sessions!inner(id, topic, start_time, status)')
       .eq('batch_id', batchId);
 
     if (sessionId) {
@@ -263,7 +266,7 @@ export class AttendanceService {
 
     const { data: sessionLinks } = await sessionsQuery;
 
-    const sessions = (sessionLinks ?? []).map((s: any) => s.live_sessions);
+    const sessions = (sessionLinks ?? []).map((s: any) => s.live_sessions).filter((s: any) => s.status === 'ended');
     const sessionIds = sessions.map((s: any) => s.id);
 
     if (sessions.length === 0) {

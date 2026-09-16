@@ -3,6 +3,7 @@ import { SupabaseService } from '../../common/services/supabase.service';
 import { ObservabilityService } from '../observability/observability.service';
 import { TABLES } from '../../common/constants/tables.constant';
 import { logEntityEvent } from '../../common/utils/observability-helper';
+import { ilikeContains } from '../../common/utils/like-escape.util';
 import { CreateTestDto } from './dto/create-test.dto';
 import { UpdateTestDto } from './dto/update-test.dto';
 
@@ -181,7 +182,7 @@ export class TestsService {
 
     if (options?.status) query = query.eq('status', options.status);
     if (options?.batchId) query = query.eq('test_batches.batch_id', options.batchId);
-    if (options?.search) query = query.ilike('title', `%${options.search}%`);
+    if (options?.search) query = query.ilike('title', ilikeContains(options.search));
 
     const page = options?.page ?? 1;
     const limit = options?.limit ?? 50;
@@ -238,12 +239,32 @@ export class TestsService {
       if (error) throw error;
     }
 
-    // Re-insert relations if provided
-    if (sections || questions || batches) {
-      await this.supabaseService.client.from(TABLES.TEST_SECTIONS).delete().eq('test_id', id);
-      await this.supabaseService.client.from(TABLES.TEST_QUESTION_BANK).delete().eq('test_id', id);
-      await this.supabaseService.client.from(TABLES.TEST_BATCHES).delete().eq('test_id', id);
-      return this.insertRelations(id, sections, questions, batches);
+    // Re-insert relations only for provided arrays (partial PATCH must not wipe other relations)
+    const needsRelationRewrite = sections !== undefined || questions !== undefined || batches !== undefined;
+    if (needsRelationRewrite) {
+      if (sections !== undefined) {
+        await this.supabaseService.client.from(TABLES.TEST_SECTIONS).delete().eq('test_id', id);
+      }
+      if (questions !== undefined) {
+        await this.supabaseService.client.from(TABLES.TEST_QUESTION_BANK).delete().eq('test_id', id);
+      }
+      if (batches !== undefined) {
+        await this.supabaseService.client.from(TABLES.TEST_BATCHES).delete().eq('test_id', id);
+      }
+      // Preserve existing relations for omitted arrays
+      const existingSections = sections === undefined ? (existing as any).test_sections?.map((s: any) => ({
+        id: s.id, title: s.title, description: s.description, instructions: s.instructions, sort_order: s.sort_order,
+      })) : undefined;
+      const existingQuestions = questions === undefined ? (existing as any).test_question_bank?.map((q: any) => ({
+        questionBankId: q.question_bank_id, marks: q.marks, negativeMark: q.negative_mark, sortOrder: q.sort_order, sectionId: q.section_id, isCompulsory: q.is_compulsory,
+      })) : undefined;
+      const existingBatches = batches === undefined ? (existing as any).test_batches?.map((b: any) => ({ batchId: b.batch_id })) : undefined;
+      return this.insertRelations(
+        id,
+        sections ?? existingSections,
+        questions ?? existingQuestions,
+        batches ?? existingBatches,
+      );
     }
 
     return this.findOne(id);

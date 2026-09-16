@@ -40,11 +40,17 @@ export function ResumeDialog({
         if (cancelled) return;
         const video = videos.find((v: any) => v.id === recordingId);
         const progress = video?.progress?.watched_seconds;
+        // Respect completed flag: if completed, don't offer resume (restart from 0)
+        const completed = video?.progress?.completed === true;
+        if (completed) {
+          setWatchedSeconds(null);
+          return;
+        }
         const remaining = duration > 0 ? duration - (progress || 0) : 0;
         if (
           progress &&
-          progress > 30 &&
-          remaining > 15
+          progress > 5 &&
+          remaining > 5
         ) {
           setWatchedSeconds(progress);
         } else {
@@ -66,8 +72,14 @@ export function ResumeDialog({
     if (watchedSeconds) onResume(watchedSeconds);
   }, [watchedSeconds, onResume]);
 
+  // Notify parent to hide dialog when no resume needed — deferred to effect to avoid render side-effect
+  useEffect(() => {
+    if (!loading && !watchedSeconds) {
+      onDismiss();
+    }
+  }, [loading, watchedSeconds, onDismiss]);
+
   if (loading || !watchedSeconds) {
-    onDismiss();
     return null;
   }
 

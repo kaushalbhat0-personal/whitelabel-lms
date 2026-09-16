@@ -65,8 +65,8 @@ export class LiveSessionsController {
 
   @Roles(UserRole.ADMIN, UserRole.TEACHER, UserRole.STUDENT)
   @Get(':id')
-  findById(@Param('id') id: string) {
-    return this.liveSessionsService.findById(id);
+  findById(@Param('id') id: string, @CurrentUser() user: { id: string; role: string }) {
+    return this.liveSessionsService.findById(id, user);
   }
 
   /**

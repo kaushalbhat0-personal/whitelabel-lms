@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { SupabaseService } from '../../common/services/supabase.service';
 import { TABLES } from '../../common/constants/tables.constant';
 import { QueryAuditDto } from './dto/query-audit.dto';
+import { escapeIlikePattern } from '../../common/utils/like-escape.util';
 
 interface LogParams {
   action: string;
@@ -84,7 +85,7 @@ export class AuditService {
     }
 
     if (query.search) {
-      const searchTerm = `%${query.search}%`;
+      const searchTerm = `%${escapeIlikePattern(query.search)}%`;
       countQuery = countQuery.or(
         `metadata->>text.ilike.${searchTerm},action.ilike.${searchTerm},entity_type.ilike.${searchTerm}`,
       );

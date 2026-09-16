@@ -300,6 +300,7 @@ export class RecordingsController {
     );
   }
 
+  @Roles(UserRole.STUDENT)
   @Get('videos/batch/:batchId')
   legacyGetBatchVideos(
     @Param('batchId') batchId: string,
@@ -308,6 +309,7 @@ export class RecordingsController {
     return this.recordingsService.getBatchRecordings(batchId, user.id);
   }
 
+  @Roles(UserRole.STUDENT)
   @Get('videos/my')
   legacyGetMyVideos(
     @CurrentUser() user: { id: string },
@@ -316,11 +318,13 @@ export class RecordingsController {
     return this.recordingsService.getRecordingsForStudent(user.id, topicId);
   }
 
+  @Roles(UserRole.STUDENT)
   @Get('videos/my/grouped')
   legacyGetMyVideosGrouped(@CurrentUser() user: { id: string }) {
     return this.recordingsService.getMyRecordingsGrouped(user.id);
   }
 
+  @Roles(UserRole.STUDENT)
   @Post('videos/:id/authorize')
   legacyAuthorizePlayback(
     @Param('id') id: string,
@@ -332,6 +336,7 @@ export class RecordingsController {
     return this.recordingsService.authorizePlayback(id, user.id, deviceId, ip);
   }
 
+  @Roles(UserRole.STUDENT)
   @Get('videos/:id/play')
   legacyGetPlaybackUrl(
     @Param('id') id: string,
@@ -344,6 +349,7 @@ export class RecordingsController {
     return this.recordingsService.getPlaybackUrl(id, user.id, token, deviceId, ip);
   }
 
+  @Roles(UserRole.STUDENT)
   @Post('videos/:id/progress')
   legacyUpdateProgress(
     @Param('id') id: string,

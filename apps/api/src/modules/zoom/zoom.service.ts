@@ -175,7 +175,6 @@ export class ZoomService {
    *   - type: 5 = scheduled webinar
    *   - auto_recording: 'cloud' = recording starts automatically
    *   - practice_session: true = host can test before going live
-   *   - include_attendees_in_in_meeting_reports: true = per-attendee timeline in reports
    *   - allow_multiple_devices: false = restrict to one device per attendee
    *
    * Steps:
@@ -211,7 +210,7 @@ export class ZoomService {
       duration: dto.durationMinutes,
       timezone: 'Asia/Kolkata',
       settings: {
-        hd_video: true,
+        hd_video: false, // Explicit OFF to avoid inheriting account default ON for screen-share HD
         practice_session: false,
         audio: 'voip',
         auto_recording: 'cloud',
@@ -221,7 +220,6 @@ export class ZoomService {
         approval_type: 0,
         registrants_email_notification: true,
         allow_attendee_to_record: false,
-        include_attendees_in_in_meeting_reports: true,
         question_and_answer: {
           enable: false,
           allow_anonymous_questions: false,

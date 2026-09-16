@@ -18,6 +18,8 @@ const config: Config = {
           800: '#065f46',
           900: '#064e3b',
           950: '#022c22',
+          navy: '#064e3b',
+          navyDark: '#022c22',
         },
         // ── Surface / Container colors ────────────────────────
         surface: {

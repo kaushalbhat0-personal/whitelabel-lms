@@ -23,6 +23,7 @@ import { SupabaseService } from '../../common/services/supabase.service';
 import { AuthService } from '../auth/auth.service';
 import { EmailService } from '../email/email.service';
 import { TABLES } from '../../common/constants/tables.constant';
+import { escapeIlikePattern } from '../../common/utils/like-escape.util';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
@@ -78,7 +79,8 @@ export class UsersService {
     }
 
     if (search?.trim()) {
-      const term = `%${search.trim()}%`;
+      const escaped = escapeIlikePattern(search.trim());
+      const term = `%${escaped}%`;
       query = query.or(`name.ilike.${term},email.ilike.${term}`);
     }
 

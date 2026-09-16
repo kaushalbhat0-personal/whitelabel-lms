@@ -164,13 +164,10 @@
   }
 }
 
-/* ── Element styles ──────────────────────────────────────── */
-
-/* Better tap targets on mobile */
-button, a, [role="button"] {
+/* ── Tap target helper — opt-in via .touch-target ────── */
+.touch-target {
   min-height: 44px;
-  display: inline-flex;
-  align-items: center;
+  min-width: 44px;
 }
 
 /* Smooth scrolling */

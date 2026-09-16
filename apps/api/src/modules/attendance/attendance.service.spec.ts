@@ -43,7 +43,7 @@ describe('AttendanceService', () => {
     it('maps students via profiles embed (not users)', async () => {
       setupFrom(client, [
         { data: { id: 'b1', name: 'Batch A' }, error: null }, // batch
-        { data: [{ session_id: 's1', live_sessions: { id: 's1', topic: 'T', start_time: 'x' } }], error: null }, // sessions
+        { data: [{ session_id: 's1', live_sessions: { id: 's1', topic: 'T', start_time: 'x', status: 'ended' } }], error: null }, // sessions
         { data: [{ user_id: 'u1', profiles: { id: 'u1', name: 'Alice', email: 'a@x.com' } }], error: null }, // students
         { data: [{ session_id: 's1', user_id: 'u1', status: 'present' }], error: null }, // attendance
       ]);

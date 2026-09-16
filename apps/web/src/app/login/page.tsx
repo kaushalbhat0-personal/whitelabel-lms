@@ -57,13 +57,13 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-100">
-      <div className="w-full max-w-md rounded-xl bg-white p-8 shadow-lg">
-        <h1 className="mb-2 text-2xl font-bold text-gray-900">LMS Platform</h1>
-        <p className="mb-6 text-sm text-gray-500">Sign in to your account</p>
+    <div className="flex min-h-screen items-center justify-center bg-surface-page px-4 py-8">
+      <div className="w-full max-w-md rounded-card-lg bg-surface-card p-6 shadow-modal md:p-8">
+        <h1 className="mb-2 text-2xl font-bold text-text-primary">MCT Learn</h1>
+        <p className="mb-6 text-sm text-text-secondary">Sign in to your account</p>
 
         {error && (
-          <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+          <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">
             {error}
           </div>
         )}
@@ -71,31 +71,33 @@ export default function LoginPage() {
         {!showForgotPassword ? (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="email" className="input-label">
                 Email
               </label>
               <input
                 id="email"
                 type="email"
                 required
+                autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                className="input-field"
                 placeholder="you@example.com"
               />
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="password" className="input-label">
                 Password
               </label>
               <input
                 id="password"
                 type="password"
                 required
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                className="input-field"
                 placeholder="••••••••"
               />
             </div>

@@ -91,6 +91,17 @@ export class ZoomController {
       throw new ForbiddenException('You do not have access to this session');
     }
 
+    // Enforce registrant gate (single source of truth) — student must have been registered at session creation time
+    const { count: registrantCount } = await this.supabaseService.client
+      .from(TABLES.SESSION_REGISTRANTS)
+      .select('*', { count: 'exact', head: true })
+      .eq('session_id', session.id)
+      .eq('user_id', userId);
+
+    if (!registrantCount || registrantCount === 0) {
+      throw new ForbiddenException('You are not registered for this session');
+    }
+
     // Generate SDK signature
     const { signature, sdkKey } = this.zoomService.generateSignature(
       dto.meetingNumber,

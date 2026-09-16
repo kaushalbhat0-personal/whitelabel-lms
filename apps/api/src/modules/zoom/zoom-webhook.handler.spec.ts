@@ -128,7 +128,7 @@ describe('ZoomWebhookHandler', () => {
 
       const updateChain = fromChains.find((c) => c.update.mock.calls.length > 0);
       expect(updateChain?.update.mock.calls[0][0].status).toBe('ended');
-      expect(supabase.rpc).toHaveBeenCalledWith('mark_absent_for_session', { session_id: 's1' });
+      expect(supabase.rpc).toHaveBeenCalledWith('mark_absent_for_session', { p_session_id: 's1' });
     });
   });
 

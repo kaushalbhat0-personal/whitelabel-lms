@@ -101,7 +101,7 @@ export function StudentBottomNav() {
           </button>
 
           {moreOpen && (
-            <div className="absolute bottom-full right-0 mb-2 w-40 animate-fade-in rounded-card border border-surface-border bg-surface-card p-2 shadow-elevated">
+            <div className="absolute bottom-full right-0 mb-2 max-w-[calc(100vw-16px)] w-40 animate-fade-in rounded-card border border-surface-border bg-surface-card p-2 shadow-elevated">
               {moreItems.map((item) => {
                 const active = isActive(item.href, false);
                 return (

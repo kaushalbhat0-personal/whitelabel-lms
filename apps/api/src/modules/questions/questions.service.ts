@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { SupabaseService } from '../../common/services/supabase.service';
 import { TABLES } from '../../common/constants/tables.constant';
+import { ilikeContains } from '../../common/utils/like-escape.util';
 import { CreateQuestionDto, UpdateQuestionDto } from './dto/create-question.dto';
 
 const QUESTION_SELECT = `
@@ -52,7 +53,7 @@ export class QuestionsService {
     if (options?.topicId) query = query.eq('topic_id', options.topicId);
     if (options?.difficulty) query = query.eq('difficulty', options.difficulty);
     if (options?.questionType) query = query.eq('question_type', options.questionType);
-    if (options?.search) query = query.ilike('question_text', `%${options.search}%`);
+    if (options?.search) query = query.ilike('question_text', ilikeContains(options.search));
 
     const page = options?.page ?? 1;
     const limit = options?.limit ?? 50;

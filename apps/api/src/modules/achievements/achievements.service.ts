@@ -231,6 +231,15 @@ export class AchievementsService {
   }
 
   async checkCourseCompletion(userId: string, batchId: string) {
+    // Verify enrollment first — do not leak across batches
+    const { data: enrollment } = await this.supabaseService.client
+      .from(TABLES.BATCH_STUDENTS)
+      .select('batch_id')
+      .eq('user_id', userId)
+      .eq('batch_id', batchId)
+      .maybeSingle();
+    if (!enrollment) return { completed: false, reason: 'not_enrolled' };
+
     const { data: progress } = await this.supabaseService.client
       .from(TABLES.BATCH_CURRICULUM_ITEM_PROGRESS)
       .select('curriculum_id, completed')
@@ -281,12 +290,30 @@ export class AchievementsService {
     const templateSource = this.readTemplate('certificate.template.hbs');
     const template = Handlebars.compile(templateSource);
 
+    // Create verification token first so verifyUrl uses real token, not cert id
+    let verifyToken: string | null = null;
+    try {
+      const { data: vt } = await this.supabaseService.client
+        .from(TABLES.CERTIFICATE_VERIFICATIONS)
+        .insert({ certificate_id: certificateId })
+        .select('token')
+        .single();
+      verifyToken = (vt as any)?.token ?? null;
+    } catch { /* fallback below */ }
+    if (!verifyToken) {
+      const { data: existing } = await this.supabaseService.client
+        .from(TABLES.CERTIFICATE_VERIFICATIONS)
+        .select('token')
+        .eq('certificate_id', certificateId)
+        .maybeSingle();
+      verifyToken = (existing as any)?.token ?? c.id;
+    }
     const html = template({
       studentName: c.profiles?.name ?? 'Student',
       courseName: c.courses?.name ?? 'Course',
       issueDate: new Date(c.issued_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' }),
       certificateNumber: c.certificate_number,
-      verifyUrl: `${this.getFrontendUrl()}/verify-certificate?token=${c.id}`,
+      verifyUrl: `${this.getFrontendUrl()}/verify-certificate?token=${verifyToken}`,
     });
 
     try {
@@ -298,9 +325,6 @@ export class AchievementsService {
         .update({ pdf_path: pdfPath, pdf_generated: true })
         .eq('id', certificateId);
 
-      // Create verification token
-      await this.createVerificationToken(certificateId);
-
       // Send email with PDF
       const studentEmail = (c as any).profiles?.email;
       if (studentEmail) {
@@ -308,10 +332,10 @@ export class AchievementsService {
           studentEmail,
           `Certificate of Completion — ${c.courses?.name ?? 'Course'}`,
           `<p>Dear ${c.profiles?.name ?? 'Student'},</p>
-           <p>Congratulations on completing <strong>${c.courses?.name ?? 'Course'}</strong>!</p>
-           <p>Your certificate (${c.certificate_number}) is attached to this email.</p>
-           <p>You can also verify your certificate at any time: <a href="${this.getFrontendUrl()}/verify-certificate?token=${c.id}">Verify Certificate</a></p>
-           <p>— MCT Learn Team</p>`,
+            <p>Congratulations on completing <strong>${c.courses?.name ?? 'Course'}</strong>!</p>
+            <p>Your certificate (${c.certificate_number}) is attached to this email.</p>
+            <p>You can also verify your certificate at any time: <a href="${this.getFrontendUrl()}/verify-certificate?token=${verifyToken}">Verify Certificate</a></p>
+            <p>— MCT Learn Team</p>`,
           [{ filename: `Certificate-${c.certificate_number}.pdf`, content: pdfBuffer }],
         );
       }

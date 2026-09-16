@@ -194,6 +194,7 @@ describe('AttemptsService', () => {
       setupFrom(client, [
         { data: attemptRow, error: null },   // verifyOwnership
         { data: [{ question_bank_id: 'qb1' }], error: null }, // validate belongs
+        { data: [{ question_bank_id: 'qb1', marks: 5 }], error: null }, // resolveMarksMap
         { data: { saved: true }, error: null }, // upsert
         { data: null, error: null },         // update attempt
         { data: { current_question_index: 1, time_remaining_seconds: 500 }, error: null }, // saveCheckpoint select
@@ -222,6 +223,7 @@ describe('AttemptsService', () => {
       setupFrom(client, [
         { data: attemptRow, error: null },
         { data: [{ question_bank_id: 'q1' }, { question_bank_id: 'q2' }], error: null },
+        { data: [{ question_bank_id: 'q1', marks: 2 }, { question_bank_id: 'q2', marks: 3 }], error: null }, // marks map
         { data: null, error: null }, // upsert 1
         { data: null, error: null }, // upsert 2
         { data: null, error: null }, // update attempt
@@ -241,6 +243,7 @@ describe('AttemptsService', () => {
       setupFrom(client, [
         { data: attemptRow, error: null },
         { data: [{ question_bank_id: 'qb1' }], error: null },
+        { data: [{ question_bank_id: 'qb1', marks: 5 }], error: null }, // marks map
         { data: null, error: null }, // upsert answer
         { data: submitted, error: null }, // update attempt (single)
       ]);

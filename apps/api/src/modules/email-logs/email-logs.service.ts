@@ -4,6 +4,7 @@ import { TABLES } from '../../common/constants/tables.constant';
 import { CreateEmailLogDto } from './dto/create-email-log.dto';
 import { AuditService } from '../audit/audit.service';
 import { ObservabilityService } from '../observability/observability.service';
+import { ilikeContains } from '../../common/utils/like-escape.util';
 
 @Injectable()
 export class EmailLogsService {
@@ -193,8 +194,9 @@ export class EmailLogsService {
       dataQ = dataQ.eq('template_name', query.templateName);
     }
     if (query.recipientSearch) {
-      countQ = countQ.ilike('recipient_email', `%${query.recipientSearch}%`);
-      dataQ = dataQ.ilike('recipient_email', `%${query.recipientSearch}%`);
+      const pat = ilikeContains(query.recipientSearch);
+      countQ = countQ.ilike('recipient_email', pat);
+      dataQ = dataQ.ilike('recipient_email', pat);
     }
     if (query.startDate) {
       countQ = countQ.gte('created_at', query.startDate);

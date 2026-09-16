@@ -189,22 +189,23 @@ export function UploadRecordingModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
       onClick={handleClose}
     >
       <div
-        className="w-full max-w-lg rounded-xl bg-white shadow-xl"
+        className="flex max-h-[90vh] w-full max-w-lg flex-col rounded-xl bg-white shadow-xl md:max-h-[85vh]"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+        {/* Header — fixed */}
+        <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-6 py-4">
           <h2 className="text-lg font-semibold text-gray-900">Upload Recording</h2>
           <button onClick={handleClose} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="space-y-5 px-6 py-5">
+        {/* Body — scrollable */}
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
           {/* Title */}
           <div>
             <label className="mb-1.5 block text-sm font-medium text-gray-700">
@@ -428,36 +429,37 @@ export function UploadRecordingModal({
             </div>
           )}
 
-          {/* Actions */}
-          <div className="flex items-center justify-end gap-3 border-t border-gray-200 pt-4">
-            <button
-              type="button"
-              onClick={handleClose}
-              disabled={isSubmitting}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-            >
-              {phase.phase === 'uploading' ? 'Cancel' : 'Close'}
-            </button>
-            {phase.phase !== 'success' && (
-              <button
-                onClick={handleSubmit}
-                disabled={!isValid || isSubmitting}
-                className="flex items-center gap-2 rounded-lg bg-brand-600 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
-              >
-                {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                {phase.phase === 'requesting_url'
-                  ? 'Requesting...'
-                  : phase.phase === 'uploading'
-                    ? `Uploading ${phase.progress}%`
-                    : (
-                      <>
-                        <Upload className="h-4 w-4" />
-                        Upload & Assign
-                      </>
-                    )}
-              </button>
-            )}
           </div>
+
+        {/* Footer — fixed, always visible */}
+        <div className="flex shrink-0 items-center justify-end gap-3 border-t border-gray-200 bg-white px-6 py-4">
+          <button
+            type="button"
+            onClick={handleClose}
+            disabled={isSubmitting}
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            {phase.phase === 'uploading' ? 'Cancel' : 'Close'}
+          </button>
+          {phase.phase !== 'success' && (
+            <button
+              onClick={handleSubmit}
+              disabled={!isValid || isSubmitting}
+              className="flex items-center gap-2 rounded-lg bg-brand-600 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
+            >
+              {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+              {phase.phase === 'requesting_url'
+                ? 'Requesting...'
+                : phase.phase === 'uploading'
+                  ? `Uploading ${phase.progress}%`
+                  : (
+                    <>
+                      <Upload className="h-4 w-4" />
+                      Upload & Assign
+                    </>
+                  )}
+            </button>
+          )}
         </div>
       </div>
     </div>

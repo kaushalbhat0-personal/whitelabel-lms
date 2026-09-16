@@ -222,7 +222,7 @@ export class ZoomWebhookHandler {
             // RPC or manual query to mark unregistered students as absent
             const { error: rpcError } = await supabase.rpc(
               'mark_absent_for_session',
-              { session_id: sessions[0].id },
+              { p_session_id: sessions[0].id },
             );
 
             if (rpcError) {

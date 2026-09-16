@@ -335,19 +335,50 @@ export function VideoPlayerClient({
     handleVolumeChange,
   ]);
 
-  // Save progress on page unload
+  // Save progress reliably on unload / visibility change / unmount (throttled elsewhere, but ensure last position persists)
   useEffect(() => {
-    const handleBeforeUnload = () => {
+    const saveNow = () => {
       const t = videoRef.current?.currentTime;
-      if (t) {
-        navigator.sendBeacon?.(
-          `/recordings/${recordingId}/progress`,
-          JSON.stringify({ watchedSeconds: Math.floor(t) }),
-        );
+      if (!t || !isFinite(t) || t < 1) return;
+      const floored = Math.floor(t);
+      if (floored === lastTimeUpdateSave.current) return;
+      lastTimeUpdateSave.current = floored;
+      // Use fetch with keepalive so it survives pagehide/unload; fallback to updateVideoProgress helper
+      try {
+        const token = typeof document !== 'undefined' ? document.cookie.match(/access_token=([^;]+)/)?.[1] : null;
+        const url = `${process.env.NEXT_PUBLIC_API_URL || ''}/recordings/${recordingId}/progress`;
+        const body = JSON.stringify({ watchedSeconds: floored });
+        if (token) {
+          fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body,
+            keepalive: true,
+          }).catch(() => {});
+        } else {
+          updateVideoProgress(recordingId, floored).catch(() => {});
+        }
+      } catch {
+        updateVideoProgress(recordingId, Math.floor(t)).catch(() => {});
       }
     };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') saveNow();
+    };
+    const handlePageHide = () => saveNow();
+    const handleBeforeUnload = () => saveNow();
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('pagehide', handlePageHide);
     window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('pagehide', handlePageHide);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      // Final save on unmount (navigation away within SPA)
+      saveNow();
+    };
   }, [recordingId]);
 
   // PiP support detection

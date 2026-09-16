@@ -153,11 +153,15 @@ export class ScreenRecordingService {
     const now = new Date();
     const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString();
 
     const { data: allViolations } = await this.supabaseService.client
       .from(TABLES.SCREEN_RECORDING_VIOLATIONS)
       .select('detection_type, context_type, created_at')
-      .eq('user_id', userId);
+      .eq('user_id', userId)
+      .gte('created_at', ninetyDaysAgo)
+      .order('created_at', { ascending: false })
+      .limit(1000);
 
     const violations = allViolations ?? [];
     const totalViolations = violations.length;

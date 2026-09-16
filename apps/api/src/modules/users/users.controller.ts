@@ -57,6 +57,18 @@ export class UsersController {
   }
 
   /**
+   * GET /users/me/batches
+   *
+   * Get all batches for the currently logged-in user.
+   * Students use this to see their enrolled batches without knowing their user ID.
+   * NOTE: must be registered BEFORE @Get(':id') or Nest would match 'me' as :id.
+   */
+  @Get('me/batches')
+  getMyBatches(@CurrentUser() user: { id: string }) {
+    return this.usersService.getBatchesForUser(user.id);
+  }
+
+  /**
    * GET /users/:id
    *
    * Get a single user by ID.
@@ -127,14 +139,4 @@ export class UsersController {
     return this.usersService.getBatchesForUser(id);
   }
 
-  /**
-   * GET /users/me/batches
-   *
-   * Get all batches for the currently logged-in user.
-   * Students use this to see their enrolled batches without knowing their user ID.
-   */
-  @Get('me/batches')
-  getMyBatches(@CurrentUser() user: { id: string }) {
-    return this.usersService.getBatchesForUser(user.id);
-  }
 }

@@ -71,30 +71,31 @@ export function LiveSessionClient({ session }: Props) {
 
 function SessionJoinFallback({ session }: { session: LiveSessionWithDetails }) {
   const [joining, setJoining] = useState(false);
-  const user = useAuthStore((s) => s.user);
+  const [joinError, setJoinError] = useState<string | null>(null);
   const [liveSessionId] = useState(() => crypto.randomUUID());
-  const [token, setToken] = useState<string | null>(null);
-  const [tokenError, setTokenError] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    requestJoinToken(session.id).then((res) => {
-      if (!cancelled) setToken(res.token);
-    }).catch(() => {
-      if (!cancelled) setTokenError(true);
-    });
-    return () => { cancelled = true; };
-  }, [session.id]);
 
   const handleJoin = async () => {
-    if (!token) return;
+    if (joining) return;
     setJoining(true);
+    setJoinError(null);
+    const win = window.open('about:blank', '_blank');
     try {
+      const { token } = await requestJoinToken(session.id);
       const { joinUrl } = await getSessionJoinUrl(session.id, token);
-      window.open(joinUrl, '_blank');
-    } catch {
+      if (!joinUrl || !joinUrl.includes('zoom.us')) throw new Error('Invalid join URL');
+      if (win && !win.closed) {
+        win.location.href = joinUrl;
+        win.focus();
+      } else {
+        window.location.href = joinUrl;
+      }
+    } catch (err: any) {
+      if (win && !win.closed) win.close();
+      setJoinError(err?.message || 'Unable to join. Please try again.');
       setJoining(false);
+      return;
     }
+    setJoining(false);
   };
 
   const isUpcoming = session.status === 'scheduled' || session.status === 'live';
@@ -121,7 +122,8 @@ function SessionJoinFallback({ session }: { session: LiveSessionWithDetails }) {
         <button
           onClick={handleJoin}
           disabled={joining}
-          className="flex items-center gap-2 rounded-lg bg-brand-600 px-6 py-3 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
+          aria-label={joining ? 'Joining session' : `Join ${session.topic}`}
+          className="flex min-h-[44px] min-w-[160px] items-center justify-center gap-2 rounded-xl bg-brand-600 px-6 py-3 text-sm font-bold text-white shadow-sm hover:bg-brand-700 active:bg-brand-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:opacity-60 disabled:pointer-events-none transition-colors"
         >
           {joining ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -130,6 +132,7 @@ function SessionJoinFallback({ session }: { session: LiveSessionWithDetails }) {
           )}
           {joining ? 'Opening Zoom...' : 'Join on Zoom'}
         </button>
+        {joinError && <p className="mt-3 text-sm font-medium text-red-600" role="alert">{joinError}</p>}
         <div className="pointer-events-none absolute inset-0 select-none overflow-hidden rounded-xl">
           <WatermarkOverlay sessionId={liveSessionId} />
         </div>
