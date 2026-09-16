@@ -36,6 +36,17 @@ function getRelativeTime(startTime: string): string {
   return 'Starting now';
 }
 
+function getTimeLabel(session: LiveSession): string {
+  const start = new Date(session.start_time).getTime();
+  const end = start + (session.duration_minutes ?? 60) * 60000;
+  const now = Date.now();
+  if (session.status === 'cancelled') return 'Cancelled';
+  if (session.status === 'ended' || now >= end) return 'Ended';
+  if (now >= start) return 'Live Now';
+  if (now >= start - 15 * 60 * 1000) return 'Starting soon';
+  return getRelativeTime(session.start_time);
+}
+
 function JoinButton({ session }: { session: LiveSession }) {
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
@@ -63,9 +74,13 @@ function JoinButton({ session }: { session: LiveSession }) {
     }
   };
 
-  const canJoin = session.status === 'live' ||
-    (session.status === 'scheduled' &&
-      new Date(session.start_time).getTime() - Date.now() < 15 * 60 * 1000);
+  const start = new Date(session.start_time).getTime();
+  const end = start + (session.duration_minutes ?? 60) * 60000;
+  const now = Date.now();
+  const canJoin =
+    (session.status === 'live' || session.status === 'scheduled') &&
+    now >= start - 15 * 60 * 1000 &&
+    now <= end;
 
   if (!canJoin) return null;
 
@@ -84,7 +99,7 @@ function JoinButton({ session }: { session: LiveSession }) {
         )}
         {joining ? 'Joining...' : 'Join Now'}
       </button>
-      {joinError && <p className="max-w-[140px] text-right text-xs font-medium text-red-600" role="alert">{joinError}</p>}
+      {joinError && <div className="max-w-[140px] text-right"><p className="text-xs font-medium text-red-600" role="alert">{joinError}</p><button onClick={handleJoin} className="mt-1 text-xs font-semibold text-brand-600 underline hover:text-brand-700">Retry</button></div>}
     </div>
   );
 }
@@ -120,7 +135,14 @@ export function CourseDetailSessions({ upcoming, past }: Props) {
                 <p className="text-sm font-medium text-text-primary truncate">
                   {session.topic}
                 </p>
-                <SessionStatusBadge status={session.status} />
+                {(() => {
+                  const st = new Date(session.start_time).getTime();
+                  const en = st + (session.duration_minutes ?? 60) * 60000;
+                  const nw = Date.now();
+                  const liveByTime = nw >= st && nw < en && session.status !== 'cancelled' && session.status !== 'ended';
+                  const derived = liveByTime ? 'live' : session.status;
+                  return <SessionStatusBadge status={derived} />;
+                })()}
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-text-muted">
                 <span className="flex items-center gap-1">
@@ -133,11 +155,10 @@ export function CourseDetailSessions({ upcoming, past }: Props) {
                 </span>
                 <span>{session.duration_minutes} min</span>
               </div>
-              {session.status !== 'live' && (
-                <p className="mt-1 text-[10px] text-text-muted">
-                  {getRelativeTime(session.start_time)}
-                </p>
-              )}
+              <p className={`mt-1 flex items-center gap-1.5 text-[10px] font-semibold ${(() => { const s=new Date(session.start_time).getTime(); const e=s+(session.duration_minutes??60)*60000; const n=Date.now(); if(n>=s&&n<e&&session.status!=='cancelled'&&session.status!=='ended') return 'text-red-600'; return 'text-text-muted';})()}`}>
+                {(() => { const s=new Date(session.start_time).getTime(); const e=s+(session.duration_minutes??60)*60000; const n=Date.now(); if(n>=s&&n<e&&session.status!=='cancelled'&&session.status!=='ended') return <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-600" />; return null;})()}
+                {getTimeLabel(session)}
+              </p>
             </div>
             <JoinButton session={session} />
           </div>

@@ -97,4 +97,110 @@ describe('LiveSessionsService P2-3/4/5', () => {
     const q = client.from.mock.results[0].value;
     // Since we mocked, just ensure it didn't throw and used deterministic path
   });
+
+  // ── Phase 18.1 regression: entitled student without registrant still gets joinUrl via fallback ──
+  it('Phase18.1 getStudentJoinUrl falls back to webinar join_url when personal_join_url missing (entitled)', async () => {
+    const token = 'tok-fallback';
+    redis.get.mockImplementation((k: string) => {
+      if (k === REDIS_KEYS.joinToken(token)) return Promise.resolve(JSON.stringify({ userId: 'u1', sessionId: 's1', expiresAt: new Date(Date.now() + 900000).toISOString() }));
+      if (k === REDIS_KEYS.joinTokenIndex('s1', 'u1')) return Promise.resolve(token);
+      return Promise.resolve(null);
+    });
+    let fromCall = 0;
+    client.from.mockImplementation((table: string) => {
+      fromCall++;
+      // registrant personal_join_url null
+      if (table === 'session_registrants' || fromCall === 1) {
+        return mockQuery({ data: null, error: null }); // maybeSingle null personal
+      }
+      // live_sessions fallback
+      if (fromCall >= 2) {
+        return mockQuery({ data: { zoom_webinar_join_url: 'https://zoom.us/j/fallback123' }, error: null });
+      }
+      return mockQuery({ data: null, error: null });
+    });
+    // Override to simulate registrant null then fallback
+    client.from.mockImplementation(() => {
+      let call = 0;
+      return {
+        select: jest.fn(function () { return this; }),
+        eq: jest.fn(function () { return this; }),
+        maybeSingle: jest.fn().mockImplementation(() => {
+          call++;
+          if (call === 1) return Promise.resolve({ data: { personal_join_url: null }, error: null });
+          return Promise.resolve({ data: { zoom_webinar_join_url: 'https://zoom.us/j/fallback123' }, error: null });
+        }),
+        single: jest.fn().mockImplementation(() => Promise.resolve({ data: { zoom_webinar_join_url: 'https://zoom.us/j/fallback123' }, error: null })),
+        from: client.from,
+        insert: jest.fn(() => mockQuery({ data: {}, error: null })),
+        update: jest.fn(() => mockQuery({ data: {}, error: null })),
+        delete: jest.fn(() => mockQuery({ data: {}, error: null })),
+      } as any;
+    });
+    // Simpler: mock supabase to return registrant null then webinar fallback via sequence
+    const origFrom = client.from;
+    let seq = 0;
+    client.from.mockImplementation((t: string) => {
+      seq++;
+      if (seq === 1) {
+        // first from is registrant query inside getStudentJoinUrl step 7
+        return {
+          select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: { personal_join_url: null }, error: null }) }) }) }),
+          from: client.from,
+        } as any;
+      }
+      if (seq === 2) {
+        // second is fallback live_sessions
+        return {
+          select: () => ({ eq: () => ({ single: () => Promise.resolve({ data: { zoom_webinar_join_url: 'https://zoom.us/j/fallback123' }, error: null }) }) }),
+          from: client.from,
+        } as any;
+      }
+      return mockQuery({ data: {}, error: null });
+    });
+    // We need proper redis state to pass validation
+    // bypass DB insert checks by stubbing insert
+    client.from = origFrom;
+    // Instead directly test the fallback branch by mocking client.from to handle both
+    let callIdx = 0;
+    client.from.mockImplementation(() => {
+      callIdx++;
+      const q: any = mockQuery(callIdx === 1 ? { data: null, error: null } : { data: { zoom_webinar_join_url: 'https://zoom.us/j/fallback123' }, error: null });
+      if (callIdx === 1) {
+        q.maybeSingle = jest.fn().mockResolvedValue({ data: { personal_join_url: null }, error: null });
+        q.single = jest.fn().mockResolvedValue({ data: { personal_join_url: null }, error: null });
+      } else {
+        q.single = jest.fn().mockResolvedValue({ data: { zoom_webinar_join_url: 'https://zoom.us/j/fallback123' }, error: null });
+        q.maybeSingle = jest.fn().mockResolvedValue({ data: { zoom_webinar_join_url: 'https://zoom.us/j/fallback123' }, error: null });
+      }
+      q.select = jest.fn(() => q);
+      q.eq = jest.fn(() => q);
+      return q;
+    });
+    const res = await svc.getStudentJoinUrl('s1', 'u1', token);
+    expect(res.joinUrl).toBe('https://zoom.us/j/fallback123');
+    expect(res.joinUrl).not.toContain('start_url');
+  });
+
+  it('Phase18.1 requestJoinToken allows valid batch member even when registrant absent (backfill attempt)', async () => {
+    const start = new Date(Date.now() - 5 * 60000).toISOString(); // started 5 min ago, 60 min duration -> live
+    let c = 0;
+    client.from.mockImplementation(() => {
+      c++;
+      if (c === 1) return mockQuery({ data: { id: 's1', status: 'scheduled', start_time: start, duration_minutes: 60, join_tokens_revoked_since: null }, error: null });
+      if (c === 2) return mockQuery({ data: [{ batch_id: 'b1' }], error: null }); // userBatches
+      if (c === 3) return mockQuery({ data: [{ batch_id: 'b1' }], error: null }); // sessionBatches
+      if (c === 4) return mockQuery({ count: 0, error: null }); // ensureRegistrant count 0
+      if (c === 5) return mockQuery({ data: { zoom_webinar_id: 'w1' }, error: null });
+      if (c === 6) return mockQuery({ data: { name: 'Stu', email: 's@test.com' }, error: null });
+      if (c === 7) return mockQuery({ data: {}, error: null }); // insert registrant (may fail Zoom but still insert null)
+      if (c === 8) return mockQuery({ data: null, error: null }); // update tokens
+      if (c === 9) return mockQuery({ data: {}, error: null }); // insert join_tokens
+      return mockQuery({ data: {}, error: null });
+    });
+    redis.get.mockResolvedValue(null);
+    const res = await svc.requestJoinToken('s1', 'u1');
+    expect(res.token).toBeDefined();
+    expect(res.expiresInSeconds).toBe(900);
+  });
 });

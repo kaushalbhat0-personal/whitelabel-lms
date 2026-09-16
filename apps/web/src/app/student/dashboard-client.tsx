@@ -107,7 +107,14 @@ export function DashboardClient({ name, nextClass, upcoming, continueContent, co
     } finally { setJoining(false); }
   };
 
-  const isLive = nextClass?.status === 'live';
+  const isLiveByTime = (() => {
+    if (!nextClass) return false;
+    const s = new Date(nextClass.start_time).getTime();
+    const e = s + (nextClass.duration_minutes ?? 60) * 60000;
+    const n = Date.now();
+    return n >= s && n < e && nextClass.status !== 'cancelled' && nextClass.status !== 'ended';
+  })();
+  const isLive = nextClass?.status === 'live' || isLiveByTime;
   const lastResult = results.length > 0 ? (results[0] as Record<string, unknown>) : null;
 
   // Real metrics — no fake data
@@ -268,7 +275,7 @@ export function DashboardClient({ name, nextClass, upcoming, continueContent, co
                           {isLive ? 'Join Now' : 'View Details'}
                           <ExternalLink className="h-4 w-4" />
                         </Button>
-                        {joinError && <p className="text-xs font-medium text-red-600" role="alert">{joinError}</p>}
+                        {joinError && <div><p className="text-xs font-medium text-red-600" role="alert">{joinError}</p><button onClick={handleJoin} className="mt-1 text-xs font-semibold text-brand-600 underline hover:text-brand-700">Retry</button></div>}
                       </div>
                     </Card>
                   ) : (

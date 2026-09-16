@@ -37,6 +37,17 @@ function getRelativeTime(startTime: string): string {
   return 'Starting now';
 }
 
+function getTimeLabel(session: LiveSession): string {
+  const start = new Date(session.start_time).getTime();
+  const end = start + (session.duration_minutes ?? 60) * 60000;
+  const now = Date.now();
+  if (session.status === 'cancelled') return 'Cancelled';
+  if (session.status === 'ended' || now >= end) return 'Ended';
+  if (now >= start) return 'Live Now';
+  if (now >= start - 15 * 60 * 1000) return 'Starting soon';
+  return getRelativeTime(session.start_time);
+}
+
 function SessionCard({
   session,
 }: {
@@ -76,8 +87,11 @@ function SessionCard({
   const start = new Date(session.start_time).getTime();
   const end = start + (session.duration_minutes ?? 60) * 60000;
   const now = Date.now();
+  // isUpcoming includes live-by-time even if Zoom webhook hasn't set status=live yet
   const isUpcoming = (session.status === 'scheduled' || session.status === 'live') && now <= end;
-  const canJoin = session.status === 'live' || (session.status === 'scheduled' && now >= start - 15 * 60 * 1000 && now <= end);
+  const isLiveByTime = now >= start && now < end && session.status !== 'cancelled' && session.status !== 'ended';
+  const derivedStatus = isLiveByTime ? 'live' : session.status;
+  const canJoin = (session.status === 'live' || session.status === 'scheduled') && now >= start - 15 * 60 * 1000 && now <= end;
 
   return (
     <div className="rounded-card border border-surface-border bg-surface-card p-4">
@@ -87,7 +101,7 @@ function SessionCard({
             <p className="text-sm font-semibold text-text-primary truncate">
               {session.topic}
             </p>
-            <SessionStatusBadge status={session.status} />
+            <SessionStatusBadge status={derivedStatus} />
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-text-secondary">
             <span className="flex items-center gap-1">
@@ -100,11 +114,10 @@ function SessionCard({
             </span>
             <span>{session.duration_minutes} min</span>
           </div>
-          {isUpcoming && session.status !== 'live' && (
-            <p className="mt-1 text-xs text-text-muted">
-              {getRelativeTime(session.start_time)}
-            </p>
-          )}
+          <p className={`mt-1 flex items-center gap-1.5 text-xs font-semibold ${isLiveByTime ? 'text-red-600' : derivedStatus === 'ended' ? 'text-text-muted' : derivedStatus === 'cancelled' ? 'text-gray-500' : 'text-text-muted'}`}>
+            {isLiveByTime && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-600" />}
+            {getTimeLabel(session)}
+          </p>
           {!isUpcoming && session.attendanceStatus && (
             <p
               className={`mt-1 flex items-center gap-1 text-xs ${
@@ -138,7 +151,10 @@ function SessionCard({
               {joining ? 'Joining...' : 'Join Now'}
             </button>
             {joinError && (
-              <p className="max-w-[180px] text-right text-xs font-medium text-red-600" role="alert">{joinError}</p>
+              <div className="max-w-[180px] text-right">
+                <p className="text-xs font-medium text-red-600" role="alert">{joinError}</p>
+                <button onClick={handleJoin} className="mt-1 text-xs font-semibold text-brand-600 underline hover:text-brand-700">Retry</button>
+              </div>
             )}
           </div>
         )}

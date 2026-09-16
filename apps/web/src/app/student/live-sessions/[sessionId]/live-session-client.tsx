@@ -132,7 +132,7 @@ function SessionJoinFallback({ session }: { session: LiveSessionWithDetails }) {
           )}
           {joining ? 'Opening Zoom...' : 'Join on Zoom'}
         </button>
-        {joinError && <p className="mt-3 text-sm font-medium text-red-600" role="alert">{joinError}</p>}
+        {joinError && <div className="mt-3 text-center"><p className="text-sm font-medium text-red-600" role="alert">{joinError}</p><button onClick={handleJoin} className="mt-2 text-sm font-semibold text-brand-600 underline hover:text-brand-700">Retry</button></div>}
         <div className="pointer-events-none absolute inset-0 select-none overflow-hidden rounded-xl">
           <WatermarkOverlay sessionId={liveSessionId} />
         </div>

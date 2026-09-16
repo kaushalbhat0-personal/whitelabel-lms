@@ -521,25 +521,38 @@ export class LiveSessionsService {
       .update({ used_at: new Date().toISOString() })
       .eq('token', token);
 
-    // Step 7: Fetch the join URL from session_registrants
+    // Step 7: Fetch the join URL — authoritative auth is batch_students∩session_batches (already validated in requestJoinToken).
+    // session_registrants is Zoom compatibility (personal_join_url). We do NOT fail LMS join if registrant row is missing/null;
+    // fallback to the webinar's generic join URL so entitled students are not blocked by Zoom registration drift.
     const { data: registrant } = await this.supabaseService.client
       .from(TABLES.SESSION_REGISTRANTS)
       .select('personal_join_url')
       .eq('session_id', sessionId)
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
 
-    if (!registrant?.personal_join_url) {
-      await this.logJoinAttempt(sessionId, userId, null, ip, userAgent, 'rejected_not_enrolled');
-      throw new NotFoundException(
-        'You are not registered for this session. Contact your admin.',
-      );
+    if (registrant?.personal_join_url) {
+      await this.logJoinAttempt(sessionId, userId, token, ip, userAgent, 'granted');
+      return { joinUrl: registrant.personal_join_url, sessionId };
     }
 
-    // Step 8: Log granted attempt
-    await this.logJoinAttempt(sessionId, userId, token, ip, userAgent, 'granted');
+    // Fallback: generic webinar join URL (still entitled via batch intersection)
+    const { data: fallbackSession } = await this.supabaseService.client
+      .from(TABLES.LIVE_SESSIONS)
+      .select('zoom_webinar_join_url')
+      .eq('id', sessionId)
+      .single();
 
-    return { joinUrl: registrant.personal_join_url, sessionId };
+    if (fallbackSession?.zoom_webinar_join_url) {
+      this.logger.warn(`getStudentJoinUrl fallback to generic join URL for ${userId} session ${sessionId} (no personal_join_url)`);
+      await this.logJoinAttempt(sessionId, userId, token, ip, userAgent, 'granted');
+      return { joinUrl: fallbackSession.zoom_webinar_join_url, sessionId };
+    }
+
+    await this.logJoinAttempt(sessionId, userId, null, ip, userAgent, 'rejected_not_enrolled');
+    throw new NotFoundException(
+      'You are not registered for this session. Contact your admin.',
+    );
   }
 
   // ──────────────────────────────────────────────────────────────
