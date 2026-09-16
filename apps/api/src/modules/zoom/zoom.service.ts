@@ -217,8 +217,9 @@ export class ZoomService {
         host_video: true,
         panelists_video: true,
         allow_multiple_devices: false,
-        approval_type: 0,
-        registrants_email_notification: true,
+        approval_type: 2, // No registration required — hassle-free direct join via generic join_url
+        registrants_email_notification: false,
+        registrants_confirmation_email: false,
         allow_attendee_to_record: false,
         question_and_answer: {
           enable: false,
