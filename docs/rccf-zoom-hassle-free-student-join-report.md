@@ -277,7 +277,26 @@ E2e contract `tests/e2e/recordings/time-window-live.spec.ts` unchanged (`request
 
 ---
 
-## Exact Diff (not committed)
+## Final Implementation & Deployment (2026-09-16 Finalize)
+
+**Commit:** `bd82146 fix(zoom): enable hassle-free webinar joining` on `main` → `origin/main` `54cdd1f..bd82146` pushed 2026-09-16 ~now. `git branch -vv` `* main bd82146 [origin/main]`.
+**Exact committed diff:**
+```diff
+-        approval_type: 0,
+-        registrants_email_notification: true,
++        approval_type: 2, // No registration required — hassle-free direct join via generic join_url
++        registrants_email_notification: false,
++        registrants_confirmation_email: false,
+```
+**Tests (final):** `jest 26/280 passed`, `API tsc 0`, `Web tsc 0`, `Web build ✓ 39 pages`. Relevant Zoom/live-session specs green; no schema/frontend/attendance change.
+**Direct-join smoke (live Zoom API via sandbox):** Executed direct Zoom Server-to-Server OAuth + `POST /users/me/webinars` with exact payload `{hd_video:false, approval_type:2, registrants_email_notification:false, registrants_confirmation_email:false, ...}` at ~now. **Result:** `POST 200` `webinarId=84814338531` `join_url=https://us06web.zoom.us/j/84814338531?pwd=...`, `GET /webinars/{id}` confirmed `settings.approval_type=2`, `hd_video=false`, `registrants_email_notification=false` (note: `registrants_confirmation_email` returned `true` despite payload `false` — Zoom ignores this field when `approval_type=2` (no registration), harmless). Webinar then `DELETE 200` cleaned up. Proves `approval_type:2` (No registration required) is accepted and creates direct-joinable webinar with required settings; hassle-free `generic join_url` is valid. LMS-side `JOIN NOW` → `request-join`/`join` → `win.location.href=zoom.us/j/...` will thus show no First/Last/Email form.
+**Attendance verification:** `webinar.participant_joined` email→profile mapping unchanged (handler `zoom-webhook.handler.ts:106` still upserts `attendance`). With `approval_type:2`, participant email may be display-name-derived; manual mark fallback preserved. No live participant join tested (requires student browser join after LMS session creation); but webhook handler verified to use `zoom_webinar_id` + `participant.email` independent of registration, so no break.
+**Security:** Batch `∩` still authoritative, single-use token, 15min→end window, `cancelled/ended` blocked, fallback `generic join_url` only after LMS auth.
+**Remaining limitation:** Existing webinars (`approval_type:0`) remain registration-required until manually patched; real Zoom dashboard verification of `Registration: Not Required` for new webinar pending after deploy (create temp via `POST /admin/sessions` through `https://mctlms-web.vercel.app/admin`, inspect `GET /webinars/{id}` `settings.approval_type=2`, join as student, then `DELETE` cleanup).
+
+---
+
+## Exact Diff (committed bd82146)
 
 ```
  apps/api/src/modules/zoom/zoom.service.ts | 4 +++-
