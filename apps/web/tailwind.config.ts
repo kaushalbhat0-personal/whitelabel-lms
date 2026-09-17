@@ -34,7 +34,7 @@ const config: Config = {
         text: {
           primary: '#111827',
           secondary: '#4b5563',
-          muted: '#9ca3af',
+          muted: '#6b7280',
           inverse: '#ffffff',
           link: '#059669',
         },

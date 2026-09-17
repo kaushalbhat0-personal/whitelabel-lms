@@ -142,49 +142,94 @@ function QuestionRenderer({
       );
     }
 
-    case 'numerical':
+    case 'numerical': {
+      const inputId = `answer-${question.id}`;
+      const helpId = `${inputId}-help`;
       return (
-        <input
-          type="number"
-          value={value ?? ''}
-          onChange={(e) => onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))}
-          placeholder="Enter your answer"
-          className="w-full rounded-lg border border-surface-border bg-white p-3 text-sm text-text-primary placeholder:text-text-muted focus:border-brand-navy focus:outline-none"
-        />
+        <div>
+          <label htmlFor={inputId} className="mb-1.5 block text-sm font-medium text-text-secondary">
+            Your answer
+          </label>
+          <input
+            id={inputId}
+            type="number"
+            value={value ?? ''}
+            onChange={(e) => onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))}
+            placeholder="Enter your answer"
+            aria-describedby={helpId}
+            className="w-full rounded-lg border border-surface-border bg-white p-3 text-sm text-text-primary placeholder:text-text-muted focus:border-brand-navy focus:outline-none"
+          />
+          <p id={helpId} className="mt-1 text-xs text-text-muted">
+            Enter a numerical value
+          </p>
+        </div>
       );
+    }
 
-    case 'short_answer':
+    case 'short_answer': {
+      const inputId = `answer-${question.id}`;
+      const helpId = `${inputId}-help`;
       return (
-        <textarea
-          value={value ?? ''}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="Type your answer here..."
-          rows={3}
-          className="w-full resize-none rounded-lg border border-surface-border bg-white p-3 text-sm text-text-primary placeholder:text-text-muted focus:border-brand-navy focus:outline-none"
-        />
+        <div>
+          <label htmlFor={inputId} className="mb-1.5 block text-sm font-medium text-text-secondary">
+            Your answer
+          </label>
+          <textarea
+            id={inputId}
+            value={value ?? ''}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="Type your answer here..."
+            rows={3}
+            aria-describedby={helpId}
+            className="w-full resize-none rounded-lg border border-surface-border bg-white p-3 text-sm text-text-primary placeholder:text-text-muted focus:border-brand-navy focus:outline-none"
+          />
+          <p id={helpId} className="mt-1 text-xs text-text-muted">
+            Your response will be reviewed by an instructor
+          </p>
+        </div>
       );
+    }
 
-    case 'long_answer':
+    case 'long_answer': {
+      const inputId = `answer-${question.id}`;
+      const helpId = `${inputId}-help`;
       return (
-        <textarea
-          value={value ?? ''}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="Write your detailed answer here..."
-          rows={8}
-          className="w-full resize-none rounded-lg border border-surface-border bg-white p-3 text-sm text-text-primary placeholder:text-text-muted focus:border-brand-navy focus:outline-none"
-        />
+        <div>
+          <label htmlFor={inputId} className="mb-1.5 block text-sm font-medium text-text-secondary">
+            Your answer
+          </label>
+          <textarea
+            id={inputId}
+            value={value ?? ''}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="Write your detailed answer here..."
+            rows={8}
+            aria-describedby={helpId}
+            className="w-full resize-none rounded-lg border border-surface-border bg-white p-3 text-sm text-text-primary placeholder:text-text-muted focus:border-brand-navy focus:outline-none"
+          />
+          <p id={helpId} className="mt-1 text-xs text-text-muted">
+            Provide a detailed answer; this will be reviewed by an instructor
+          </p>
+        </div>
       );
+    }
 
     case 'image_upload': {
       const isUploading = typeof value === 'object' && value !== null && '_uploading' in value;
       const hasValue = value && typeof value === 'object' && value.url;
       const isPdf = hasValue && (value.fileName?.toLowerCase().endsWith('.pdf') || value.mimeType === 'application/pdf');
+      const fileInputId = `answer-${question.id}-file`;
       return (
         <div className="flex flex-col items-center gap-2 rounded-lg border-2 border-dashed border-surface-border p-8 text-center">
+          <label htmlFor={fileInputId} className="text-sm font-medium text-text-secondary">
+            Upload your answer file
+          </label>
           <input
+            id={fileInputId}
             type="file"
             accept="image/*,.pdf"
             disabled={isUploading}
+            aria-describedby={`${fileInputId}-help`}
             onChange={async (e) => {
               const file = e.target.files?.[0];
               if (!file) return;
@@ -228,7 +273,7 @@ function QuestionRenderer({
               <button type="button" onClick={() => onChange(undefined)} className="text-xs text-red-600 hover:underline">Remove / Replace</button>
             </div>
           )}
-          <p className="text-[10px] text-text-muted">PNG, JPG, WEBP, GIF or PDF — max 10MB</p>
+          <p id={`${fileInputId}-help`} className="text-[10px] text-text-muted">PNG, JPG, WEBP, GIF or PDF — max 10MB</p>
         </div>
       );
     }
@@ -620,7 +665,7 @@ export default function TestAttemptPage() {
           </main>
 
           {/* Question palette - desktop sidebar */}
-          <aside className="hidden w-56 shrink-0 border-l border-surface-border bg-surface-card p-4 lg:block">
+          <aside className="hidden w-64 shrink-0 border-l border-surface-border bg-surface-card p-4 lg:block">
             <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
               Questions
             </h3>
@@ -631,8 +676,9 @@ export default function TestAttemptPage() {
                   <button
                     key={q.id}
                     onClick={() => goToQuestion(idx)}
+                    aria-label={`Go to question ${idx + 1}${hasAnswer ? ' (answered)' : ''}${idx === currentIndex ? ' (current)' : ''}`}
                     className={cn(
-                      'flex h-8 w-8 items-center justify-center rounded-lg text-xs font-semibold transition-colors',
+                      'flex h-11 w-11 items-center justify-center rounded-lg text-xs font-semibold transition-colors min-h-[44px] min-w-[44px]',
                       idx === currentIndex
                         ? 'bg-brand-navy text-white'
                         : hasAnswer
@@ -738,7 +784,11 @@ function MobileQuestionPalette({
           >
             <div className="mb-3 flex items-center justify-between">
               <h3 className="text-sm font-semibold text-text-primary">Questions</h3>
-              <button onClick={() => setOpen(false)} className="p-1">
+              <button
+                onClick={() => setOpen(false)}
+                aria-label="Close question palette"
+                className="p-1 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-surface-muted"
+              >
                 <ChevronDown className="h-5 w-5 text-text-muted" />
               </button>
             </div>
@@ -749,8 +799,9 @@ function MobileQuestionPalette({
                   <button
                     key={q.id}
                     onClick={() => { onSelect(idx); setOpen(false); }}
+                    aria-label={`Go to question ${idx + 1}${hasAnswer ? ' (answered)' : ''}${idx === currentIndex ? ' (current)' : ''}`}
                     className={cn(
-                      'flex h-10 w-full items-center justify-center rounded-lg text-xs font-semibold transition-colors',
+                      'flex h-11 w-full items-center justify-center rounded-lg text-xs font-semibold transition-colors min-h-[44px]',
                       idx === currentIndex
                         ? 'bg-brand-navy text-white'
                         : hasAnswer

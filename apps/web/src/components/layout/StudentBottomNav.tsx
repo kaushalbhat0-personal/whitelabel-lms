@@ -60,6 +60,8 @@ export function StudentBottomNav() {
             <Link
               key={tab.href}
               href={tab.href}
+              aria-label={tab.label}
+              aria-current={active ? 'page' : undefined}
               className="bottom-nav-link"
               style={{ minHeight: '44px', minWidth: '44px' }}
             >
@@ -81,6 +83,9 @@ export function StudentBottomNav() {
         <div className="relative" ref={menuRef}>
           <button
             onClick={() => setMoreOpen(!moreOpen)}
+            aria-label="More navigation options"
+            aria-expanded={moreOpen}
+            aria-haspopup="true"
             className={cn(
               'bottom-nav-link',
               (anyMoreActive || moreOpen) && 'active',
