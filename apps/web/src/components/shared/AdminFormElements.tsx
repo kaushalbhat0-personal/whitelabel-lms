@@ -1,6 +1,8 @@
 'use client';
 
+import { useId } from 'react';
 import { cn } from '@/lib/utils';
+import { FormField as CanonicalFormField } from '@/components/ui/Form/FormField';
 
 interface FormSectionProps {
   title: string;
@@ -52,16 +54,20 @@ interface FormFieldProps {
 }
 
 export function FormField({ label, required, error, children, hint, className }: FormFieldProps) {
+  const generatedId = useId();
+  // Try to reuse child's id if present, otherwise use generated
+  const childId = (children as any)?.props?.id ?? `field-${generatedId.replace(/:/g, '')}`;
   return (
-    <div className={cn('space-y-1.5', className)}>
-      <label className="block text-xs font-medium text-text-secondary">
-        {label}
-        {required && <span className="text-red-500 ml-0.5">*</span>}
-      </label>
+    <CanonicalFormField
+      label={label}
+      htmlFor={childId}
+      hint={hint}
+      error={error}
+      required={required}
+      className={className}
+    >
       {children}
-      {hint && !error && <p className="text-2xs text-text-muted">{hint}</p>}
-      {error && <p className="text-2xs text-red-600">{error}</p>}
-    </div>
+    </CanonicalFormField>
   );
 }
 

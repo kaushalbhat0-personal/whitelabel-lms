@@ -34,6 +34,7 @@ import { NextActionCard } from '@/components/student/dashboard/NextActionCard';
 import { LearningJourney } from '@/components/student/dashboard/LearningJourney';
 import { AssessmentProgress } from '@/components/student/dashboard/AssessmentProgress';
 import { RecentLearning } from '@/components/student/dashboard/RecentLearning';
+import { StatCard } from '@/components/ui/StatCard';
 import { deriveSessionState, canShowJoin, getTimeLabel, isJoinable } from '@/lib/session-status';
 
 interface DashboardClientProps {
@@ -356,34 +357,10 @@ export function DashboardClient({ name, nextClass, upcoming, continueContent, co
 
                 {/* Quick stats - real only */}
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="stat-card">
-                    <div className="flex items-center justify-between">
-                      <span className="stat-label">Courses</span>
-                      <BookOpen className="h-4 w-4 text-brand-500" aria-hidden="true" />
-                    </div>
-                    <p className="stat-value mt-2">{courses.length}</p>
-                  </div>
-                  <div className="stat-card">
-                    <div className="flex items-center justify-between">
-                      <span className="stat-label">Completed</span>
-                      <CheckCircle2 className="h-4 w-4 text-emerald-500" aria-hidden="true" />
-                    </div>
-                    <p className="stat-value mt-2">{completed}</p>
-                  </div>
-                  <div className="stat-card">
-                    <div className="flex items-center justify-between">
-                      <span className="stat-label">Watched</span>
-                      <Clock className="h-4 w-4 text-blue-500" aria-hidden="true" />
-                    </div>
-                    <p className="stat-value mt-2">{Math.floor(totalWatchedSeconds / 3600)}h</p>
-                  </div>
-                  <div className="stat-card">
-                    <div className="flex items-center justify-between">
-                      <span className="stat-label">Pending Tests</span>
-                      <BarChart3 className="h-4 w-4 text-amber-500" aria-hidden="true" />
-                    </div>
-                    <p className="stat-value mt-2">{pendingTests}</p>
-                  </div>
+                  <StatCard label="Courses" value={courses.length} icon={<BookOpen className="h-5 w-5" />} iconColor="bg-brand-50 text-brand-600" />
+                  <StatCard label="Completed" value={completed} icon={<CheckCircle2 className="h-5 w-5" />} iconColor="bg-emerald-50 text-emerald-600" />
+                  <StatCard label="Watched" value={`${Math.floor(totalWatchedSeconds / 3600)}h`} icon={<Clock className="h-5 w-5" />} iconColor="bg-blue-50 text-blue-600" />
+                  <StatCard label="Pending Tests" value={pendingTests} icon={<BarChart3 className="h-5 w-5" />} iconColor="bg-amber-50 text-amber-600" />
                 </div>
 
                 {/* Recent result */}
