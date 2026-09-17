@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff } from 'lucide-react';
 import { fetchApi, ApiError } from '@/lib/api-client';
@@ -18,6 +18,7 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [sessionReplaced, setSessionReplaced] = useState(false);
+  const submittingRef = useRef(false);
   const { login } = useSession();
   const fingerprint = useDeviceFingerprint();
 
@@ -29,6 +30,12 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (submittingRef.current || loading) {
+      return;
+    }
+    submittingRef.current = true;
+
     setError('');
     setSessionReplaced(false);
     setLoading(true);
@@ -61,6 +68,7 @@ export default function LoginPage() {
       }
     } finally {
       setLoading(false);
+      submittingRef.current = false;
     }
   };
 
