@@ -24,10 +24,11 @@ export class CreateUserDto {
   @IsEmail({}, { message: 'Please provide a valid email address' })
   email: string;
 
-  /** Initial password (min 8 characters) — hashed by Supabase Auth automatically */
+  /** Initial password (min 8 characters) — hashed by Supabase Auth automatically. Optional: server generates if not provided */
+  @IsOptional()
   @IsString()
   @MinLength(8, { message: 'Password must be at least 8 characters' })
-  password: string;
+  password?: string;
 
   /** Optional phone number for SMS notifications */
   @IsString()

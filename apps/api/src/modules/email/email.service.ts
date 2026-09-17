@@ -18,6 +18,7 @@ export class EmailService implements OnModuleInit {
   private readonly logger = new Logger(EmailService.name);
   private resend: Resend | null = null;
   private fromAddress: string;
+  private replyToAddress?: string;
   private isStub: boolean;
   private frontendUrl: string;
 
@@ -32,6 +33,7 @@ export class EmailService implements OnModuleInit {
     const apiKey = this.config.get<string>('RESEND_API_KEY');
     this.fromAddress =
       this.config.get<string>('EMAIL_FROM') ?? 'onboarding@resend.dev';
+    this.replyToAddress = this.config.get<string>('EMAIL_REPLY_TO') || undefined;
     this.frontendUrl =
       this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3000';
 
@@ -42,7 +44,10 @@ export class EmailService implements OnModuleInit {
     } else {
       this.isStub = false;
       this.resend = new Resend(apiKey);
-      this.logger.log(`EmailService ready — sending from: ${this.fromAddress}`);
+      this.logger.log(
+        `EmailService ready — sending from: ${this.fromAddress}` +
+          (this.replyToAddress ? ` replyTo: ${this.replyToAddress}` : ''),
+      );
     }
   }
 
@@ -102,6 +107,7 @@ export class EmailService implements OnModuleInit {
         to,
         subject,
         html,
+        ...(this.replyToAddress ? { replyTo: this.replyToAddress } : {}),
         attachments: attachments?.map((a) => ({
           filename: a.filename,
           content: a.content instanceof Buffer ? a.content.toString('base64') : a.content,
@@ -136,11 +142,11 @@ export class EmailService implements OnModuleInit {
     }
   }
 
-  async sendWelcomeEmail(toEmail: string, studentName: string, tempPassword: string): Promise<void> {
+  async sendWelcomeEmail(toEmail: string, studentName: string, tempPassword: string): Promise<boolean> {
     const suppressed = await this.emailWebhookService.isSuppressed(toEmail);
     if (suppressed) {
       this.logger.warn(`Skipping welcome email to suppressed: ${toEmail}`);
-      return;
+      return false;
     }
 
     const logId = await this.emailLogsService.createLog({
@@ -151,13 +157,13 @@ export class EmailService implements OnModuleInit {
     }).catch(() => undefined);
 
     if (this.isStub || !this.resend) {
-      this.logger.log(`[STUB EMAIL] To: ${toEmail} | Name: ${studentName} | Password: ${tempPassword}`);
+      this.logger.log(`[STUB EMAIL] To: ${toEmail} | Name: ${studentName} | welcome email stub`);
       if (logId) {
         await this.emailLogsService.markSent(logId, 'stub').catch(() => {});
         await this.logEmailAudit('EMAIL_SENT', logId, toEmail, 'Your MCT Learn account is ready', EMAIL_TEMPLATES.WELCOME, 'stub').catch(() => {});
         await this.logObservabilityEvent('EMAIL_SENT', `Welcome email stub sent to ${toEmail}`, EMAIL_TEMPLATES.WELCOME, toEmail).catch(() => {});
       }
-      return;
+      return true;
     }
 
     try {
@@ -166,6 +172,7 @@ export class EmailService implements OnModuleInit {
         to: toEmail,
         subject: 'Your MCT Learn account is ready',
         html: this.buildWelcomeEmailHtml(studentName, toEmail, tempPassword, this.frontendUrl),
+        ...(this.replyToAddress ? { replyTo: this.replyToAddress } : {}),
       });
 
       if (error) {
@@ -174,7 +181,7 @@ export class EmailService implements OnModuleInit {
           await this.emailLogsService.markFailed(logId, (error as any).message).catch(() => {});
           await this.logEmailAudit('EMAIL_FAILED', logId, toEmail, 'Your MCT Learn account is ready', EMAIL_TEMPLATES.WELCOME, 'resend', (error as any).message).catch(() => {});
         }
-        return;
+        return false;
       }
 
       this.logger.log(`Welcome email sent to ${toEmail} (id: ${data?.id})`);
@@ -183,12 +190,14 @@ export class EmailService implements OnModuleInit {
         await this.logEmailAudit('EMAIL_SENT', logId, toEmail, 'Your MCT Learn account is ready', EMAIL_TEMPLATES.WELCOME, data?.id ?? 'unknown').catch(() => {});
         await this.logObservabilityEvent('EMAIL_SENT', `Welcome email sent to ${toEmail}`, EMAIL_TEMPLATES.WELCOME, toEmail).catch(() => {});
       }
+      return true;
     } catch (err: any) {
       this.logger.error(`Exception sending welcome email to ${toEmail}: ${err.message}`);
       if (logId) {
         await this.emailLogsService.markFailed(logId, err.message).catch(() => {});
         await this.logEmailAudit('EMAIL_FAILED', logId, toEmail, 'Your MCT Learn account is ready', EMAIL_TEMPLATES.WELCOME, 'resend', err.message).catch(() => {});
       }
+      return false;
     }
   }
 
@@ -228,6 +237,7 @@ export class EmailService implements OnModuleInit {
         to: toEmail,
         subject: 'New login to your MCT Learn account',
         html: this.buildLoginAlertHtml(userName, browser, os, ipAddress, frontendUrl),
+        ...(this.replyToAddress ? { replyTo: this.replyToAddress } : {}),
       });
 
       if (error) {

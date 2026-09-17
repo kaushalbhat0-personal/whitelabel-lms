@@ -8,6 +8,7 @@ import {
 import { UserRole, Batch } from '@lms/shared-types';
 import { SupabaseService } from '../../common/services/supabase.service';
 import { EmailService } from '../email/email.service';
+import { generateTempPassword } from '../../common/utils/password.util';
 import { ObservabilityService } from '../observability/observability.service';
 import { RedisCacheService } from '../../common/services/redis-cache.service';
 import { TABLES } from '../../common/constants/tables.constant';
@@ -383,8 +384,8 @@ export class BatchesService {
     if (existing) {
       userId = existing.id;
     } else {
-      // 2. Create auth user with a temporary password
-      tempPassword = crypto.randomUUID().replace(/-/g, '').slice(0, 8);
+      // 2. Create auth user with a temporary password — standardized 10+Aa1!
+      tempPassword = generateTempPassword();
       const { data: authData, error: authError } =
         await supabase.auth.admin.createUser({
           email: dto.email,

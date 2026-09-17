@@ -6,6 +6,7 @@ import { BatchesService } from '../batches/batches.service';
 import { TABLES } from '../../common/constants/tables.constant';
 import { parseUsersFile, ParsedUser } from '../../common/utils/file-parser.util';
 import { UploadStudentsDto } from './dto/upload-students.dto';
+import { generateTempPassword } from '../../common/utils/password.util';
 
 const CHUNK_SIZE = 5;
 
@@ -131,7 +132,7 @@ export class BulkUploadService {
     dto: UploadStudentsDto,
   ): Promise<RowResult> {
     try {
-      const password = crypto.randomUUID().replace(/-/g, '').slice(0, 8);
+      const tempPassword = generateTempPassword();
 
       // Validate email format before calling Supabase
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -144,11 +145,11 @@ export class BulkUploadService {
         };
       }
 
-      // Create auth user
+      // Create auth user — use tempPassword for new users
       const { data: authData, error: authError } =
         await this.supabaseService.client.auth.admin.createUser({
           email: user.email,
-          password,
+          password: tempPassword,
           email_confirm: true,
         });
 
@@ -245,12 +246,26 @@ export class BulkUploadService {
         }
       }
 
-      // Send welcome email — truly fire-and-forget, not awaited
-      this.emailService
-        .sendWelcomeEmail(user.email, user.name, password)
-        .catch((emailErr: any) =>
-          this.logger.warn(`Welcome email failed for ${user.email}: ${emailErr.message}`),
-        );
+      // Send welcome email only for new users — existing password preserved
+      if (isNewUser) {
+        try {
+          const sent = await this.emailService.sendWelcomeEmail(user.email, user.name, tempPassword);
+          if (!sent) {
+            const emailWarning = 'Student created but welcome email failed — resend manually';
+            warning = warning ? `${warning}; ${emailWarning}` : emailWarning;
+            this.logger.warn(`Welcome email not sent for ${user.email} (suppressed or failed)`);
+          }
+        } catch (emailErr: any) {
+          const emailWarning = 'Student created but welcome email failed — resend manually';
+          warning = warning ? `${warning}; ${emailWarning}` : emailWarning;
+          this.logger.warn(`Welcome email failed for ${user.email}: ${emailErr.message}`);
+        }
+      } else {
+        const existingWarning =
+          'Student already exists — welcome email not sent because existing password was preserved.';
+        // Preserve any batch warning, or use existing-user warning
+        warning = warning ? `${warning}; ${existingWarning}` : existingWarning;
+      }
 
       return {
         rowNumber: user.rowNumber,

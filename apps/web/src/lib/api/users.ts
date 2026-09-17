@@ -55,15 +55,14 @@ export async function getStudents() {
 }
 
 /**
- * Create a single user (admin-only). Password is auto-generated client-side.
+ * Create a single user (admin-only). Password is generated server-side.
  * POST /users
  */
 export async function createUser(
   data: { name: string; email: string; role: string; phone?: string },
 ) {
-  const password = crypto.randomUUID().replace(/-/g, '').slice(0, 10) + 'Aa1!';
   return fetchApi<User>(API_ROUTES.USERS, {
     method: 'POST',
-    body: JSON.stringify({ ...data, password }),
+    body: JSON.stringify(data),
   });
 }

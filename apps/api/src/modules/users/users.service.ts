@@ -26,6 +26,7 @@ import { TABLES } from '../../common/constants/tables.constant';
 import { escapeIlikePattern } from '../../common/utils/like-escape.util';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { generateTempPassword } from '../../common/utils/password.util';
 
 @Injectable()
 export class UsersService {
@@ -155,11 +156,13 @@ export class UsersService {
    *   4. Return the created profile (never expose the password)
    */
   async create(dto: CreateUserDto): Promise<UserType> {
+    // Server-side generation if client did not provide password (manual onboarding)
+    const effectivePassword = dto.password ?? generateTempPassword();
     // Step 1: Create auth user
     const { data: authData, error: authError } =
       await this.supabaseService.client.auth.admin.createUser({
         email: dto.email,
-        password: dto.password,
+        password: effectivePassword,
         email_confirm: true,
       });
 
@@ -195,8 +198,9 @@ export class UsersService {
     }
 
     // Fire-and-forget welcome email — failure must NOT block user creation
+    // Use the actual password that was persisted (effectivePassword)
     this.emailService
-      .sendWelcomeEmail(dto.email, dto.name, dto.password)
+      .sendWelcomeEmail(dto.email, dto.name, effectivePassword)
       .catch((emailErr: any) =>
         this.logger.warn(`Welcome email failed for ${dto.email}: ${emailErr.message}`),
       );
