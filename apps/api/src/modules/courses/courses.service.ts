@@ -4,10 +4,12 @@ import {
   BadRequestException,
   InternalServerErrorException,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import { UserRole } from '@lms/shared-types';
 import { SupabaseService } from '../../common/services/supabase.service';
 import { ObservabilityService } from '../observability/observability.service';
+import { RedisCacheService } from '../../common/services/redis-cache.service';
 import { TABLES } from '../../common/constants/tables.constant';
 import { logEntityEvent } from '../../common/utils/observability-helper';
 import { CreateCourseDto } from './dto/create-course.dto';
@@ -20,6 +22,7 @@ export class CoursesService {
   constructor(
     private readonly supabaseService: SupabaseService,
     private readonly observabilityService: ObservabilityService,
+    @Optional() private readonly redisCache?: RedisCacheService,
   ) {}
 
   async create(dto: CreateCourseDto) {
@@ -311,6 +314,14 @@ export class CoursesService {
   }
 
   async getCoursesForStudent(studentId: string) {
+    if (!this.redisCache) return this.fetchCoursesForStudent(studentId);
+    const cacheKey = this.redisCache.key('courses', studentId);
+    return this.redisCache.wrap(cacheKey, 300, async () => {
+      return this.fetchCoursesForStudent(studentId);
+    });
+  }
+
+  private async fetchCoursesForStudent(studentId: string) {
     const { data: enrolments, error: enrolErr } = await this.supabaseService.client
       .from(TABLES.BATCH_STUDENTS)
       .select('batch_id, batches:batches(id, name, course_id)')

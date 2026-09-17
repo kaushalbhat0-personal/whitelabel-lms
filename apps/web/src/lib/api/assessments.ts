@@ -67,6 +67,10 @@ export async function getTests(params?: { status?: string; batchId?: string; sea
   );
 }
 
+export async function getMyDashboardTests() {
+  return fetchApi<{ items: Array<{ id: string; title: string; status: string; end_time: string | null; max_attempts: number | null; start_time: string | null }>; total: number; page: number; limit: number }>('/tests/my/dashboard');
+}
+
 export async function getMyTests(params?: { page?: number; limit?: number }) {
   const searchParams = new URLSearchParams();
   if (params?.page) searchParams.set('page', String(params.page));
@@ -269,6 +273,11 @@ export async function uploadQuestionImage(file: File): Promise<{ url: string; fi
 // ─── Results ──────────────────────────────────────────────────
 export async function getStudentResult(attemptId: string) {
   return fetchApi<any>(`/results/${attemptId}`);
+}
+
+export async function getMyDashboardResults(): Promise<{ items: any[]; total: number; page: number; limit: number }> {
+  const result = await fetchApi<{ items: any[]; total: number; page: number; limit: number }>('/results/my/dashboard');
+  return result;
 }
 
 export async function getMyResults(page?: number, limit?: number): Promise<any[]> {

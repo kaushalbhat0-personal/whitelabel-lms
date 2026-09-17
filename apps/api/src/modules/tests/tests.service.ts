@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException, ConflictException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, Logger, Optional } from '@nestjs/common';
 import { SupabaseService } from '../../common/services/supabase.service';
 import { ObservabilityService } from '../observability/observability.service';
+import { RedisCacheService } from '../../common/services/redis-cache.service';
 import { TABLES } from '../../common/constants/tables.constant';
 import { logEntityEvent } from '../../common/utils/observability-helper';
 import { ilikeContains } from '../../common/utils/like-escape.util';
@@ -24,6 +25,7 @@ export class TestsService {
   constructor(
     private readonly supabaseService: SupabaseService,
     private readonly observabilityService: ObservabilityService,
+    @Optional() private readonly redisCache?: RedisCacheService,
   ) {}
 
   async create(dto: CreateTestDto, createdBy: string) {
@@ -72,6 +74,7 @@ export class TestsService {
       }
     }
     const result = await this.insertRelations(test.id, sections, questions, batches);
+    if (this.redisCache) await this.redisCache.invalidateAllTestsCache().catch(()=>{}).catch(()=>{});
     logEntityEvent(
       this.observabilityService,
       'TEST_CREATED',
@@ -290,18 +293,20 @@ export class TestsService {
         questionBankId: q.question_bank_id, marks: q.marks, negativeMark: q.negative_mark, sortOrder: q.sort_order, sectionId: q.section_id, isCompulsory: q.is_compulsory,
       })) : undefined;
       const existingBatches = batches === undefined ? (existing as any).test_batches?.map((b: any) => ({ batchId: b.batch_id })) : undefined;
-      return this.insertRelations(
+      if (this.redisCache) await this.redisCache.invalidateAllTestsCache().catch(()=>{}).catch(()=>{});
+    return this.insertRelations(
         id,
         sections ?? existingSections,
         questions ?? existingQuestions,
         batches ?? existingBatches,
       );
     }
-
+    if (this.redisCache) await this.redisCache.invalidateAllTestsCache().catch(()=>{}).catch(()=>{});
     return this.findOne(id);
   }
 
   async updateStatus(id: string, status: string) {
+    if (this.redisCache) await this.redisCache.invalidateAllTestsCache().catch(()=>{}).catch(()=>{});
     const valid = ['draft', 'published', 'scheduled', 'active', 'closed', 'archived'];
     if (!valid.includes(status)) throw new ConflictException('Invalid status');
 
@@ -326,10 +331,12 @@ export class TestsService {
   }
 
   async archive(id: string) {
+    if (this.redisCache) await this.redisCache.invalidateAllTestsCache().catch(()=>{}).catch(()=>{});
     return this.updateStatus(id, 'archived');
   }
 
   async remove(id: string) {
+    if (this.redisCache) await this.redisCache.invalidateAllTestsCache().catch(()=>{}).catch(()=>{});
     const { error } = await this.supabaseService.client
       .from(TABLES.TESTS)
       .delete()
@@ -340,6 +347,31 @@ export class TestsService {
   }
 
   async getMyTests(userId: string, options?: { page?: number; limit?: number }) {
+    if (!this.redisCache) return this.fetchMyTests(userId, options);
+    const cacheKey = this.redisCache.key('tests', userId, String(options?.page ?? 1), String(options?.limit ?? 20));
+    return this.redisCache.wrap(cacheKey, 300, async () => this.fetchMyTests(userId, options));
+  }
+
+  async getDashboardTests(userId: string) {
+    if (!this.redisCache) return this.fetchMyTests(userId, { page: 1, limit: 50 }).then(full=>({ items: (full.items ?? []).map((t:any)=>({ id:t.id, title:t.title, status:t.status, end_time:t.end_time ?? null, max_attempts:t.max_attempts ?? null, start_time:t.start_time ?? null })), total: full.total, page:1, limit:50 }));
+    const cacheKey = this.redisCache.key('tests', userId, 'dashboard');
+    return this.redisCache.wrap(cacheKey, 300, async () => {
+      const full = await this.fetchMyTests(userId, { page: 1, limit: 50 });
+      // Slim DTO: only required fields, pending detection needs earliest due
+      const slimItems = (full.items ?? []).map((t: any) => ({
+        id: t.id,
+        title: t.title,
+        status: t.status,
+        end_time: t.end_time ?? null,
+        max_attempts: t.max_attempts ?? null,
+        start_time: t.start_time ?? null,
+      }));
+      // Ensure pending test can be found: status published/active + earliest end_time already computed client-side; keep as is
+      return { items: slimItems, total: full.total, page: 1, limit: 50 };
+    });
+  }
+
+  private async fetchMyTests(userId: string, options?: { page?: number; limit?: number }) {
     const { data: enrolments } = await this.supabaseService.client
       .from(TABLES.BATCH_STUDENTS)
       .select('batch_id')

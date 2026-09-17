@@ -21,6 +21,7 @@ import {
   BadRequestException,
   UnauthorizedException,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SessionStatus } from '@lms/shared-types';
@@ -31,6 +32,7 @@ import { SupabaseService } from '../../common/services/supabase.service';
 import { BatchesService } from '../batches/batches.service';
 import { ZoomService } from '../zoom/zoom.service';
 import { ObservabilityService } from '../observability/observability.service';
+import { RedisCacheService } from '../../common/services/redis-cache.service';
 import { TABLES } from '../../common/constants/tables.constant';
 import { REDIS_KEYS, REDIS_TTL } from '../../common/constants/redis-keys.constant';
 import { Transaction } from '../../common/utils/transaction.util';
@@ -57,6 +59,7 @@ export class LiveSessionsService {
     private readonly observabilityService: ObservabilityService,
     private readonly configService: ConfigService,
     redisService: RedisService,
+    @Optional() private readonly redisCache?: RedisCacheService,
   ) {
     try {
       this.redis = redisService.getOrThrow();
@@ -240,6 +243,8 @@ export class LiveSessionsService {
       },
     ]);
 
+    await this.invalidateSessionsForBatchIds(dto.batchIds).catch(()=>{});
+    if (this.redisCache) await this.redisCache.delByPattern('cache:sessions:*').catch(()=>{}).catch(()=>{});
     logEntityEvent(
       this.observabilityService,
       'LIVE_SESSION_CREATED',
@@ -876,6 +881,23 @@ export class LiveSessionsService {
     }
   }
 
+  private async invalidateSessionsForBatchIds(batchIds: string[]): Promise<void> {
+    if (!batchIds.length) return;
+    try {
+      const { data: rows } = await this.supabaseService.client.from(TABLES.BATCH_STUDENTS).select('user_id').in('batch_id', batchIds);
+      const userIds = [...new Set((rows ?? []).map((r: any) => r.user_id))];
+      if (userIds.length) if (this.redisCache) if (this.redisCache) await this.redisCache.invalidateSessionsCacheForUsers(userIds).catch(()=>{});
+    } catch {}
+  }
+
+  private async invalidateSessionsForSessionId(sessionId: string): Promise<void> {
+    try {
+      const { data: links } = await this.supabaseService.client.from(TABLES.SESSION_BATCHES).select('batch_id').eq('session_id', sessionId);
+      const batchIds = (links ?? []).map((l: any)=>l.batch_id);
+      await this.invalidateSessionsForBatchIds(batchIds);
+    } catch {}
+  }
+
   private async logJoinAttempt(
     sessionId: string,
     userId: string,
@@ -911,6 +933,47 @@ export class LiveSessionsService {
    *   5. Return the separated lists
    */
   async getForStudent(userId: string) {
+    if (!this.redisCache) return this.fetchForStudent(userId);
+    const cacheKey = this.redisCache.key('sessions', userId);
+    return this.redisCache.wrap(cacheKey, 60, async () => {
+      return this.fetchForStudent(userId);
+    });
+  }
+
+  async getDashboardSessionsForStudent(userId: string) {
+    if (!this.redisCache) return this.fetchDashboardSessions(userId);
+    const cacheKey = this.redisCache.key('sessions', userId, 'dashboard');
+    return this.redisCache.wrap(cacheKey, 60, async () => {
+      return this.fetchDashboardSessions(userId);
+    });
+  }
+
+  private async fetchDashboardSessions(userId: string) {
+    const { data: batchMemberships } = await this.supabaseService.client
+      .from(TABLES.BATCH_STUDENTS)
+      .select('batch_id')
+      .eq('user_id', userId);
+    const batchIds = (batchMemberships ?? []).map((b: any) => b.batch_id);
+    if (batchIds.length === 0) return { upcoming: [], past: [] };
+    const { data: sessionLinks } = await this.supabaseService.client
+      .from(TABLES.SESSION_BATCHES)
+      .select('session_id')
+      .in('batch_id', batchIds);
+    const sessionIds = [...new Set((sessionLinks ?? []).map((s: any) => s.session_id))];
+    if (sessionIds.length === 0) return { upcoming: [], past: [] };
+    const { data: sessions } = await this.supabaseService.client
+      .from(TABLES.LIVE_SESSIONS)
+      .select('id, topic, start_time, duration_minutes, status, created_at')
+      .in('id', sessionIds)
+      .order('start_time', { ascending: true });
+    const nowMs = Date.now();
+    const isEndedByTime = (s: any) => new Date(s.start_time).getTime() + (s.duration_minutes ?? 60) * 60000 <= nowMs;
+    const upcoming = (sessions ?? []).filter((s: any) => (s.status === 'scheduled' || s.status === 'live') && !isEndedByTime(s)).slice(0, 5);
+    // Past intentionally empty for dashboard to avoid attendance cost
+    return { upcoming, past: [] };
+  }
+
+  private async fetchForStudent(userId: string) {
     // Get student's batches
     const { data: batchMemberships } = await this.supabaseService.client
       .from(TABLES.BATCH_STUDENTS)
@@ -1022,6 +1085,8 @@ export class LiveSessionsService {
       throw new BadRequestException('Failed to update session status');
     }
 
+    await this.invalidateSessionsForSessionId(id).catch(()=>{});
+    if (this.redisCache) await this.redisCache.delByPattern('cache:sessions:*').catch(()=>{}).catch(()=>{});
     if (status === 'cancelled') {
       logEntityEvent(
         this.observabilityService,

@@ -58,6 +58,12 @@ export class LiveSessionsController {
   }
 
   @Roles(UserRole.STUDENT)
+  @Get('my/dashboard')
+  getDashboardSessions(@CurrentUser() user: { id: string }) {
+    return this.liveSessionsService.getDashboardSessionsForStudent(user.id);
+  }
+
+  @Roles(UserRole.STUDENT)
   @Get('my')
   getMySessions(@CurrentUser() user: { id: string }) {
     return this.liveSessionsService.getForStudent(user.id);

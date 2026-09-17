@@ -1308,6 +1308,82 @@ export class RecordingsService {
     });
   }
 
+  async getDashboardRecordingsForStudent(userId: string, search?: string) {
+    const cacheKey = this.redisCache.key('recordings', 'dashboard', userId, search ? `search:${search}` : 'all');
+    return this.redisCache.wrap(cacheKey, 300, async () => {
+      return this.fetchDashboardRecordings(userId, search);
+    });
+  }
+
+  private async fetchDashboardRecordings(userId: string, search?: string) {
+    // Single DB chain for both representations
+    const { data: batchMemberships } = await this.supabaseService.client.from(TABLES.BATCH_STUDENTS).select('batch_id').eq('user_id', userId);
+    const batchIds = (batchMemberships ?? []).map((b:any)=>b.batch_id);
+    if (batchIds.length===0) return { flat: [], grouped: [] };
+    const { data: batches } = await this.supabaseService.client.from(TABLES.BATCHES).select('id, name').in('id', batchIds);
+    const batchMap = new Map((batches ?? []).map((b:any)=>[b.id, b.name]));
+    const { data: accessRecords } = await this.supabaseService.client.from(TABLES.RECORDING_BATCHES).select('recording_id, batch_id').in('batch_id', batchIds);
+    const recordingIds = [...new Set((accessRecords ?? []).map((r:any)=>r.recording_id))];
+    if (recordingIds.length===0) return { flat: [], grouped: [] };
+    // publish gate
+    const { data: publishedCurriculumAll } = await this.supabaseService.client.from(TABLES.BATCH_RECORDING_CURRICULUM).select('content_id, batch_id, category_name, sort_order, is_published, title_override').eq('content_type','recording').in('batch_id', batchIds).eq('is_published', true).in('content_id', recordingIds);
+    let publishedIds = [...new Set((publishedCurriculumAll ?? []).map((r:any)=>r.content_id))];
+    if (publishedIds.length===0){
+      const { data: anyCur } = await this.supabaseService.client.from(TABLES.BATCH_RECORDING_CURRICULUM).select('content_id').eq('content_type','recording').in('batch_id', batchIds).in('content_id', recordingIds);
+      if (!anyCur || anyCur.length===0) publishedIds = recordingIds; else return { flat: [], grouped: [] };
+    }
+    const { data: recordingsRaw } = await this.supabaseService.client.from(TABLES.RECORDINGS).select('id, title, description, topic_id, sort_order, status, created_at, mux_playback_id, duration_seconds, topics(name)').in('id', publishedIds).eq('status','ready').order('sort_order',{ascending:true});
+    if (!recordingsRaw || recordingsRaw.length===0) return { flat: [], grouped: [] };
+    let recordings = recordingsRaw;
+    if (search){
+      const term=search.toLowerCase();
+      recordings = recordingsRaw.filter((r:any)=> (r.title||'').toLowerCase().includes(term) || (r.description||'').toLowerCase().includes(term));
+      if (recordings.length===0) return { flat: [], grouped: [] };
+    }
+    const recIds = recordings.map((r:any)=>r.id);
+    const { data: progress } = await this.supabaseService.client.from(TABLES.VIDEO_PROGRESS).select('video_id, watched_seconds, completed, last_watched_at').in('video_id', recIds).eq('user_id', userId);
+    const progressMap = new Map((progress ?? []).map((p:any)=>[p.video_id,p]));
+    // flat
+    const flat = recordings.map((rec:any)=>({ ...rec, progress: progressMap.get(rec.id) ?? { watched_seconds:0, completed:false, last_watched_at:null } }));
+    // grouped construction reusing already fetched publishedCurriculumAll filtered to recIds
+    const curriculum = (publishedCurriculumAll ?? []).filter((c:any)=> recIds.includes(c.content_id));
+    const curriculumByBatch = new Map();
+    for(const c of curriculum){
+      const bId=c.batch_id;
+      const sec=c.category_name ?? 'Uncategorized';
+      if(!curriculumByBatch.has(bId)) curriculumByBatch.set(bId, new Map());
+      const m=curriculumByBatch.get(bId);
+      if(!m.has(sec)) m.set(sec, []);
+      m.get(sec).push(c);
+    }
+    const grouped=[];
+    const recById = new Map(recordings.map((r:any)=>[r.id,r]));
+    for(const bId of batchIds){
+      const bName=batchMap.get(bId) ?? 'Unknown Batch';
+      const sections=curriculumByBatch.get(bId);
+      const recIdsInBatch = (accessRecords ?? []).filter((a:any)=>a.batch_id===bId).map((a:any)=>a.recording_id);
+      if(sections){
+        const secArr=[];
+        for(const [secName, items] of sections){
+          const recs=items.map((it:any)=>{
+            const rec=recById.get(it.content_id);
+            if(!rec || !recIdsInBatch.includes(rec.id)) return null;
+            const prog=progressMap.get(rec.id);
+            return { id:rec.id, title:it.title_override ?? rec.title, description:rec.description, muxPlaybackId:rec.mux_playback_id, durationSeconds:rec.duration_seconds, sortOrder: it.sort_order ?? rec.sort_order, createdAt: rec.created_at, progress: prog ? { watchedSeconds: prog.watched_seconds, completed: prog.completed, lastWatchedAt: prog.last_watched_at } : { watchedSeconds:0, completed:false, lastWatchedAt:null } };
+          }).filter(Boolean);
+          if(recs.length) secArr.push({ sectionName: secName, recordings: recs });
+        }
+        secArr.sort((a,b)=>a.sectionName.localeCompare(b.sectionName));
+        if(secArr.length) grouped.push({ batchId:bId, batchName:bName, sections:secArr });
+      } else {
+        const uncategorized = recordings.filter((r:any)=>recIdsInBatch.includes(r.id)).map((r:any)=>{ const prog=progressMap.get(r.id); return { id:r.id, title:r.title, description:r.description, muxPlaybackId:r.mux_playback_id, durationSeconds:r.duration_seconds, sortOrder:r.sort_order, createdAt:r.created_at, progress: prog ? { watchedSeconds:prog.watched_seconds, completed:prog.completed, lastWatchedAt:prog.last_watched_at } : { watchedSeconds:0, completed:false, lastWatchedAt:null } };});
+        if(uncategorized.length) grouped.push({ batchId:bId, batchName:bName, sections:[{ sectionName:null, recordings:uncategorized }]});
+      }
+    }
+    // also need to handle batches that have access but no curriculum yet legacy: already grouped fallback handles;
+    return { flat, grouped };
+  }
+
   private async fetchMyRecordingsGrouped(userId: string, search?: string) {
     this.logger.debug(`[DEBUG] fetchMyRecordingsGrouped | studentId=${userId}`);
 

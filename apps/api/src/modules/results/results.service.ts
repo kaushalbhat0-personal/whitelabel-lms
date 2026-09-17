@@ -1,12 +1,14 @@
-import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ForbiddenException, Optional } from '@nestjs/common';
 import { SupabaseService } from '../../common/services/supabase.service';
+import { RedisCacheService } from '../../common/services/redis-cache.service';
 import { TABLES } from '../../common/constants/tables.constant';
 
 @Injectable()
 export class ResultsService {
   private readonly logger = new Logger(ResultsService.name);
+  private readonly dashboardProjection = 'id, attempt_id, test_id, test_title:tests(title), percentage, rank, passed, obtained_marks, total_marks, published_at';
 
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(private readonly supabaseService: SupabaseService, @Optional() private readonly redisCache?: RedisCacheService) {}
 
   async getStudentResult(attemptId: string, userId: string) {
     // Verify ownership and fetch full attempt for fallback
@@ -203,6 +205,25 @@ export class ResultsService {
     userId: string,
     options?: { page?: number; limit?: number },
   ) {
+    if (!this.redisCache) return this.fetchMyResults(userId, options);
+    const cacheKey = this.redisCache.key('results', userId, String(options?.page ?? 1), String(options?.limit ?? 50));
+    return this.redisCache.wrap(cacheKey, 300, async () => this.fetchMyResults(userId, options));
+  }
+
+  async getDashboardResults(userId: string) {
+    if (!this.redisCache) return this.fetchMyResults(userId, { page: 1, limit: 5 });
+    const cacheKey = this.redisCache.key('results', userId, 'dashboard');
+    return this.redisCache.wrap(cacheKey, 300, async () => {
+      const r = await this.fetchMyResults(userId, { page: 1, limit: 5 });
+      // projection already slim; ensure no large JSON leaked
+      return r;
+    });
+  }
+
+  private async fetchMyResults(
+    userId: string,
+    options?: { page?: number; limit?: number },
+  ) {
     const page = options?.page ?? 1;
     const limit = options?.limit ?? 50;
     const from = (page - 1) * limit;
@@ -211,8 +232,8 @@ export class ResultsService {
     const query = this.supabaseService.client
       .from(TABLES.TEST_RESULTS)
       .select(`
-        *,
-        test:${TABLES.TESTS}(id, title, total_marks, passing_marks)
+        id, attempt_id, test_id, obtained_marks, total_marks, percentage, rank, passed, published_at,
+        test:${TABLES.TESTS}(id, title)
       `, { count: 'exact' })
       .eq('user_id', userId)
       .order('published_at', { ascending: false })

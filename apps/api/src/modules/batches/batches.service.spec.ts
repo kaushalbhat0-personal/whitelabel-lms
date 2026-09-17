@@ -46,6 +46,9 @@ describe('BatchesService — H1 cache invalidation (Phase 10A)', () => {
       invalidateRecordingsCache: jest.fn().mockResolvedValue(undefined),
       invalidateRecordingsCacheForUser: jest.fn().mockResolvedValue(undefined),
       invalidateRecordingsCacheForUsers: jest.fn().mockResolvedValue(undefined),
+      invalidateCoursesCacheForUser: jest.fn().mockResolvedValue(undefined),
+      invalidateCoursesCacheForUsers: jest.fn().mockResolvedValue(undefined),
+      invalidateTestsCacheForUser: jest.fn().mockResolvedValue(undefined),
     };
 
     const module: TestingModule = await Test.createTestingModule({

@@ -190,6 +190,13 @@ export async function getMyVideos(topicId?: string, search?: string) {
   return fetchApi<StudentVideo[]>(`${API_ROUTES.RECORDINGS}/my${q ? `?${q}` : ''}`);
 }
 
+export async function getMyDashboardRecordings(search?: string) {
+  const params = new URLSearchParams();
+  if (search) params.set('search', search);
+  const q = params.toString();
+  return fetchApi<{ flat: StudentVideo[]; grouped: StudentBatchRecordings[] }>(`${API_ROUTES.RECORDINGS}/my/dashboard${q ? `?${q}` : ''}`);
+}
+
 export async function getMyVideosGrouped(search?: string) {
   const params = new URLSearchParams();
   if (search) params.set('search', search);

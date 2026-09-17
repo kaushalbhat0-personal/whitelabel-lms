@@ -1,5 +1,6 @@
-import { Injectable, NotFoundException, InternalServerErrorException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, InternalServerErrorException, Logger, Optional } from '@nestjs/common';
 import { SupabaseService } from '../../common/services/supabase.service';
+import { RedisCacheService } from '../../common/services/redis-cache.service';
 import { TABLES } from '../../common/constants/tables.constant';
 import { AttemptStatus, ReviewStatus, QuestionType } from '@lms/shared-types';
 import { Transaction } from '../../common/utils/transaction.util';
@@ -26,7 +27,7 @@ interface ReviewQueueOptions {
 export class EvaluationService {
   private readonly logger = new Logger(EvaluationService.name);
 
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(private readonly supabaseService: SupabaseService, @Optional() private readonly redisCache?: RedisCacheService) {}
 
   /**
    * Fetch test_answers enriched with question_bank + test_question_bank data.
@@ -562,6 +563,7 @@ export class EvaluationService {
       },
     ]);
 
+    if (this.redisCache) await this.redisCache.invalidateResultsCacheForUser(attempt.user_id).catch(()=>{});
     await this.calculateAnalytics(attempt.test_id).catch((err) =>
       this.logger.error('Analytics recalculation failed', err),
     );

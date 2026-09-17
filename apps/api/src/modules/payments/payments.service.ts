@@ -4,6 +4,7 @@ import {
   BadRequestException,
   InternalServerErrorException,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import {
   InstallmentStatus,
@@ -11,6 +12,7 @@ import {
   PaymentMethod,
 } from '@lms/shared-types';
 import { SupabaseService } from '../../common/services/supabase.service';
+import { RedisCacheService } from '../../common/services/redis-cache.service';
 import { TABLES } from '../../common/constants/tables.constant';
 import { OutboxService } from '../outbox/outbox.service';
 import { ObservabilityService } from '../observability/observability.service';
@@ -27,6 +29,7 @@ export class PaymentsService {
     private readonly supabaseService: SupabaseService,
     private readonly outboxService: OutboxService,
     private readonly observabilityService: ObservabilityService,
+    @Optional() private readonly redisCache?: RedisCacheService,
   ) {}
 
   // ──────────────────────────────────────────────────────────────
@@ -165,6 +168,8 @@ export class PaymentsService {
       .select('*')
       .eq('payment_plan_id', planId)
       .order('installment_number', { ascending: true });
+
+    if (this.redisCache) await this.redisCache.invalidatePaymentsCacheForUser(dto.studentId).catch(() => {});
 
     return {
       ...(plan as any),
@@ -325,6 +330,8 @@ export class PaymentsService {
       { studentId: plan.student_id, installmentId, amount: inst.amount },
     ).catch(() => {});
 
+    if (this.redisCache) await this.redisCache.invalidatePaymentsCacheForUser(plan.student_id).catch(() => {});
+
     return payment as any;
   }
 
@@ -334,9 +341,17 @@ export class PaymentsService {
 
   /**
    * Fetch all payment plans for a student, including course name
-   * and installments sorted by due date.
+   * and installments sorted by due date. Cached per-user TTL 300s.
    */
   async getStudentPlans(studentId: string) {
+    if (!this.redisCache) return this.fetchStudentPlans(studentId);
+    const cacheKey = this.redisCache.key('payments', studentId);
+    return this.redisCache.wrap(cacheKey, 300, async () => {
+      return this.fetchStudentPlans(studentId);
+    });
+  }
+
+  private async fetchStudentPlans(studentId: string) {
     const { data: plans, error } = await this.supabaseService.client
       .from(TABLES.PAYMENT_PLANS)
       .select('*, course:courses(id, name)')

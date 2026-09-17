@@ -174,6 +174,15 @@ export class RecordingsController {
   }
 
   @Roles(UserRole.STUDENT)
+  @Get('recordings/my/dashboard')
+  async getDashboardRecordings(
+    @CurrentUser() user: { id: string },
+    @Query('search') search?: string,
+  ) {
+    return this.recordingsService.getDashboardRecordingsForStudent(user.id, search);
+  }
+
+  @Roles(UserRole.STUDENT)
   @Get('recordings/my/grouped')
   async getMyRecordingsGrouped(
     @CurrentUser() user: { id: string },
@@ -321,6 +330,15 @@ export class RecordingsController {
     @Query('search') search?: string,
   ) {
     return this.recordingsService.getRecordingsForStudent(user.id, topicId, search);
+  }
+
+  @Roles(UserRole.STUDENT)
+  @Get('videos/my/dashboard')
+  legacyGetDashboardVideos(
+    @CurrentUser() user: { id: string },
+    @Query('search') search?: string,
+  ) {
+    return this.recordingsService.getDashboardRecordingsForStudent(user.id, search);
   }
 
   @Roles(UserRole.STUDENT)

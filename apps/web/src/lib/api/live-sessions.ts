@@ -35,6 +35,10 @@ export interface JoinUrlResponse {
   sessionId: string;
 }
 
+export async function getMyDashboardSessions() {
+  return fetchApi<StudentSessions>(`${API_ROUTES.LIVE_SESSIONS}/my/dashboard`);
+}
+
 export async function getMySessions() {
   return fetchApi<StudentSessions>(`${API_ROUTES.LIVE_SESSIONS}/my`);
 }

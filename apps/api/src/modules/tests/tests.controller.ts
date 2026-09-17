@@ -43,6 +43,12 @@ export class TestsController {
 
 
   @Roles(UserRole.STUDENT)
+  @Get('my/dashboard')
+  getDashboardTests(@CurrentUser() user: { id: string }) {
+    return this.testsService.getDashboardTests(user.id);
+  }
+
+  @Roles(UserRole.STUDENT)
   @Get('my')
   getMyTests(
     @CurrentUser() user: { id: string },

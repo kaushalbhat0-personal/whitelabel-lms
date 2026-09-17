@@ -15,6 +15,12 @@ export class ResultsController {
   }
 
   @Roles(UserRole.STUDENT)
+  @Get('my/dashboard')
+  getDashboardResults(@CurrentUser() user: { id: string }) {
+    return this.resultsService.getDashboardResults(user.id);
+  }
+
+  @Roles(UserRole.STUDENT)
   @Get('my')
   getMyResults(
     @CurrentUser() user: { id: string },
