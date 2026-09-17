@@ -209,6 +209,15 @@ export function AdminSidebarWrapper() {
   // Close mobile drawer on route change
   useEffect(() => { setMobileOpen(false); }, [pathname]);
 
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMobileOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [mobileOpen]);
+
   const toggleGroup = useCallback((label: string) => {
     setCollapsed((prev) => {
       const next = { ...prev, [label]: !prev[label] };
@@ -256,7 +265,7 @@ export function AdminSidebarWrapper() {
             className="absolute inset-0 bg-black/50 backdrop-blur-sm"
             onClick={() => setMobileOpen(false)}
           />
-          <div className="absolute left-0 top-0 bottom-0 w-72 bg-sidebar-bg shadow-xl flex flex-col animate-slide-in-right">
+          <div className="absolute left-0 top-0 bottom-0 w-72 bg-sidebar-bg shadow-xl flex flex-col motion-safe:animate-slide-in-right">
             <div className="flex items-center justify-between p-4 border-b border-sidebar-divider">
               <span className="text-sm font-bold text-white">Navigation</span>
               <button

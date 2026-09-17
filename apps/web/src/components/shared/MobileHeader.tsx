@@ -18,7 +18,7 @@ export function MobileHeader({ title, showBack, onBack, onMenuClick }: MobileHea
         {showBack ? (
           <button
             onClick={onBack}
-            className="flex items-center justify-center rounded-lg p-1.5 text-text-secondary hover:bg-surface-muted"
+            className="flex items-center justify-center rounded-lg p-2 text-text-secondary hover:bg-surface-muted min-h-[44px] min-w-[44px]"
             aria-label="Back"
           >
             <ChevronLeft className="h-5 w-5" />
@@ -26,7 +26,7 @@ export function MobileHeader({ title, showBack, onBack, onMenuClick }: MobileHea
         ) : onMenuClick ? (
           <button
             onClick={onMenuClick}
-            className="flex items-center justify-center rounded-lg p-1.5 text-text-secondary hover:bg-surface-muted"
+            className="flex items-center justify-center rounded-lg p-2 text-text-secondary hover:bg-surface-muted min-h-[44px] min-w-[44px]"
             aria-label="Menu"
           >
             <Menu className="h-5 w-5" />

@@ -68,7 +68,7 @@ export function NextActionCard({ action }: { action: NextAction }) {
         <p className="text-xs text-text-muted mt-1">{action.pct}% completed</p>
       )}
       <Link href={href} className="mt-4 inline-flex" aria-label={`${cta}: ${description}`}>
-        <Button size="md" variant={isJoinable ? 'primary' : 'primary'} className={`min-h-[44px] ${isLive ? 'animate-pulse-soft' : ''}`}>
+        <Button size="md" variant={isJoinable ? 'primary' : 'primary'} className={`min-h-[44px] ${isLive ? 'motion-safe:animate-pulse-soft' : ''}`}>
           {cta}
           <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </Button>

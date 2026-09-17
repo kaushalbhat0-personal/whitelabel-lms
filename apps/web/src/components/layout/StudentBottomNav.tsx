@@ -42,8 +42,15 @@ export function StudentBottomNav() {
         setMoreOpen(false);
       }
     }
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key === 'Escape') setMoreOpen(false);
+    }
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
   }, []);
 
   const isActive = (href: string, exact?: boolean) =>
@@ -106,7 +113,7 @@ export function StudentBottomNav() {
           </button>
 
           {moreOpen && (
-            <div className="absolute bottom-full right-0 mb-2 max-w-[calc(100vw-16px)] w-40 animate-fade-in rounded-card border border-surface-border bg-surface-card p-2 shadow-elevated">
+            <div className="absolute bottom-full right-0 mb-2 max-w-[calc(100vw-16px)] w-40 motion-safe:animate-fade-in rounded-card border border-surface-border bg-surface-card p-2 shadow-elevated">
               {moreItems.map((item) => {
                 const active = isActive(item.href, false);
                 return (

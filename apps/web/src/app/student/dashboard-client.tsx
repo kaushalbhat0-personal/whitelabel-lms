@@ -327,7 +327,7 @@ export function DashboardClient({ name, nextClass, upcoming, continueContent, co
                         )}
                         <div className="flex flex-wrap gap-2">
                           {canJoin ? (
-                            <Button variant="primary" size="md" loading={joining} onClick={handleJoin} className={cn('min-h-[44px]', isLive && 'animate-pulse-soft')}>
+                            <Button variant="primary" size="md" loading={joining} onClick={handleJoin} className={cn('min-h-[44px]', isLive && 'motion-safe:animate-pulse-soft')}>
                               Join Now
                               <ExternalLink className="h-4 w-4" aria-hidden="true" />
                             </Button>

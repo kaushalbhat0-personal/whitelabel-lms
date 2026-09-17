@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   ChevronUp,
   ChevronDown,
@@ -82,6 +82,15 @@ export function AdminDataTable<T>({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [columnMenuOpen, setColumnMenuOpen] = useState(false);
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!columnMenuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setColumnMenuOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [columnMenuOpen]);
 
   const visibleColumns = columns.filter((c) => !hiddenColumns.has(c.key));
   const allSelected = data.length > 0 && data.every((item) => selectedIds.has(keyExtractor(item)));
@@ -216,7 +225,7 @@ export function AdminDataTable<T>({
           {exportCsv && (
             <button
               onClick={handleExportCsv}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-surface-border px-3 py-2 text-xs font-medium text-text-secondary hover:bg-surface-muted transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-surface-border px-3 py-2 text-xs font-medium text-text-secondary hover:bg-surface-muted transition-colors min-h-[44px]"
             >
               <Download className="h-3.5 w-3.5" />
               Export
@@ -226,9 +235,11 @@ export function AdminDataTable<T>({
           <div className="relative">
             <button
               onClick={() => setColumnMenuOpen(!columnMenuOpen)}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-surface-border px-3 py-2 text-xs font-medium text-text-secondary hover:bg-surface-muted transition-colors"
+              aria-expanded={columnMenuOpen}
+              aria-haspopup="true"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-surface-border px-3 py-2 text-xs font-medium text-text-secondary hover:bg-surface-muted transition-colors min-h-[44px]"
             >
-              <Eye className="h-3.5 w-3.5" />
+              <Eye className="h-3.5 w-3.5" aria-hidden="true" />
               Columns
             </button>
             {columnMenuOpen && (
@@ -263,8 +274,13 @@ export function AdminDataTable<T>({
       )}
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-xl border border-surface-border bg-surface-card">
-        <table className="w-full">
+      <div
+        className="overflow-x-auto rounded-xl border border-surface-border bg-surface-card scrollbar-thin"
+        role="region"
+        aria-label="Data table"
+        tabIndex={0}
+      >
+        <table className="w-full min-w-[640px]">
           <thead>
             <tr className="bg-surface-muted">
               {bulkActions && (
@@ -357,7 +373,7 @@ export function AdminDataTable<T>({
               onClick={() => onPageChange?.(Math.max(1, page - 1))}
               disabled={page <= 1}
               className={cn(
-                'flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
+                'flex items-center justify-center gap-1 rounded-lg border px-3 py-2 text-xs font-medium transition-colors min-h-[44px]',
                 page <= 1
                   ? 'border-surface-border text-text-muted cursor-not-allowed'
                   : 'border-surface-border text-text-secondary hover:bg-surface-muted hover:text-text-primary',
@@ -373,7 +389,7 @@ export function AdminDataTable<T>({
                   key={p}
                   onClick={() => onPageChange?.(p)}
                   className={cn(
-                    'flex items-center justify-center w-8 h-8 rounded-lg text-xs font-medium transition-colors',
+                    'flex items-center justify-center min-h-[44px] min-w-[44px] w-11 h-11 rounded-lg text-xs font-medium transition-colors',
                     p === page
                       ? 'bg-brand-600 text-white'
                       : 'text-text-secondary hover:bg-surface-muted',
@@ -387,7 +403,7 @@ export function AdminDataTable<T>({
               onClick={() => onPageChange?.(Math.min(totalPages, page + 1))}
               disabled={page >= totalPages}
               className={cn(
-                'flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
+                'flex items-center justify-center gap-1 rounded-lg border px-3 py-2 text-xs font-medium transition-colors min-h-[44px]',
                 page >= totalPages
                   ? 'border-surface-border text-text-muted cursor-not-allowed'
                   : 'border-surface-border text-text-secondary hover:bg-surface-muted hover:text-text-primary',
