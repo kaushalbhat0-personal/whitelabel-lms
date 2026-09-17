@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { Menu, ChevronLeft } from 'lucide-react';
 
@@ -30,7 +31,17 @@ export function MobileHeader({ title, showBack, onBack, onMenuClick }: MobileHea
           >
             <Menu className="h-5 w-5" />
           </button>
-        ) : null}
+        ) : (
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center" aria-hidden="true">
+            <Image
+              src="/mct-logo.png"
+              alt="MCT Learn"
+              width={28}
+              height={28}
+              className="h-7 w-7 object-contain rounded-md"
+            />
+          </div>
+        )}
 
         <div className="flex-1 text-center">
           <h1 className="truncate text-sm font-semibold text-text-primary">{title}</h1>

@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { ROUTES } from '@/lib/constants';
 import { useSession } from '@/hooks/useSession';
+import Image from 'next/image';
 import {
   LayoutDashboard,
   BookOpen,
@@ -13,7 +14,6 @@ import {
   ClipboardList,
   BarChart3,
   User,
-  Trophy,
   LogOut,
 } from 'lucide-react';
 
@@ -39,8 +39,15 @@ export function StudentSidebar() {
   return (
     <>
       <div className="flex h-16 items-center gap-2.5 border-b border-sidebar-divider px-6">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500/20">
-          <Trophy className="h-4 w-4 text-brand-300" />
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white p-1">
+          <Image
+            src="/mct-logo.png"
+            alt=""
+            width={32}
+            height={32}
+            className="h-full w-full object-contain"
+            aria-hidden="true"
+          />
         </div>
         <div>
           <span className="text-base font-bold tracking-tight text-white">MCT Learn</span>
