@@ -18,6 +18,7 @@ import {
   BadRequestException,
   UnauthorizedException,
   ForbiddenException,
+  ConflictException,
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -140,16 +141,29 @@ export class AuthService {
       );
     }
 
-    // ── Step 5: Single-device enforcement ─────────────────────
-    // If the user already has a session somewhere, nuke it
+    // ── Step 5: Single-device enforcement (graceful) ────────────
+    // If the user already has a session somewhere, revoke it and
+    // require the current login to be retried. This prevents two
+    // active devices and gives the user a clear message instead of
+    // a raw client-side exception.
     const existingSessionId = await this.redis.get(
       REDIS_KEYS.userSession(userId),
     );
     if (existingSessionId) {
       await this.redis.del(REDIS_KEYS.session(existingSessionId));
+      await this.redis.del(REDIS_KEYS.userSession(userId));
+      // Revoke any playback tokens tied to the old device (security)
+      await this.playbackGuard.revokeUserTokens(userId).catch(() => {});
       this.logger.log(
-        `Invalidated old session ${existingSessionId} for user ${userId}`,
+        `Invalidated old session ${existingSessionId} for user ${userId} — session replacement, requiring re-login`,
       );
+      // Do NOT create a new session yet. Tell the client to show
+      // the graceful "Account Already Active" message and retry.
+      throw new ConflictException({
+        code: 'SESSION_REPLACED',
+        message:
+          'Your account was logged in on another device. We have logged out the previous device for security. Please log in again to continue.',
+      });
     }
 
     // ── Step 6: Generate new session and sign JWT ─────────────

@@ -41,6 +41,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
       typeof exceptionResponse === 'string'
         ? exceptionResponse
         : (exceptionResponse as any).message ?? exception.message;
+    const code =
+      typeof exceptionResponse === 'object' && exceptionResponse !== null
+        ? (exceptionResponse as any).code
+        : undefined;
 
     // Log the error for server-side debugging (don't expose stack traces to clients)
     this.logger.error(
@@ -49,6 +53,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     response.status(statusCode).json({
       success: false,
+      ...(code ? { code } : {}),
       message: Array.isArray(message) ? message.join('; ') : message,
       statusCode,
       timestamp: new Date().toISOString(),
