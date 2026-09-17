@@ -182,13 +182,19 @@ export async function bulkDeleteVideos(recordingIds: string[]) {
   );
 }
 
-export async function getMyVideos(topicId?: string) {
-  const params = topicId ? `?topicId=${topicId}` : '';
-  return fetchApi<StudentVideo[]>(`${API_ROUTES.RECORDINGS}/my${params}`);
+export async function getMyVideos(topicId?: string, search?: string) {
+  const params = new URLSearchParams();
+  if (topicId) params.set('topicId', topicId);
+  if (search) params.set('search', search);
+  const q = params.toString();
+  return fetchApi<StudentVideo[]>(`${API_ROUTES.RECORDINGS}/my${q ? `?${q}` : ''}`);
 }
 
-export async function getMyVideosGrouped() {
-  return fetchApi<StudentBatchRecordings[]>(`${API_ROUTES.RECORDINGS}/my/grouped`);
+export async function getMyVideosGrouped(search?: string) {
+  const params = new URLSearchParams();
+  if (search) params.set('search', search);
+  const q = params.toString();
+  return fetchApi<StudentBatchRecordings[]>(`${API_ROUTES.RECORDINGS}/my/grouped${q ? `?${q}` : ''}`);
 }
 
 export async function getVideoPlaybackUrl(videoId: string) {

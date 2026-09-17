@@ -165,18 +165,22 @@ export class RecordingsController {
   async getMyRecordings(
     @CurrentUser() user: { id: string },
     @Query('topicId') topicId?: string,
+    @Query('search') search?: string,
   ) {
-    this.logger.debug(`[DEBUG_CONTROLLER] GET /recordings/my | studentId=${user.id} | topicId=${topicId ?? 'none'}`);
-    const result = await this.recordingsService.getRecordingsForStudent(user.id, topicId);
+    this.logger.debug(`[DEBUG_CONTROLLER] GET /recordings/my | studentId=${user.id} | topicId=${topicId ?? 'none'} | search=${search ?? 'none'}`);
+    const result = await this.recordingsService.getRecordingsForStudent(user.id, topicId, search);
     this.logger.debug(`[DEBUG_CONTROLLER] GET /recordings/my | response=${JSON.stringify(result)}`);
     return result;
   }
 
   @Roles(UserRole.STUDENT)
   @Get('recordings/my/grouped')
-  async getMyRecordingsGrouped(@CurrentUser() user: { id: string }) {
-    this.logger.debug(`[DEBUG_CONTROLLER] GET /recordings/my/grouped | studentId=${user.id}`);
-    const result = await this.recordingsService.getMyRecordingsGrouped(user.id);
+  async getMyRecordingsGrouped(
+    @CurrentUser() user: { id: string },
+    @Query('search') search?: string,
+  ) {
+    this.logger.debug(`[DEBUG_CONTROLLER] GET /recordings/my/grouped | studentId=${user.id} | search=${search ?? 'none'}`);
+    const result = await this.recordingsService.getMyRecordingsGrouped(user.id, search);
     this.logger.debug(`[DEBUG_CONTROLLER] GET /recordings/my/grouped | response=${JSON.stringify(result)}`);
     return result;
   }
@@ -314,14 +318,18 @@ export class RecordingsController {
   legacyGetMyVideos(
     @CurrentUser() user: { id: string },
     @Query('topicId') topicId?: string,
+    @Query('search') search?: string,
   ) {
-    return this.recordingsService.getRecordingsForStudent(user.id, topicId);
+    return this.recordingsService.getRecordingsForStudent(user.id, topicId, search);
   }
 
   @Roles(UserRole.STUDENT)
   @Get('videos/my/grouped')
-  legacyGetMyVideosGrouped(@CurrentUser() user: { id: string }) {
-    return this.recordingsService.getMyRecordingsGrouped(user.id);
+  legacyGetMyVideosGrouped(
+    @CurrentUser() user: { id: string },
+    @Query('search') search?: string,
+  ) {
+    return this.recordingsService.getMyRecordingsGrouped(user.id, search);
   }
 
   @Roles(UserRole.STUDENT)

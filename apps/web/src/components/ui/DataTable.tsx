@@ -1,7 +1,7 @@
 'use client';
 import { cn } from '@/lib/utils';
 import { ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 interface Column<T> {
   key: string;
@@ -30,6 +30,17 @@ export function DataTable<T>({
 }: DataTableProps<T>) {
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc' | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [canScroll, setCanScroll] = useState(false);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const check = () => setCanScroll(el.scrollWidth > el.clientWidth);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, [data]);
 
   const handleSort = (key: string) => {
     if (sortKey === key) {
@@ -78,9 +89,15 @@ export function DataTable<T>({
   }
 
   return (
-    <div className={cn('overflow-x-auto', className)}>
-      <div className="overflow-hidden rounded-xl border border-surface-border">
-        <table className="w-full">
+    <div className={cn('relative', className)}>
+      <div
+        ref={scrollRef}
+        className="overflow-x-auto overflow-y-hidden rounded-xl border border-surface-border scrollbar-thin overscroll-x-contain"
+      >
+        {canScroll && (
+          <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-white via-white/80 to-transparent md:hidden" aria-hidden="true" />
+        )}
+        <table className="w-full min-w-[600px]">
           <thead>
             <tr className="bg-surface-muted">
               {columns.map((col) => (
@@ -120,6 +137,9 @@ export function DataTable<T>({
           </tbody>
         </table>
       </div>
+      {canScroll && (
+        <p className="mt-2 text-[11px] text-text-muted md:hidden">Scroll horizontally to see more →</p>
+      )}
     </div>
   );
 }

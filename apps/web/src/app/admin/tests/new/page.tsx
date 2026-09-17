@@ -31,8 +31,16 @@ interface SelectedQuestion {
   questionText: string;
 }
 
+const STEPS = [
+  { id: 1, label: 'Details', desc: 'Title & scoring' },
+  { id: 2, label: 'Questions', desc: 'Bank & sections' },
+  { id: 3, label: 'Batches', desc: 'Assignment' },
+  { id: 4, label: 'Schedule', desc: 'Timing & settings' },
+] as const;
+
 export default function CreateTestPage() {
   const router = useRouter();
+  const [activeStep, setActiveStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -183,10 +191,23 @@ export default function CreateTestPage() {
     }
   };
 
+  const canProceed = () => {
+    if (activeStep === 1) return title.trim() && totalMarks;
+    return true;
+  };
+  const nextStep = () => {
+    if (activeStep === 1 && !title.trim()) { setError('Title is required'); return; }
+    if (activeStep === 1 && !totalMarks) { setError('Total marks is required'); return; }
+    setError('');
+    setActiveStep((s) => Math.min(4, s + 1));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+  const prevStep = () => { setError(''); setActiveStep((s) => Math.max(1, s - 1)); };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <button onClick={() => router.back()} className="rounded-lg p-2 text-text-muted hover:bg-surface-muted hover:text-text-primary">
+        <button onClick={() => router.back()} className="rounded-lg p-2 text-text-muted hover:bg-surface-muted hover:text-text-primary" aria-label="Back">
           <ArrowLeft className="h-5 w-5" />
         </button>
         <div>
@@ -194,16 +215,46 @@ export default function CreateTestPage() {
           <p className="mt-1 text-sm text-text-muted">Set up a new assessment for your students</p>
         </div>
       </div>
+      <nav aria-label="Breadcrumb" className="flex items-center gap-1 text-xs text-text-muted">
+        <a href="/admin" className="hover:text-text-primary hover:underline">Admin</a>
+        <span aria-hidden="true">/</span>
+        <a href="/admin/tests" className="hover:text-text-primary hover:underline">Tests</a>
+        <span aria-hidden="true">/</span>
+        <span aria-current="page" className="font-medium text-text-primary">Create</span>
+      </nav>
+
+      {/* Stepper */}
+      <div className="flex items-center gap-2 overflow-x-auto scrollbar-thin pb-2" role="navigation" aria-label="Test creation steps">
+        {STEPS.map((step, idx) => (
+          <div key={step.id} className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setActiveStep(step.id)}
+              className={cn(
+                'flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-colors min-h-[44px]',
+                activeStep === step.id ? 'bg-brand-navy text-white' : activeStep > step.id ? 'bg-brand-50 text-brand-700 border border-brand-200' : 'bg-surface-muted text-text-muted border border-surface-border'
+              )}
+              aria-current={activeStep === step.id ? 'step' : undefined}
+            >
+              <span className={cn('flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold', activeStep === step.id ? 'bg-white/20' : 'bg-white border border-surface-border')}>{step.id}</span>
+              <span className="hidden sm:inline">{step.label}</span>
+              <span className="sm:hidden">{step.label.slice(0,3)}</span>
+            </button>
+            {idx < STEPS.length - 1 && <div className={cn('h-px w-6 shrink-0', activeStep > step.id ? 'bg-brand-navy' : 'bg-surface-border')} />}
+          </div>
+        ))}
+      </div>
 
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
           {error}
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="rounded-xl border border-surface-border bg-surface-card p-6">
-          <h2 className="mb-4 text-lg font-semibold text-text-primary">Basic Information</h2>
+        {activeStep === 1 && (
+          <div className="rounded-xl border border-surface-border bg-surface-card p-6">
+            <h2 className="mb-4 text-lg font-semibold text-text-primary">Basic Information</h2>
           <div className="space-y-4">
             <div>
               <label className="mb-1.5 block text-sm font-medium text-text-secondary">Title *</label>
@@ -235,9 +286,11 @@ export default function CreateTestPage() {
             </div>
           </div>
         </div>
+        )}
 
-        <div className="rounded-xl border border-surface-border bg-surface-card p-6">
-          <h2 className="mb-4 text-lg font-semibold text-text-primary">Timing & Access</h2>
+        {activeStep === 4 && (
+          <div className="rounded-xl border border-surface-border bg-surface-card p-6">
+            <h2 className="mb-4 text-lg font-semibold text-text-primary">Timing & Access</h2>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
               <label className="mb-1.5 block text-sm font-medium text-text-secondary">Duration (minutes)</label>
@@ -280,9 +333,11 @@ export default function CreateTestPage() {
             </div>
           </div>
         </div>
+        )}
 
-        <div className="rounded-xl border border-surface-border bg-surface-card p-6">
-          <h2 className="mb-4 text-lg font-semibold text-text-primary">Scoring</h2>
+        {activeStep === 1 && (
+          <div className="rounded-xl border border-surface-border bg-surface-card p-6">
+            <h2 className="mb-4 text-lg font-semibold text-text-primary">Scoring</h2>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
               <label className="mb-1.5 block text-sm font-medium text-text-secondary">Total Marks *</label>
@@ -332,9 +387,11 @@ export default function CreateTestPage() {
             )}
           </div>
         </div>
+        )}
 
-        <div className="rounded-xl border border-surface-border bg-surface-card p-6">
-          <h2 className="mb-4 text-lg font-semibold text-text-primary">Settings</h2>
+        {activeStep === 4 && (
+          <div className="rounded-xl border border-surface-border bg-surface-card p-6">
+            <h2 className="mb-4 text-lg font-semibold text-text-primary">Settings</h2>
           <div className="space-y-3">
             {[
               { label: 'Shuffle Questions', value: shuffleQuestions, set: setShuffleQuestions },
@@ -353,9 +410,11 @@ export default function CreateTestPage() {
             ))}
           </div>
         </div>
+        )}
 
-        <div className="rounded-xl border border-surface-border bg-surface-card p-6">
-          <h2 className="mb-4 text-lg font-semibold text-text-primary">Batch Assignment</h2>
+        {activeStep === 3 && (
+          <div className="rounded-xl border border-surface-border bg-surface-card p-6">
+            <h2 className="mb-4 text-lg font-semibold text-text-primary">Batch Assignment</h2>
           {availableBatches.length === 0 ? (
             <p className="text-sm text-text-muted">No active batches found. Create a batch before assigning this test.</p>
           ) : (
@@ -374,10 +433,13 @@ export default function CreateTestPage() {
             </div>
           )}
         </div>
+        )}
 
-        <div className="rounded-xl border border-surface-border bg-surface-card p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-text-primary">Sections</h2>
+        {activeStep === 2 && (
+          <>
+            <div className="rounded-xl border border-surface-border bg-surface-card p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-text-primary">Sections</h2>
             <button
               type="button"
               onClick={addSection}
@@ -455,23 +517,47 @@ export default function CreateTestPage() {
             </div>
           )}
         </div>
+          </>
+        )}
 
-        <div className="flex items-center justify-end gap-3">
+        <div className="flex items-center justify-between gap-3">
           <button
             type="button"
             onClick={() => router.back()}
-            className="rounded-xl border border-surface-border px-6 py-2.5 text-sm font-medium text-text-secondary hover:bg-surface-muted"
+            className="rounded-xl border border-surface-border px-4 py-2.5 text-sm font-medium text-text-secondary hover:bg-surface-muted min-h-[44px]"
           >
             Cancel
           </button>
-          <button
-            type="submit"
-            disabled={saving}
-            className="inline-flex items-center gap-2 rounded-xl bg-brand-navy px-6 py-2.5 text-sm font-semibold text-white hover:bg-brand-navy-dark disabled:opacity-60"
-          >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {saving ? 'Saving...' : 'Create Test'}
-          </button>
+          <div className="flex items-center gap-2">
+            {activeStep > 1 && (
+              <button
+                type="button"
+                onClick={prevStep}
+                className="rounded-xl border border-surface-border px-6 py-2.5 text-sm font-medium text-text-secondary hover:bg-surface-muted min-h-[44px]"
+              >
+                Back
+              </button>
+            )}
+            {activeStep < 4 ? (
+              <button
+                type="button"
+                onClick={nextStep}
+                disabled={!canProceed()}
+                className="inline-flex items-center gap-2 rounded-xl bg-brand-navy px-6 py-2.5 text-sm font-semibold text-white hover:bg-brand-navy-dark disabled:opacity-60 min-h-[44px]"
+              >
+                Next
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={saving}
+                className="inline-flex items-center gap-2 rounded-xl bg-brand-navy px-6 py-2.5 text-sm font-semibold text-white hover:bg-brand-navy-dark disabled:opacity-60 min-h-[44px]"
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                {saving ? 'Saving...' : 'Create Test'}
+              </button>
+            )}
+          </div>
         </div>
       </form>
 

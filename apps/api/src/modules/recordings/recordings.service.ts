@@ -1170,14 +1170,14 @@ export class RecordingsService {
    * @returns Array of recordings with progress data.
    * @throws BadRequestException on DB query failure.
    */
-  async getRecordingsForStudent(userId: string, topicId?: string) {
-    const cacheKey = this.redisCache.key('recordings', 'flat', userId, topicId ?? 'all');
+  async getRecordingsForStudent(userId: string, topicId?: string, search?: string) {
+    const cacheKey = this.redisCache.key('recordings', 'flat', userId, topicId ?? 'all', search ? `search:${search}` : 'all');
     return this.redisCache.wrap(cacheKey, 300, async () => {
-      return this.fetchRecordingsForStudent(userId, topicId);
+      return this.fetchRecordingsForStudent(userId, topicId, search);
     });
   }
 
-  private async fetchRecordingsForStudent(userId: string, topicId?: string) {
+  private async fetchRecordingsForStudent(userId: string, topicId?: string, search?: string) {
     this.logger.debug(`[DEBUG] fetchRecordingsForStudent | studentId=${userId} | topicId=${topicId ?? 'none'}`);
 
     const { data: batchMemberships } = await this.supabaseService.client
@@ -1251,12 +1251,21 @@ export class RecordingsService {
       recordingsQuery = recordingsQuery.eq('topic_id', topicId);
     }
 
-    const { data: recordings } = await recordingsQuery;
-    this.logger.debug(`[DEBUG] fetchRecordingsForStudent | recordings query returned count=${recordings?.length ?? 0} | status filter='ready'`);
+    const { data: recordingsRaw } = await recordingsQuery;
+    this.logger.debug(`[DEBUG] fetchRecordingsForStudent | recordings query returned count=${recordingsRaw?.length ?? 0} | status filter='ready'`);
 
-    if (!recordings || recordings.length === 0) {
+    if (!recordingsRaw || recordingsRaw.length === 0) {
       this.logger.debug(`[DEBUG] fetchRecordingsForStudent | EARLY RETURN: no ready recordings | response=[]`);
       return [];
+    }
+
+    // Search after authorization/published filtering — preserves recording_batches source
+    let recordings = recordingsRaw;
+    if (search) {
+      const term = search.toLowerCase();
+      recordings = recordingsRaw.filter((r: any) => (r.title || '').toLowerCase().includes(term) || (r.description || '').toLowerCase().includes(term));
+      this.logger.debug(`[DEBUG] fetchRecordingsForStudent | search="${search}" filtered count=${recordings.length}`);
+      if (recordings.length === 0) return [];
     }
 
     const recordingIdList = recordings.map((v: any) => v.id);
@@ -1292,14 +1301,14 @@ export class RecordingsService {
    * @returns Array of batch groups, each with sections containing recordings with progress.
    * @throws BadRequestException on DB query failure (propagated from fetchMyRecordingsGrouped).
    */
-  async getMyRecordingsGrouped(userId: string) {
-    const cacheKey = this.redisCache.key('recordings', 'grouped', userId);
+  async getMyRecordingsGrouped(userId: string, search?: string) {
+    const cacheKey = this.redisCache.key('recordings', 'grouped', userId, search ? `search:${search}` : 'all');
     return this.redisCache.wrap(cacheKey, 300, async () => {
-      return this.fetchMyRecordingsGrouped(userId);
+      return this.fetchMyRecordingsGrouped(userId, search);
     });
   }
 
-  private async fetchMyRecordingsGrouped(userId: string) {
+  private async fetchMyRecordingsGrouped(userId: string, search?: string) {
     this.logger.debug(`[DEBUG] fetchMyRecordingsGrouped | studentId=${userId}`);
 
     const { data: batchMemberships } = await this.supabaseService.client
@@ -1460,8 +1469,25 @@ export class RecordingsService {
         }
       }
     }
-    this.logger.debug(`[DEBUG] fetchMyRecordingsGrouped | FINAL response=${JSON.stringify(result)}`);
-    return result;
+    // Search after authorization — filter within authorized grouped result
+    let finalResult = result;
+    if (search) {
+      const term = search.toLowerCase();
+      finalResult = result
+        .map((batch: any) => ({
+          ...batch,
+          sections: batch.sections
+            .map((sec: any) => ({
+              ...sec,
+              recordings: sec.recordings.filter((r: any) => (r.title || '').toLowerCase().includes(term) || (r.description || '').toLowerCase().includes(term)),
+            }))
+            .filter((sec: any) => sec.recordings.length > 0),
+        }))
+        .filter((batch: any) => batch.sections.length > 0);
+      this.logger.debug(`[DEBUG] fetchMyRecordingsGrouped | search="${search}" filtered batches=${finalResult.length}`);
+    }
+    this.logger.debug(`[DEBUG] fetchMyRecordingsGrouped | FINAL response=${JSON.stringify(finalResult)}`);
+    return finalResult;
   }
 
   // ── Playback ──────────────────────────────────────────────

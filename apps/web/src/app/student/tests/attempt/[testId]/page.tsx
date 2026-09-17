@@ -288,6 +288,7 @@ function QuestionRenderer({
               <img
                 src={question.image_url}
                 alt="Question image"
+                loading="lazy"
                 className="max-h-80 w-full object-contain"
               />
             </div>
@@ -700,7 +701,7 @@ export default function TestAttemptPage() {
         </Modal>
 
         {/* Main content */}
-        <div className="flex flex-1 pt-14">
+        <div className={cn("flex flex-1", isOffline ? "pt-24" : "pt-14")}>
           {/* Question area */}
           <main className="flex-1 p-4 pb-24 md:p-6 md:pb-6">
             <div className="mx-auto max-w-3xl">
