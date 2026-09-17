@@ -346,6 +346,7 @@ export default function TestAttemptPage() {
   const [warningMessage, setWarningMessage] = useState('');
   const [showWarning, setShowWarning] = useState(false);
   const [sessionExpired, setSessionExpired] = useState(false);
+  const [timeExpired, setTimeExpired] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
 
   const answersRef = useRef(answers);
@@ -435,29 +436,69 @@ export default function TestAttemptPage() {
     init();
   }, [testId]);
 
-  // Countdown timer
+  // Countdown timer — when it hits 0, lock UI and trigger expiry handling
   useEffect(() => {
-    if (timeRemaining == null || timeRemaining <= 0) return;
+    if (timeRemaining == null || timeRemaining <= 0) {
+      if (timeRemaining === 0 && !timeExpired) {
+        setTimeExpired(true);
+      }
+      return;
+    }
     countdownRef.current = setInterval(() => {
       setTimeRemaining((prev) => {
         if (prev == null || prev <= 1) {
           clearInterval(countdownRef.current!);
+          setTimeExpired(true);
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
     return () => clearInterval(countdownRef.current!);
-  }, [timeRemaining != null]);
+  }, [timeRemaining != null, timeExpired]);
 
-  // Timer sync every 30s
+  // When time expires, attempt server-side finalization (idempotent, no duplicate)
+  const hasAutoSubmittedRef = useRef(false);
+  useEffect(() => {
+    if (!timeExpired || !attemptId || hasAutoSubmittedRef.current || submitting) return;
+    hasAutoSubmittedRef.current = true;
+    // Fire-and-forget server submit with current answers — server will enforce expiry
+    (async () => {
+      try {
+        const ans = answersRef.current;
+        const answersList: AnswerEntry[] = [];
+        for (const q of questions) {
+          const val = ans[q.id];
+          if (val !== undefined && val !== '' && !(Array.isArray(val) && val.length === 0)) {
+            answersList.push({ questionId: q.id, questionType: q.question_type, answer: val });
+          }
+        }
+        await submitAttempt(attemptId, { answers: answersList, timeRemainingSeconds: 0 } as any);
+        try { localStorage.removeItem(`mct:attempt:${attemptId}:backup`); } catch {}
+        toast.info('Time expired — your answers have been submitted.');
+        router.replace(`/student/tests/result/${attemptId}`);
+      } catch (err: any) {
+        const msg = err?.message || '';
+        if (msg.toLowerCase().includes('expired')) {
+          toast.error('Time expired — your attempt has been closed.');
+          // Still navigate to result if server transitioned to submitted
+          try { router.replace(`/student/tests/result/${attemptId}`); } catch {}
+        } else if (err?.status !== 401) {
+          toast.error('Time expired — please submit manually.');
+        }
+      }
+    })();
+  }, [timeExpired, attemptId, submitting, questions, router]);
+
+  // Timer sync every 30s — server is authoritative
   useEffect(() => {
     if (!attemptId) return;
     timerSyncRef.current = setInterval(async () => {
       try {
-        const res = await getAttemptTimer(attemptId);
-        if (res.remainingSeconds != null) {
-          setTimeRemaining(res.remainingSeconds);
+        const res: any = await getAttemptTimer(attemptId);
+        const serverRemaining = res.timeRemainingSeconds ?? res.remainingSeconds;
+        if (serverRemaining != null) {
+          setTimeRemaining(serverRemaining);
         }
       } catch {
         // silent
@@ -482,6 +523,7 @@ export default function TestAttemptPage() {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
       if (!attemptId) return;
+      if (timeExpired) return;
       const ans = answersRef.current;
       const answersList: AnswerEntry[] = [];
       for (const q of questions) {
@@ -504,10 +546,16 @@ export default function TestAttemptPage() {
         } catch (err: any) {
           lastError = err;
           const is401 = err?.status === 401 || err?.name === 'UnauthorizedError';
+          const isExpired = err?.status === 403 && (err?.message || '').toLowerCase().includes('expired');
           if (is401) {
             preserveLocally(attemptId, testId, ans, currentIndex, timeRemaining);
             setSessionExpired(true);
             toast.error('Your session has expired. Answers saved on this device.');
+            break;
+          }
+          if (isExpired) {
+            setTimeExpired(true);
+            toast.error('Time expired — your attempt has been closed.');
             break;
           }
           if (retry < 2) await new Promise(r => setTimeout(r, 1000 * (retry + 1)));
@@ -515,18 +563,20 @@ export default function TestAttemptPage() {
       }
       if (lastError) {
         const is401 = (lastError as any)?.status === 401;
-        if (!is401) toast.error('Auto-save failed. Your answers are saved locally.');
+        const isExpired = (lastError as any)?.status === 403 && ((lastError as any)?.message || '').toLowerCase().includes('expired');
+        if (!is401 && !isExpired) toast.error('Auto-save failed. Your answers are saved locally.');
       }
     }, 2000);
-  }, [attemptId, questions, currentIndex, timeRemaining, preserveLocally, testId]);
+  }, [attemptId, questions, currentIndex, timeRemaining, preserveLocally, testId, timeExpired]);
 
   const setAnswer = useCallback((questionId: string, value: any) => {
+    if (timeExpired || timeRemaining === 0) return;
     setAnswers((prev) => {
       const next = { ...prev, [questionId]: value };
       return next;
     });
     debouncedSave();
-  }, [debouncedSave]);
+  }, [debouncedSave, timeExpired, timeRemaining]);
 
   const currentQuestion = questions[currentIndex];
   const totalQuestions = questions.length;
@@ -670,6 +720,15 @@ export default function TestAttemptPage() {
           <div className="fixed top-[57px] left-0 right-0 z-20 mx-auto max-w-3xl px-4">
             <Alert variant="warning" role="status" className="shadow-card">
               You&apos;re offline. Some features may not work until your connection returns. Your answers remain saved locally.
+            </Alert>
+          </div>
+        )}
+
+        {/* Time expired banner */}
+        {timeExpired && (
+          <div className="fixed top-[57px] left-0 right-0 z-20 mx-auto max-w-3xl px-4">
+            <Alert variant="error" role="alert" className="shadow-card">
+              Time expired — your attempt has been closed. No further changes are possible. Please submit or wait for auto-submission.
             </Alert>
           </div>
         )}

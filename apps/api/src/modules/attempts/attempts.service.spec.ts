@@ -59,7 +59,7 @@ describe('AttemptsService', () => {
       { question_bank_id: 'qb1', marks: 5, sort_order: 0, negative_mark: 0, question_bank: { question_type: 'single_choice' }, test_sections: null },
     ],
   };
-  const attemptRow = { id: 'a1', test_id: 't1', user_id: 'u1', status: 'in_progress', started_at: '2026-01-01', time_remaining_seconds: 600, current_question_index: 0 };
+  const attemptRow = { id: 'a1', test_id: 't1', user_id: 'u1', status: 'in_progress', started_at: new Date().toISOString(), time_remaining_seconds: 600, current_question_index: 0 };
 
   beforeEach(async () => {
     client = { from: jest.fn() };
@@ -193,8 +193,12 @@ describe('AttemptsService', () => {
     it('upserts answer and updates checkpoint', async () => {
       setupFrom(client, [
         { data: attemptRow, error: null },   // verifyOwnership
+        { data: { duration_minutes: 10 }, error: null }, // getDurationForAttempt
+        { data: { id: 't1', test_batches: [{ batch_id: 'b1' }] }, error: null }, // batch check test
+        { data: [{ batch_id: 'b1' }], error: null }, // batch check user
         { data: [{ question_bank_id: 'qb1' }], error: null }, // validate belongs
         { data: [{ question_bank_id: 'qb1', marks: 5 }], error: null }, // resolveMarksMap
+        { data: { duration_minutes: 10 }, error: null }, // clamp getDuration
         { data: { saved: true }, error: null }, // upsert
         { data: null, error: null },         // update attempt
         { data: { current_question_index: 1, time_remaining_seconds: 500 }, error: null }, // saveCheckpoint select
@@ -222,10 +226,14 @@ describe('AttemptsService', () => {
     it('saves multiple answers', async () => {
       setupFrom(client, [
         { data: attemptRow, error: null },
+        { data: { duration_minutes: 10 }, error: null }, // getDuration
+        { data: { id: 't1', test_batches: [{ batch_id: 'b1' }] }, error: null }, // batch test
+        { data: [{ batch_id: 'b1' }], error: null }, // batch user
         { data: [{ question_bank_id: 'q1' }, { question_bank_id: 'q2' }], error: null },
         { data: [{ question_bank_id: 'q1', marks: 2 }, { question_bank_id: 'q2', marks: 3 }], error: null }, // marks map
         { data: null, error: null }, // upsert 1
         { data: null, error: null }, // upsert 2
+        { data: { duration_minutes: 10 }, error: null }, // clamp duration
         { data: null, error: null }, // update attempt
         { data: null, error: null }, // checkpoint
       ]);
@@ -242,9 +250,13 @@ describe('AttemptsService', () => {
       const submitted = { ...attemptRow, status: 'submitted', submitted_at: '2026-01-02' };
       setupFrom(client, [
         { data: attemptRow, error: null },
+        { data: { duration_minutes: 10 }, error: null }, // getDuration for expiry
+        { data: { id: 't1', test_batches: [{ batch_id: 'b1' }] }, error: null }, // batch test
+        { data: [{ batch_id: 'b1' }], error: null }, // batch user
         { data: [{ question_bank_id: 'qb1' }], error: null },
         { data: [{ question_bank_id: 'qb1', marks: 5 }], error: null }, // marks map
         { data: null, error: null }, // upsert answer
+        { data: { duration_minutes: 10 }, error: null }, // clamp duration
         { data: submitted, error: null }, // update attempt (single)
       ]);
       const result = await service.submitAttempt('a1', 'u1', { answers: [{ questionId: 'qb1', questionType: 'single_choice', answer: 'B' }], timeRemainingSeconds: 0 } as any);

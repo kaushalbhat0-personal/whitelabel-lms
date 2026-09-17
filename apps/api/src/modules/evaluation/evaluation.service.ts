@@ -88,6 +88,7 @@ export class EvaluationService {
       QuestionType.MULTIPLE_CHOICE,
       QuestionType.TRUE_FALSE,
       QuestionType.NUMERICAL,
+      QuestionType.IMAGE_BASED,
     ]);
 
     const summary: AutoGradeSummary = {
@@ -125,10 +126,11 @@ export class EvaluationService {
         continue;
       }
 
-      const questionType = questionBank.question_type;
+      const rawQuestionType = questionBank.question_type;
+      const questionType = this.normalizeQuestionType(rawQuestionType);
       const correctAnswer = questionBank.correct_answer;
 
-      if (!correctAnswer || !autoGradableTypes.has(questionType)) {
+      if (!correctAnswer || !autoGradableTypes.has(questionType as any)) {
         const { error: updateError } = await this.supabaseService.client
           .from(TABLES.TEST_ANSWERS)
           .update({
@@ -216,12 +218,20 @@ export class EvaluationService {
     return { summary, attempt: { ...attempt, status: newStatus } };
   }
 
+  private normalizeQuestionType(raw: string): string {
+    if (!raw) return raw;
+    const lower = String(raw).toLowerCase();
+    if (lower === 'mcq') return QuestionType.SINGLE_CHOICE;
+    return raw;
+  }
+
   private evaluateAnswer(questionType: string, userAnswer: any, correctAnswer: string): boolean {
     if (userAnswer === null || userAnswer === undefined || userAnswer === '') return false;
 
     try {
       switch (questionType) {
         case QuestionType.SINGLE_CHOICE:
+        case QuestionType.IMAGE_BASED:
           return String(userAnswer).trim() === String(correctAnswer).trim();
 
         case QuestionType.MULTIPLE_CHOICE: {
@@ -260,6 +270,21 @@ export class EvaluationService {
         .filter(Boolean);
     }
     return [];
+  }
+
+  private async refreshAnswerUrlsEval(answer: any): Promise<any> {
+    if (!answer || typeof answer !== 'object' || !answer.storagePath) return answer;
+    const storagePath = String(answer.storagePath);
+    if (!storagePath.startsWith('question-answers/')) return answer;
+    try {
+      const { data, error } = await this.supabaseService.client.storage
+        .from('uploads')
+        .createSignedUrl(storagePath, 60 * 60);
+      if (!error && data?.signedUrl) {
+        return { ...answer, url: data.signedUrl };
+      }
+    } catch {}
+    return answer;
   }
 
   async getReviewQueue(options: ReviewQueueOptions = {}) {
@@ -301,6 +326,15 @@ export class EvaluationService {
     const { data, count, error } = await query;
     if (error) throw error;
 
+    if (data) {
+      for (const item of data as any[]) {
+        const ans = (item as any).test_answers;
+        if (ans?.answer) {
+          (item as any).test_answers.answer = await this.refreshAnswerUrlsEval(ans.answer);
+        }
+      }
+    }
+
     return { items: data ?? [], total: count ?? 0, page, limit };
   }
 
@@ -338,6 +372,8 @@ export class EvaluationService {
     const answerBefore = reviewItem.test_answers;
     const oldStatus = reviewItem.status;
     const attemptId = reviewItem.attempt_id;
+    const marksPossibleForReview = answerBefore.marks_possible ?? 1;
+    const derivedIsCorrect = dto.marksAwarded >= marksPossibleForReview;
 
     const tx = new Transaction();
     await tx.run([
@@ -352,6 +388,7 @@ export class EvaluationService {
               evaluated_by: evaluatedBy,
               evaluated_at: new Date().toISOString(),
               is_manual_review: false,
+              is_correct: derivedIsCorrect,
             })
             .eq('id', reviewItem.answer_id);
           if (error) throw error;
@@ -365,6 +402,7 @@ export class EvaluationService {
               evaluated_by: answerBefore.evaluated_by,
               evaluated_at: answerBefore.evaluated_at,
               is_manual_review: answerBefore.is_manual_review,
+              is_correct: answerBefore.is_correct,
             })
             .eq('id', reviewItem.answer_id);
         },
@@ -413,6 +451,7 @@ export class EvaluationService {
           .from(TABLES.TEST_ANSWERS)
           .update({
             is_manual_review: answerBefore.is_manual_review,
+            is_correct: answerBefore.is_correct,
           })
           .eq('id', reviewItem.answer_id);
 

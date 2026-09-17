@@ -10,6 +10,22 @@ export class ResultsService {
 
   constructor(private readonly supabaseService: SupabaseService, @Optional() private readonly redisCache?: RedisCacheService) {}
 
+  private async refreshAnswerUrls(answer: any): Promise<any> {
+    if (!answer || typeof answer !== 'object' || !answer.storagePath) return answer;
+    const storagePath = String(answer.storagePath);
+    // Only allow question-answers prefix — prevent arbitrary path exposure
+    if (!storagePath.startsWith('question-answers/')) return answer;
+    try {
+      const { data, error } = await this.supabaseService.client.storage
+        .from('uploads')
+        .createSignedUrl(storagePath, 60 * 60);
+      if (!error && data?.signedUrl) {
+        return { ...answer, url: data.signedUrl };
+      }
+    } catch {}
+    return answer;
+  }
+
   async getStudentResult(attemptId: string, userId: string) {
     // Verify ownership and fetch full attempt for fallback
     const { data: attempt, error: attemptError } = await this.supabaseService.client
@@ -83,6 +99,15 @@ export class ResultsService {
         .select(`*, question_bank!inner(id, question_text, question_type, options, correct_answer, image_url, explanation, difficulty, topic_id)`)
         .eq('attempt_id', attemptId);
 
+      // Refresh signed URLs for authorized attachment access (1h TTL, private bucket stays private)
+      if (answers) {
+        for (const row of answers as any[]) {
+          if (row.answer) {
+            row.answer = await this.refreshAnswerUrls(row.answer);
+          }
+        }
+      }
+
       const sanitizeWithQuestion = (rows: any[]) =>
         (rows ?? []).map((a: any) => ({
           id: a.id,
@@ -118,6 +143,14 @@ export class ResultsService {
       .select(`*, question_bank!inner(id, question_text, question_type, options, correct_answer, image_url, explanation, difficulty, topic_id)`)
       .eq('attempt_id', attemptId);
 
+    if (answers) {
+      for (const row of answers as any[]) {
+        if (row.answer) {
+          row.answer = await this.refreshAnswerUrls(row.answer);
+        }
+      }
+    }
+
     const answerRows = answers ?? [];
     const manualPending = answerRows.some((a: any) => a.is_manual_review === true);
     const hasAnyGrading = answerRows.some((a: any) => a.marks_awarded != null || a.is_correct != null);
@@ -142,18 +175,19 @@ export class ResultsService {
         ? Math.round((new Date(attempt.submitted_at).getTime() - new Date(attempt.started_at).getTime()) / 1000)
         : null;
 
-    // Build question_analysis for interim so frontend can display per-question review even before publish
+    // Build question_analysis for interim — mask correct_answer when show_result_immediately=false until published
+    const showInterimResults = (test as any).show_result_immediately !== false;
     const interimQuestionAnalysis = answerRows.map((a: any) => ({
       questionId: a.question_bank?.id ?? a.question_id,
       questionText: a.question_bank?.question_text ?? null,
       questionType: a.question_bank?.question_type ?? a.question_type,
       options: a.question_bank?.options ?? null,
-      correctAnswer: a.question_bank?.correct_answer ?? null,
+      correctAnswer: showInterimResults ? (a.question_bank?.correct_answer ?? null) : null,
       userAnswer: a.answer,
-      isCorrect: a.is_correct,
+      isCorrect: showInterimResults ? a.is_correct : null,
       isManualReview: a.is_manual_review,
       marksPossible: a.marks_possible ?? 1,
-      marksAwarded: a.marks_awarded ?? 0,
+      marksAwarded: showInterimResults ? (a.marks_awarded ?? 0) : null,
       feedback: a.feedback ?? null,
       imageUrl: a.question_bank?.image_url ?? null,
     }));
@@ -164,12 +198,12 @@ export class ResultsService {
       question_type: a.question_type,
       question_text: a.question_bank?.question_text ?? null,
       options: a.question_bank?.options ?? null,
-      correct_answer: a.question_bank?.correct_answer ?? null,
+      correct_answer: showInterimResults ? (a.question_bank?.correct_answer ?? null) : null,
       image_url: a.question_bank?.image_url ?? null,
       answer: a.answer,
       marks_possible: a.marks_possible ?? null,
-      marks_awarded: a.marks_awarded ?? null,
-      is_correct: a.is_correct ?? null,
+      marks_awarded: showInterimResults ? (a.marks_awarded ?? null) : null,
+      is_correct: showInterimResults ? (a.is_correct ?? null) : null,
       is_manual_review: a.is_manual_review ?? null,
       feedback: a.feedback ?? null,
     }));

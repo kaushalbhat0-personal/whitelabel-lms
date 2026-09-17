@@ -87,6 +87,22 @@ export class AttemptsService {
       return this.buildAttemptResponse(existingAttempt);
     }
 
+    // Server-side availability window — controls STARTING a new attempt only
+    // Resume (existing in_progress) is allowed even if window has closed.
+    const now = new Date();
+    if ((test as any).start_time) {
+      const start = new Date((test as any).start_time);
+      if (now < start) {
+        throw new ForbiddenException('Test not yet available');
+      }
+    }
+    if ((test as any).end_time) {
+      const end = new Date((test as any).end_time);
+      if (now > end) {
+        throw new ForbiddenException('Test window closed');
+      }
+    }
+
     const timeRemainingSeconds = test.duration_minutes ? test.duration_minutes * 60 : null;
 
     const { data: attempt, error: insertError } = await this.supabaseService.client
@@ -137,7 +153,7 @@ export class AttemptsService {
         question_type: q.question_bank?.question_type ?? 'single_choice',
         marks_possible: q.marks ?? 1,
         marks_awarded: 0,
-        is_correct: false,
+        is_correct: null,
         is_manual_review: false,
       }));
 
@@ -180,6 +196,9 @@ export class AttemptsService {
       throw new ForbiddenException('Attempt is no longer in progress');
     }
 
+    await this.assertNotExpired(attempt);
+    await this.assertHasBatchAccess(attempt.test_id, userId);
+
     await this.validateQuestionsBelongToTest(attempt.test_id, [dto.questionId]);
 
     const marksPossible = await this.resolveMarksPossible(attempt.test_id, dto.questionId);
@@ -204,7 +223,7 @@ export class AttemptsService {
     const updates: Record<string, any> = { last_saved_at: new Date().toISOString() };
     if (dto.currentQuestionIndex !== undefined) updates.current_question_index = dto.currentQuestionIndex;
     if (dto.timeRemainingSeconds !== undefined) {
-      updates.time_remaining_seconds = this.clampTimeRemaining(dto.timeRemainingSeconds, attempt);
+      updates.time_remaining_seconds = await this.clampTimeRemaining(dto.timeRemainingSeconds, attempt);
     }
 
     await this.supabaseService.client
@@ -223,6 +242,9 @@ export class AttemptsService {
     if (attempt.status !== 'in_progress') {
       throw new ForbiddenException('Attempt is no longer in progress');
     }
+
+    await this.assertNotExpired(attempt);
+    await this.assertHasBatchAccess(attempt.test_id, userId);
 
     await this.validateQuestionsBelongToTest(attempt.test_id, answers.map((a) => a.questionId));
 
@@ -249,7 +271,7 @@ export class AttemptsService {
     const updates: Record<string, any> = { last_saved_at: new Date().toISOString() };
     if (lastAnswer?.currentQuestionIndex !== undefined) updates.current_question_index = lastAnswer.currentQuestionIndex;
     if (lastAnswer?.timeRemainingSeconds !== undefined) {
-      updates.time_remaining_seconds = this.clampTimeRemaining(lastAnswer.timeRemainingSeconds, attempt);
+      updates.time_remaining_seconds = await this.clampTimeRemaining(lastAnswer.timeRemainingSeconds, attempt);
     }
 
     await this.supabaseService.client
@@ -268,6 +290,9 @@ export class AttemptsService {
     if (attempt.status !== 'in_progress') {
       throw new ForbiddenException('Attempt is no longer in progress');
     }
+
+    await this.assertNotExpired(attempt);
+    await this.assertHasBatchAccess(attempt.test_id, userId);
 
     await this.validateQuestionsBelongToTest(attempt.test_id, dto.answers.map((a) => a.questionId));
 
@@ -292,7 +317,7 @@ export class AttemptsService {
 
     const clampedRemaining =
       dto.timeRemainingSeconds !== undefined
-        ? this.clampTimeRemaining(dto.timeRemainingSeconds, attempt)
+        ? await this.clampTimeRemaining(dto.timeRemainingSeconds, attempt)
         : attempt.time_remaining_seconds;
 
     const { data: updated, error: updateError } = await this.supabaseService.client
@@ -392,6 +417,74 @@ export class AttemptsService {
     return attempt;
   }
 
+  private async assertHasBatchAccess(testId: string, userId: string): Promise<void> {
+    const { data: test, error } = await this.supabaseService.client
+      .from(TABLES.TESTS)
+      .select('id, test_batches(batch_id)')
+      .eq('id', testId)
+      .single();
+    if (error || !test) throw new NotFoundException('Test not found');
+    const testBatchIds = ((test as any).test_batches ?? []).map((b: any) => b.batch_id);
+    if (testBatchIds.length === 0) return; // open test
+    const { data: userBatches } = await this.supabaseService.client
+      .from(TABLES.BATCH_STUDENTS)
+      .select('batch_id')
+      .eq('user_id', userId);
+    const userBatchIds = (userBatches ?? []).map((b: any) => b.batch_id);
+    const hasAccess = testBatchIds.some((id: string) => userBatchIds.includes(id));
+    if (!hasAccess) {
+      throw new ForbiddenException('You are no longer enrolled in this test');
+    }
+  }
+
+  private async getDurationForAttempt(attempt: any): Promise<number | null> {
+    if (attempt?.test?.duration_minutes != null) return attempt.test.duration_minutes;
+    if ((attempt as any)?.duration_minutes != null) return (attempt as any).duration_minutes;
+    // Fetch authoritative duration from tests table
+    try {
+      const { data: test } = await this.supabaseService.client
+        .from(TABLES.TESTS)
+        .select('duration_minutes')
+        .eq('id', attempt.test_id)
+        .single();
+      return (test as any)?.duration_minutes ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async getServerRemainingSeconds(attempt: any): Promise<number | null> {
+    const duration = await this.getDurationForAttempt(attempt);
+    if (duration == null || !attempt?.started_at) return null;
+    const elapsed = (Date.now() - new Date(attempt.started_at).getTime()) / 1000;
+    return Math.floor(duration * 60 - elapsed);
+  }
+
+  private async assertNotExpired(attempt: any): Promise<void> {
+    const remaining = await this.getServerRemainingSeconds(attempt);
+    if (remaining == null) return;
+    if (remaining <= 0) {
+      // Transition to terminal state idempotently — only if still in_progress
+      try {
+        await this.supabaseService.client
+          .from(TABLES.TEST_ATTEMPTS)
+          .update({
+            status: 'submitted',
+            submitted_at: new Date().toISOString(),
+            time_remaining_seconds: 0,
+            last_saved_at: new Date().toISOString(),
+          })
+          .eq('id', attempt.id)
+          .eq('status', 'in_progress');
+      } catch {}
+      try {
+        await this.redis.del(REDIS_KEYS.attemptTimer(attempt.id));
+        await this.redis.del(REDIS_KEYS.attemptCheckpoint(attempt.id));
+      } catch {}
+      throw new ForbiddenException('Time expired');
+    }
+  }
+
   private async saveCheckpoint(attemptId: string) {
     const { data: attempt } = await this.supabaseService.client
       .from(TABLES.TEST_ATTEMPTS)
@@ -483,17 +576,16 @@ export class AttemptsService {
     return map;
   }
 
-  private clampTimeRemaining(clientValue: number, attempt: any): number {
+  private async clampTimeRemaining(clientValue: number, attempt: any): Promise<number> {
     const raw = Math.floor(clientValue);
     if (!attempt?.started_at) return Math.max(0, raw);
-    // Derive server-side lower bound: started_at + duration
-    const duration = attempt.test?.duration_minutes ?? attempt.duration_minutes ?? null;
-    // attempt loaded via verifyOwnership has no joined test; fallback to column
-    // Heuristic: if we cannot resolve duration, just clamp to non-negative.
-    if (!duration) return Math.max(0, raw);
+    let duration: number | null = attempt.test?.duration_minutes ?? (attempt as any)?.duration_minutes ?? null;
+    if (duration == null) {
+      duration = await this.getDurationForAttempt(attempt);
+    }
+    if (duration == null) return Math.max(0, raw);
     const elapsed = (Date.now() - new Date(attempt.started_at).getTime()) / 1000;
     const serverRemaining = Math.max(0, Math.floor(duration * 60 - elapsed));
-    // Client cannot extend beyond server truth: take min
     return Math.min(raw, serverRemaining);
   }
 }

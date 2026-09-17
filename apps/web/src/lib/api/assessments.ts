@@ -225,7 +225,7 @@ export async function getMyAttempts(page?: number, limit?: number) {
 }
 
 export async function getAttemptTimer(attemptId: string) {
-  return fetchApi<{ remainingSeconds: number }>(`/attempts/${attemptId}/timer`);
+  return fetchApi<{ timeRemainingSeconds: number | null; remainingSeconds?: number | null }>(`/attempts/${attemptId}/timer`);
 }
 
 // ─── Evaluation ──────────────────────────────────────────────
