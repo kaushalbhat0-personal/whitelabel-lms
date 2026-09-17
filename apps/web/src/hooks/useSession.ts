@@ -114,7 +114,16 @@ export function useSession(): UseSessionReturn {
     const storeState = useAuthStore.getState();
     console.log('[AUTH LOGOUT] Called — status:', storeState.status, 'user:', storeState.user?.id);
 
-    // Clear everything
+    // Server-side session invalidation (best-effort, fire-and-forget) — ensures
+    // next login does NOT hit SESSION_REPLACED from a stale Redis user_session.
+    // Local state is cleared immediately so UX is not blocked by network.
+    // `fetchApi` failure is swallowed — session may already be expired.
+    fetchApi(API_ROUTES.AUTH.LOGOUT, {
+      method: 'POST',
+      skipAuthRedirect: true,
+    } as any).catch(() => {});
+
+    // Clear everything locally
     clearSessionCache();
     clearAuthCookies();
     stopBackgroundValidation();

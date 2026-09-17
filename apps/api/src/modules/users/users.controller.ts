@@ -117,6 +117,22 @@ export class UsersController {
   }
 
   /**
+   * DELETE /users/:id/permanent
+   *
+   * Permanently delete a STUDENT — DB-first, retention-aware.
+   * Requires ADMIN. Validates target is student, blocks if historical records exist.
+   * Must be defined BEFORE DELETE /users/:id to avoid param collision on ':id/permanent'.
+   */
+  @Roles(UserRole.ADMIN)
+  @Delete(':id/permanent')
+  permanentDelete(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string; role: string },
+  ) {
+    return this.usersService.permanentDelete(id, user.id);
+  }
+
+  /**
    * DELETE /users/:id
    *
    * Soft-delete a user — sets is_active = false and force-logs them out.

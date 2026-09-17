@@ -50,8 +50,28 @@ export async function deleteUser(id: string) {
 /**
  * Convenience wrapper to get only student users.
  */
-export async function getStudents() {
-  return getUsers({ role: 'student', limit: 200 });
+export async function getStudents(params: { includeInactive?: boolean } = {}) {
+  return getUsers({ role: 'student', limit: 200, includeInactive: params.includeInactive });
+}
+
+export async function permanentDeleteUser(id: string) {
+  return fetchApi<{ deleted: boolean; freedEmail: string }>(`${API_ROUTES.USERS}/${id}/permanent`, {
+    method: 'DELETE',
+  });
+}
+
+export async function restoreUser(id: string) {
+  return fetchApi<User>(`${API_ROUTES.USERS}/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ isActive: true }),
+  });
+}
+
+export async function updateUser(id: string, data: { isActive?: boolean; name?: string; email?: string }) {
+  return fetchApi<User>(`${API_ROUTES.USERS}/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
 }
 
 /**

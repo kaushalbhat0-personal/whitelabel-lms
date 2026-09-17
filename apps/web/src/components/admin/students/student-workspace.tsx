@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Users,
   BookOpen,
@@ -20,7 +21,11 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
+  Trash2,
+  RotateCcw,
+  ShieldAlert,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { AdminWorkspaceHeader } from '@/components/shared/AdminWorkspaceHeader';
 import { AdminSection } from '@/components/shared/AdminSection';
@@ -28,7 +33,9 @@ import { AdminStatCard } from '@/components/shared/AdminStatCard';
 import { AdminDataTable, type AdminDataTableColumn } from '@/components/shared/AdminDataTable';
 import { AdminEmptyState } from '@/components/shared/AdminEmptyState';
 import { Modal } from '@/components/ui/Modal';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { AssignBatchModal } from './assign-batch-modal';
+import { permanentDeleteUser, restoreUser } from '@/lib/api/users';
 
 interface StudentWorkspaceProps {
   student: {
@@ -66,8 +73,15 @@ export function StudentWorkspace({
   initialAnalytics,
   initialAuditLogs,
 }: StudentWorkspaceProps) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [showAssignModal, setShowAssignModal] = useState(false);
+  const [permStep1Open, setPermStep1Open] = useState(false);
+  const [permStep2Open, setPermStep2Open] = useState(false);
+  const [confirmEmailInput, setConfirmEmailInput] = useState('');
+  const [permLoading, setPermLoading] = useState(false);
+  const [permError, setPermError] = useState('');
+  const [restoring, setRestoring] = useState(false);
 
   const totals = {
     enrolledBatches: Array.isArray(initialBatches) ? initialBatches.length : 0,
@@ -94,6 +108,36 @@ export function StudentWorkspace({
 
   const formatTime = (iso: string) =>
     new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' });
+
+  const handleRestore = async () => {
+    setRestoring(true);
+    try { await restoreUser(student.id); toast.success(`${student.name} restored`); router.refresh(); }
+    catch (e: any) { toast.error(e.message || 'Failed to restore'); }
+    finally { setRestoring(false); }
+  };
+
+  const handlePermStep1Confirm = () => { setPermStep1Open(false); setPermStep2Open(true); setConfirmEmailInput(''); setPermError(''); };
+  const handlePermanentDelete = async () => {
+    if (confirmEmailInput.trim() !== student.email) { setPermError('Email does not match. Type the exact email to confirm.'); return; }
+    setPermLoading(true); setPermError('');
+    try { await permanentDeleteUser(student.id); toast.success('Student permanently deleted'); router.push('/admin/students'); router.refresh(); }
+    catch (e: any) {
+      const data = e?.data ?? e;
+      if (data?.code === 'STUDENT_HAS_HISTORICAL_RECORDS') {
+        const d = data.details ?? {};
+        const labels: string[] = [];
+        if (d.payments) labels.push('Payments');
+        if (d.paymentPlans) labels.push('Payment Plans');
+        if (d.invoices) labels.push('Invoices');
+        if (d.receipts) labels.push('Receipts');
+        if (d.testResults) labels.push('Test Results');
+        if (d.certificates) labels.push('Certificates');
+        if (d.attendance) labels.push('Attendance');
+        const which = labels.length ? ` (${labels.join(', ')})` : '';
+        setPermError(`Cannot permanently delete because historical records exist${which}. Archive the student instead.`);
+      } else { setPermError(e.message || 'Failed to permanently delete'); }
+    } finally { setPermLoading(false); }
+  };
 
   const activityColumns: AdminDataTableColumn<any>[] = [
     { key: 'time', header: 'Time', render: (item) => <span className="text-xs whitespace-nowrap">{formatTime(item.createdAt)}</span> },
@@ -134,6 +178,12 @@ export function StudentWorkspace({
         ]}
         actions={
           <div className="flex items-center gap-2">
+            {!student.is_active && (
+              <button onClick={handleRestore} disabled={restoring} className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 hover:bg-emerald-100 transition-colors disabled:opacity-50">
+                <RotateCcw className="h-3.5 w-3.5" />
+                {restoring ? 'Restoring…' : 'Restore Student'}
+              </button>
+            )}
             <button onClick={() => setShowAssignModal(true)} className="inline-flex items-center gap-1.5 rounded-xl border border-surface-border px-3 py-2 text-xs font-medium text-text-secondary hover:bg-surface-muted transition-colors">
               <Link2 className="h-3.5 w-3.5" />
               Assign Batch
@@ -204,6 +254,34 @@ export function StudentWorkspace({
                 </div>
               </AdminSection>
             )}
+
+            {/* Danger Zone — always visible on overview for discoverability */}
+            <AdminSection title="Danger Zone">
+              <div className="rounded-xl border border-red-200 bg-red-50/50 p-5 space-y-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-100">
+                    <ShieldAlert className="h-5 w-5 text-red-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-red-800">Permanently Delete Student</p>
+                    <p className="mt-1 text-xs leading-relaxed text-red-700">Auth account and profile will be permanently deleted; enrollments, progress and ephemeral records may be removed. Email will become available for re-onboarding. Students with payments, invoices, test results, certificates or attendance cannot be deleted — archive instead.</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {!student.is_active && (
+                    <button onClick={handleRestore} disabled={restoring} className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-white px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50">
+                      <RotateCcw className="h-4 w-4" /> {restoring ? 'Restoring…' : 'Restore Student'}
+                    </button>
+                  )}
+                  <button onClick={() => setPermStep1Open(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors">
+                    <Trash2 className="h-4 w-4" /> Permanently Delete
+                  </button>
+                </div>
+                {!student.is_active ? null : (
+                  <p className="text-xs text-text-muted">Tip: Archive is available via the students list. Permanent delete is typically used for inactive students with no historical records.</p>
+                )}
+              </div>
+            </AdminSection>
 
             {initialAuditLogs.length > 0 && (
               <AdminSection title="Recent Activity" actions={
@@ -407,6 +485,22 @@ export function StudentWorkspace({
         onClose={() => setShowAssignModal(false)}
         onSuccess={() => setShowAssignModal(false)}
       />
+
+      {/* Permanent delete step 1 — warning */}
+      <ConfirmDialog isOpen={permStep1Open} variant="warning" title="Permanently Delete Student?" message={`${student.name} (${student.email}) will be permanently deleted: Auth account, profile, enrollments and progress will be removed and the email will become available for re-onboarding. Students with historical records cannot be deleted.`} confirmLabel="Continue" onConfirm={handlePermStep1Confirm} onCancel={() => setPermStep1Open(false)} />
+
+      {/* Permanent delete step 2 — type email to confirm */}
+      <Modal isOpen={permStep2Open} onClose={() => { setPermStep2Open(false); setConfirmEmailInput(''); setPermError(''); }} title="Confirm Permanent Deletion">
+        <div className="p-4 space-y-4">
+          <p className="text-sm text-text-secondary">Type <span className="font-mono font-semibold text-text-primary">{student.email}</span> to confirm. This cannot be undone.</p>
+          <input type="text" value={confirmEmailInput} onChange={e => { setConfirmEmailInput(e.target.value); setPermError(''); }} placeholder={student.email} className="w-full rounded-lg border border-surface-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600" autoFocus />
+          {permError && <p className="text-sm text-red-600 whitespace-pre-wrap">{permError}</p>}
+          <div className="flex justify-end gap-2">
+            <button onClick={() => { setPermStep2Open(false); setConfirmEmailInput(''); setPermError(''); }} disabled={permLoading} className="rounded-xl border border-surface-border px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-muted disabled:opacity-50">Cancel</button>
+            <button onClick={handlePermanentDelete} disabled={permLoading || confirmEmailInput.trim() !== student.email} className="rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50">{permLoading ? 'Deleting…' : 'Permanently Delete'}</button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
