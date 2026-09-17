@@ -643,6 +643,7 @@ export class EvaluationService {
       questionId: answer.question_bank?.id,
       questionText: answer.question_bank?.question_text,
       questionType: answer.question_bank?.question_type,
+      options: answer.question_bank?.options ?? null,
       userAnswer: answer.answer,
       correctAnswer: answer.question_bank?.correct_answer,
       isCorrect: answer.is_correct,

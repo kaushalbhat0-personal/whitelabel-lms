@@ -45,6 +45,12 @@ export class CoursesController {
     return this.coursesService.getCoursesForStudent(user.id);
   }
 
+  @Get('my/dashboard')
+  @Roles(UserRole.STUDENT)
+  myDashboardCourses(@CurrentUser() user: { id: string }) {
+    return this.coursesService.getDashboardCoursesForStudent(user.id);
+  }
+
   @Get(':id')
   @Roles(UserRole.ADMIN, UserRole.TEACHER, UserRole.STUDENT)
   findOne(

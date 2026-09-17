@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { getMyCourses, type StudentCourse } from '@/lib/api/courses';
+import { getMyDashboardCourses, type StudentCourse } from '@/lib/api/courses';
 import { getMyDashboardSessions, type LiveSession } from '@/lib/api/live-sessions';
 import { getMyDashboardRecordings, type StudentVideo, type StudentBatchRecordings } from '@/lib/api/videos';
 import { getMyDashboardTests, getMyDashboardResults } from '@/lib/api/assessments';
@@ -17,7 +17,7 @@ function isUnauthorized(err: unknown): boolean {
 
 export default async function StudentDashboardPage() {
   const settled = await Promise.allSettled([
-    getMyCourses(),
+    getMyDashboardCourses(),
     getMyDashboardSessions(),
     getMyDashboardRecordings(),
     getMyDashboardResults(),
@@ -32,7 +32,8 @@ export default async function StudentDashboardPage() {
     }
   }
 
-  const coursesResult = settled[0].status === 'fulfilled' ? (settled[0].value as StudentCourse[]) : [];
+  const dashboardCoursesResult = settled[0].status === 'fulfilled' ? (settled[0].value as { courses: StudentCourse[]; name: string | null }) : { courses: [], name: null };
+  const coursesResult = dashboardCoursesResult.courses ?? [];
   const sessionsResult = settled[1].status === 'fulfilled' ? (settled[1].value as { upcoming: LiveSession[]; past: (LiveSession & { attendanceStatus?: string })[] }) : { upcoming: [], past: [] };
   const recordingsDashboardResult = settled[2].status === 'fulfilled' ? (settled[2].value as { flat: StudentVideo[]; grouped: StudentBatchRecordings[] }) : { flat: [], grouped: [] };
   const resultsDashboardResult = settled[3].status === 'fulfilled' ? (settled[3].value as { items: unknown[]; total: number; page: number; limit: number }) : { items: [], total: 0, page: 1, limit: 5 };
@@ -62,7 +63,8 @@ export default async function StudentDashboardPage() {
     ? upcoming.sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())[0]
     : null;
 
-  const displayName = 'Trader';
+  const rawName = (dashboardCoursesResult as any)?.name ?? null;
+  const displayName = rawName && String(rawName).trim() ? String(rawName).trim().split(' ')[0] : 'Trader';
   return (
     <DashboardClient
       name={displayName}

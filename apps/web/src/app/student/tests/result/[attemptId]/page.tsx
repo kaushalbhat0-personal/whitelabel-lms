@@ -445,7 +445,26 @@ export default function TestResultPage() {
                           {q.correct_answer != null && !q.is_correct && !q.is_manual_review && (
                             <div>
                               <p className="text-text-muted">Correct answer</p>
-                              <p className="font-medium text-status-success">{renderAnswer(q.correct_answer)}</p>
+                              <p className="font-medium text-status-success break-words">
+                                {(() => {
+                                  const keyRaw = String(q.correct_answer);
+                                  // direct match against optArr
+                                  const found = optArr.find((o: any) => String(o.key) === keyRaw || String(o.key).toLowerCase() === keyRaw.toLowerCase());
+                                  if (found) return `${found.key} — ${found.value}`;
+                                  // comma-separated multiple keys (e.g. "A,B")
+                                  if (keyRaw.includes(',')) {
+                                    const parts = keyRaw.split(',').map((k: string) => k.trim()).filter(Boolean);
+                                    let anyResolved = false;
+                                    const resolved = parts.map((k) => {
+                                      const f = optArr.find((o: any) => String(o.key) === k || String(o.key).toLowerCase() === k.toLowerCase());
+                                      if (f) { anyResolved = true; return `${f.key} — ${f.value}`; }
+                                      return k;
+                                    }).join(', ');
+                                    if (anyResolved) return resolved;
+                                  }
+                                  return renderAnswer(q.correct_answer);
+                                })()}
+                              </p>
                             </div>
                           )}
                           {q.is_manual_review && (

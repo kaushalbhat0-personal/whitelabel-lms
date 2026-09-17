@@ -104,6 +104,8 @@ export class RedisCacheService {
   async invalidateCoursesCacheForUser(userId: string): Promise<void> {
     if (!userId) return;
     await this.del(this.key('courses', userId));
+    await this.del(this.key('courses', userId, 'dashboard'));
+    await this.delByPattern(this.key('courses', userId, '*'));
   }
 
   async invalidateCoursesCacheForUsers(userIds: string[]): Promise<void> {
@@ -114,6 +116,8 @@ export class RedisCacheService {
   async invalidateSessionsCacheForUser(userId: string): Promise<void> {
     if (!userId) return;
     await this.del(this.key('sessions', userId));
+    await this.del(this.key('sessions', userId, 'dashboard'));
+    await this.delByPattern(this.key('sessions', userId, '*'));
   }
 
   async invalidateSessionsCacheForUsers(userIds: string[]): Promise<void> {

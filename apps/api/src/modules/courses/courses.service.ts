@@ -321,6 +321,20 @@ export class CoursesService {
     });
   }
 
+  async getDashboardCoursesForStudent(studentId: string): Promise<{ courses: any[]; name: string | null }> {
+    if (!this.redisCache) {
+      const courses = await this.fetchCoursesForStudent(studentId);
+      const { data: profile } = await this.supabaseService.client.from(TABLES.PROFILES).select('name').eq('id', studentId).single();
+      return { courses, name: (profile as any)?.name ?? null };
+    }
+    const cacheKey = this.redisCache.key('courses', studentId, 'dashboard');
+    return this.redisCache.wrap(cacheKey, 300, async () => {
+      const courses = await this.fetchCoursesForStudent(studentId);
+      const { data: profile } = await this.supabaseService.client.from(TABLES.PROFILES).select('name').eq('id', studentId).single();
+      return { courses, name: (profile as any)?.name ?? null };
+    });
+  }
+
   private async fetchCoursesForStudent(studentId: string) {
     const { data: enrolments, error: enrolErr } = await this.supabaseService.client
       .from(TABLES.BATCH_STUDENTS)

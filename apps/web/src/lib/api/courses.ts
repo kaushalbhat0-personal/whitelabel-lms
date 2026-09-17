@@ -73,6 +73,10 @@ export async function getMyCourses() {
   return fetchApi<StudentCourse[]>(`${API_ROUTES.COURSES}/my`);
 }
 
+export async function getMyDashboardCourses() {
+  return fetchApi<{ courses: StudentCourse[]; name: string | null }>(`${API_ROUTES.COURSES}/my/dashboard`);
+}
+
 /**
  * Fetch a single course by ID with enrolled batches (student classroom).
  * GET /courses/:id
