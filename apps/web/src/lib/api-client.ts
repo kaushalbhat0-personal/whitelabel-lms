@@ -70,7 +70,7 @@ function createApiError(status: number, body: any): ApiError {
 
 export async function fetchApi<T = unknown>(
   endpoint: string,
-  options?: RequestInit,
+  options?: RequestInit & { skipAuthRedirect?: boolean },
 ): Promise<T> {
   const start = performance.now();
   let attempt = 0;
@@ -112,6 +112,10 @@ export async function fetchApi<T = unknown>(
       }
 
       if (response.status === 401 && attempt === 1 && !AUTH_ENDPOINTS.has(endpoint)) {
+        const shouldRedirect = !(options as any)?.skipAuthRedirect;
+        if (!shouldRedirect) {
+          throw new UnauthorizedError('Session expired');
+        }
         const sessionValid = await validateSession();
         if (sessionValid) {
           continue;

@@ -10,6 +10,8 @@ import {
 } from 'lucide-react';
 import { startAttempt, getAttempt, saveAllAnswers, submitAttempt, getAttemptTimer, uploadQuestionImage } from '@/lib/api/assessments';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { Modal } from '@/components/ui/Modal';
+import { Alert } from '@/components/ui/Alert';
 import { ScreenRecordingDetector } from '@/components/shared/ScreenRecordingDetector';
 import { cn } from '@/lib/utils';
 
@@ -342,6 +344,8 @@ export default function TestAttemptPage() {
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
   const [warningMessage, setWarningMessage] = useState('');
   const [showWarning, setShowWarning] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
 
   const answersRef = useRef(answers);
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -349,7 +353,28 @@ export default function TestAttemptPage() {
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = useRef(Date.now());
 
+  // helpers: local preservation (minimal, no tokens/passwords)
+  const getBackupKey = useCallback((id: string) => `mct:attempt:${id}:backup`, []);
+  const preserveLocally = useCallback((id: string, test: string, ans: Record<string, any>, idx: number, remaining: number | null) => {
+    try {
+      const payload = { testId: test, attemptId: id, answers: ans, currentIndex: idx, timeRemainingSeconds: remaining, timestamp: Date.now() };
+      localStorage.setItem(`mct:attempt:${id}:backup`, JSON.stringify(payload));
+    } catch {}
+  }, []);
+
   answersRef.current = answers;
+
+  // Offline detection (lightweight, no blocking)
+  useEffect(() => {
+    const update = () => setIsOffline(typeof navigator !== 'undefined' ? !navigator.onLine : false);
+    update();
+    window.addEventListener('online', update);
+    window.addEventListener('offline', update);
+    return () => {
+      window.removeEventListener('online', update);
+      window.removeEventListener('offline', update);
+    };
+  }, []);
 
   // Load attempt
   useEffect(() => {
@@ -383,6 +408,21 @@ export default function TestAttemptPage() {
             savedAnswers[a.questionId ?? a.question_id] = a.answer ?? a.answer ?? '';
           }
         }
+        // Restore locally preserved answers if server has none (e.g., after 401 local save)
+        try {
+          const backupRaw = localStorage.getItem(`mct:attempt:${att.id}:backup`);
+          if (backupRaw) {
+            const backup = JSON.parse(backupRaw);
+            const backupAnswers = backup.answers ?? {};
+            const hasServerAnswers = Object.keys(savedAnswers).length > 0;
+            if (!hasServerAnswers && Object.keys(backupAnswers).length > 0 && backup.testId === testId) {
+              Object.assign(savedAnswers, backupAnswers);
+              if (typeof backup.currentIndex === 'number') setCurrentIndex(backup.currentIndex);
+              if (typeof backup.timeRemainingSeconds === 'number') setTimeRemaining(backup.timeRemainingSeconds);
+              toast.info('Restored your locally saved answers.');
+            }
+          }
+        } catch {}
         setAnswers(savedAnswers);
         startTimeRef.current = Date.now();
       } catch {
@@ -436,6 +476,7 @@ export default function TestAttemptPage() {
   }, []);
 
   // Auto-save with retry — preserves answers in local state even on failure
+  // On 401, preserve locally and show recoverable session-expired UI (do not lose answers)
   const debouncedSave = useCallback(() => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
@@ -459,16 +500,24 @@ export default function TestAttemptPage() {
           });
           lastError = null;
           break;
-        } catch (err) {
+        } catch (err: any) {
           lastError = err;
+          const is401 = err?.status === 401 || err?.name === 'UnauthorizedError';
+          if (is401) {
+            preserveLocally(attemptId, testId, ans, currentIndex, timeRemaining);
+            setSessionExpired(true);
+            toast.error('Your session has expired. Answers saved on this device.');
+            break;
+          }
           if (retry < 2) await new Promise(r => setTimeout(r, 1000 * (retry + 1)));
         }
       }
       if (lastError) {
-        toast.error('Auto-save failed. Your answers are saved locally.');
+        const is401 = (lastError as any)?.status === 401;
+        if (!is401) toast.error('Auto-save failed. Your answers are saved locally.');
       }
     }, 2000);
-  }, [attemptId, questions, currentIndex, timeRemaining]);
+  }, [attemptId, questions, currentIndex, timeRemaining, preserveLocally, testId]);
 
   const setAnswer = useCallback((questionId: string, value: any) => {
     setAnswers((prev) => {
@@ -521,9 +570,20 @@ export default function TestAttemptPage() {
         timeRemainingSeconds: timeRemaining ?? 0,
       } as any);
 
+      // Clear local backup on success
+      try { localStorage.removeItem(`mct:attempt:${attemptId}:backup`); } catch {}
+      toast.success('Test submitted successfully.');
       // Redirect to results page
       router.replace(`/student/tests/result/${attemptId}`);
-    } catch {
+    } catch (err: any) {
+      const is401 = err?.status === 401;
+      if (is401) {
+        preserveLocally(attemptId, testId, answersRef.current, currentIndex, timeRemaining);
+        setSessionExpired(true);
+        toast.error('Your session has expired. Answers saved on this device.');
+      } else {
+        toast.error(err?.message || 'Failed to submit. Please try again.');
+      }
       setSubmitting(false);
       setShowSubmitDialog(false);
     }
@@ -603,6 +663,41 @@ export default function TestAttemptPage() {
             />
           </div>
         </header>
+
+        {/* Offline banner */}
+        {isOffline && (
+          <div className="fixed top-[57px] left-0 right-0 z-20 mx-auto max-w-3xl px-4">
+            <Alert variant="warning" role="status" className="shadow-card">
+              You&apos;re offline. Some features may not work until your connection returns. Your answers remain saved locally.
+            </Alert>
+          </div>
+        )}
+
+        {/* Session expired preservation modal */}
+        <Modal
+          isOpen={sessionExpired}
+          onClose={() => setSessionExpired(false)}
+          title="Session expired"
+          description="Your latest answers were saved on this device."
+        >
+          <div className="space-y-4">
+            <Alert variant="warning">Your session has expired. Your latest answers were saved on this device. Log in again to continue your test.</Alert>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setSessionExpired(false)}
+                className="rounded-xl border border-surface-border px-4 py-2.5 text-sm font-medium text-text-secondary hover:bg-surface-muted"
+              >
+                Stay
+              </button>
+              <button
+                onClick={() => { window.location.href = '/login'; }}
+                className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 min-h-[44px]"
+              >
+                Log In
+              </button>
+            </div>
+          </div>
+        </Modal>
 
         {/* Main content */}
         <div className="flex flex-1 pt-14">

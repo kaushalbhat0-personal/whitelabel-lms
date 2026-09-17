@@ -7,6 +7,7 @@ import { getMyTests, getMyAttempts } from '@/lib/api/assessments';
 import type { TestResponse } from '@/lib/api/assessments';
 import { ROUTES } from '@/lib/constants';
 import { PageHeader } from '@/components/shared/PageHeader';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { cn } from '@/lib/utils';
 
 function formatDate(iso: string | null) {
@@ -287,13 +288,11 @@ export default function TestsPage() {
       />
       <div className="space-y-6 px-4 md:px-0">
         {tests.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 py-16 text-center">
-            <FileText className="h-10 w-10 text-text-muted" />
-            <p className="text-sm font-medium text-text-primary">No tests available</p>
-            <p className="text-xs text-text-secondary">
-              Tests assigned to your batches will appear here.
-            </p>
-          </div>
+          <EmptyState
+            icon={<FileText className="h-12 w-12" />}
+            title="No tests available"
+            description="You don't have any available tests right now. Tests assigned to your batches will appear here."
+          />
         ) : (
           <>
             {availableTests.length > 0 && (

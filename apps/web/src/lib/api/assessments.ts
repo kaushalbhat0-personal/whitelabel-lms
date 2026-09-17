@@ -199,15 +199,15 @@ export async function getAttempt(attemptId: string) {
 }
 
 export async function saveAnswer(attemptId: string, data: AttemptAnswer & { currentQuestionIndex?: number; timeRemainingSeconds?: number }) {
-  return fetchApi<any>(`/attempts/${attemptId}/answer`, { method: 'PATCH', body: JSON.stringify(data) });
+  return fetchApi<any>(`/attempts/${attemptId}/answer`, { method: 'PATCH', body: JSON.stringify(data), skipAuthRedirect: true } as any);
 }
 
 export async function saveAllAnswers(attemptId: string, data: { answers: AttemptAnswer[]; currentQuestionIndex?: number; timeRemainingSeconds?: number }) {
-  return fetchApi<any>(`/attempts/${attemptId}/answers`, { method: 'PATCH', body: JSON.stringify(data) });
+  return fetchApi<any>(`/attempts/${attemptId}/answers`, { method: 'PATCH', body: JSON.stringify(data), skipAuthRedirect: true } as any);
 }
 
 export async function submitAttempt(attemptId: string, data: { answers: AttemptAnswer[]; timeRemainingSeconds?: number }) {
-  return fetchApi<any>(`/attempts/${attemptId}/submit`, { method: 'POST', body: JSON.stringify(data) });
+  return fetchApi<any>(`/attempts/${attemptId}/submit`, { method: 'POST', body: JSON.stringify(data), skipAuthRedirect: true } as any);
 }
 
 export async function getMyAttempts(page?: number, limit?: number) {

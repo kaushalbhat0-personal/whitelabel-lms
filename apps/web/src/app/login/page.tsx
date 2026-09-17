@@ -2,15 +2,19 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Eye, EyeOff } from 'lucide-react';
 import { fetchApi, ApiError } from '@/lib/api-client';
 import { ROUTES, API_ROUTES } from '@/lib/constants';
 import { useSession } from '@/hooks/useSession';
 import { useDeviceFingerprint } from '@/lib/hooks/useDeviceFingerprint';
+import { Alert } from '@/components/ui/Alert';
+import { Button } from '@/components/ui/Button';
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [sessionReplaced, setSessionReplaced] = useState(false);
@@ -83,34 +87,25 @@ export default function LoginPage() {
         <p className="mb-6 text-sm text-text-secondary">Sign in to your account</p>
 
         {sessionReplaced ? (
-          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-center" role="alert">
-            <div className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-amber-100 text-amber-700">
-              <span aria-hidden>🔐</span>
+          <Alert variant="warning" title="Account Already Active" className="mb-4 text-center">
+            <div className="space-y-1">
+              <p>Your account was logged in on another device. We have logged out the previous device for security.</p>
+              <p className="font-medium">Please log in again to continue.</p>
             </div>
-            <h2 className="text-sm font-semibold text-amber-900">Account Already Active</h2>
-            <p className="mt-1 text-xs leading-relaxed text-amber-800">
-              Your account was logged in on another device.
-              <br />
-              We have logged out the previous device for security.
-            </p>
-            <p className="mt-2 text-xs font-medium text-amber-900">Please log in again to continue.</p>
-            <button
-              type="button"
-              onClick={() => {
-                setSessionReplaced(false);
-                setError('');
-              }}
-              className="mt-3 inline-flex items-center justify-center rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700"
-            >
-              Log In Again
-            </button>
-          </div>
+            <div className="mt-3 flex justify-center">
+              <Button
+                size="sm"
+                onClick={() => {
+                  setSessionReplaced(false);
+                  setError('');
+                }}
+              >
+                Log In Again
+              </Button>
+            </div>
+          </Alert>
         ) : (
-          error && (
-            <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">
-              {error}
-            </div>
-          )
+          error && <Alert variant="error" className="mb-4">{error}</Alert>
         )}
 
         {!showForgotPassword ? (
@@ -135,16 +130,26 @@ export default function LoginPage() {
               <label htmlFor="password" className="input-label">
                 Password
               </label>
-              <input
-                id="password"
-                type="password"
-                required
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="input-field"
-                placeholder="••••••••"
-              />
+              <div className="relative">
+                <input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="input-field pr-12"
+                  placeholder="••••••••"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 rounded-lg p-2 text-text-muted hover:bg-surface-muted hover:text-text-primary transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
 
             <div className="flex items-center justify-end">
@@ -157,13 +162,14 @@ export default function LoginPage() {
               </button>
             </div>
 
-            <button
+            <Button
               type="submit"
+              loading={loading}
               disabled={loading}
-              className="w-full rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
+              className="w-full"
             >
               {loading ? 'Signing in...' : 'Sign in'}
-            </button>
+            </Button>
           </form>
         ) : (
           <div className="space-y-4">

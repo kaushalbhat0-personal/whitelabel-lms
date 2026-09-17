@@ -37,7 +37,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     const exceptionResponse = exception.getResponse();
     // NestJS sometimes returns a string or an object with a `message` array
-    const message =
+    let message: any =
       typeof exceptionResponse === 'string'
         ? exceptionResponse
         : (exceptionResponse as any).message ?? exception.message;
@@ -51,10 +51,19 @@ export class HttpExceptionFilter implements ExceptionFilter {
       `${request.method} ${request.url} → ${statusCode}: ${JSON.stringify(message)}`,
     );
 
+    // Sanitize generic 500 errors — do not leak Supabase/constraint/sql details.
+    // Preserve intentional business codes like SESSION_REPLACED (409) and validation (400/422).
+    let userMessage: string;
+    if (statusCode >= 500) {
+      userMessage = 'Something went wrong. Please try again in a moment.';
+    } else {
+      userMessage = Array.isArray(message) ? message.join('; ') : String(message);
+    }
+
     response.status(statusCode).json({
       success: false,
       ...(code ? { code } : {}),
-      message: Array.isArray(message) ? message.join('; ') : message,
+      message: userMessage,
       statusCode,
       timestamp: new Date().toISOString(),
       path: request.url,

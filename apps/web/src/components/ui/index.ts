@@ -8,6 +8,7 @@ export { EmptyState } from './EmptyState';
 export { LoadingSkeleton } from './LoadingSkeleton';
 export { ProgressRing } from './ProgressRing';
 export { StatCard } from './StatCard';
+export { Alert } from './Alert';
 export { Input } from './Form/Input';
 export { Select } from './Form/Select';
 export { FormField } from './Form/FormField';

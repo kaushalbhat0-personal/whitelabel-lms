@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { PlayCircle, Clock, Film } from 'lucide-react';
 import { type StudentVideo } from '@/lib/api/videos';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { Button } from '@/components/ui/Button';
 
 interface Props {
   recordings: StudentVideo[];
@@ -19,15 +21,11 @@ function formatDate(iso: string) {
 export function RecordingsList({ recordings }: Props) {
   if (recordings.length === 0) {
     return (
-      <div className="flex flex-col items-center gap-3 py-16 text-center">
-        <Film className="h-10 w-10 text-text-muted" />
-        <p className="text-sm font-medium text-text-primary">
-          No recordings available
-        </p>
-        <p className="text-xs text-text-secondary">
-          Recordings will appear once your batches are assigned content.
-        </p>
-      </div>
+      <EmptyState
+        icon={<Film className="h-12 w-12" />}
+        title="No recordings yet"
+        description="Your batch recordings will appear here after they are published."
+      />
     );
   }
 
