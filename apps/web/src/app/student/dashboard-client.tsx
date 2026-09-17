@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   BookOpen,
   Video,
@@ -21,6 +22,7 @@ import { cn } from '@/lib/utils';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import { Alert } from '@/components/ui/Alert';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { MobileHeader } from '@/components/shared/MobileHeader';
 import { ErrorBoundary } from '@/components/debug/ErrorBoundary';
@@ -41,7 +43,6 @@ interface DashboardClientProps {
   name: string;
   nextClass: LiveSession | null;
   upcoming: LiveSession[];
-  continueContent: StudentVideo[];
   courses: StudentCourse[];
   recordings: StudentVideo[];
   results: unknown[];
@@ -50,6 +51,15 @@ interface DashboardClientProps {
   grouped: StudentBatchRecordings[];
   myTestsTotal: number;
   myTests: any[];
+  errors: {
+    courses?: string | null;
+    sessions?: string | null;
+    recordings?: string | null;
+    results?: string | null;
+    payments?: string | null;
+    grouped?: string | null;
+    tests?: string | null;
+  };
 }
 
 function getGreeting() {
@@ -94,10 +104,12 @@ function formatDueDate(iso: string | null) {
   return `Due ${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`;
 }
 
-export function DashboardClient({ name, nextClass, upcoming, continueContent, courses, recordings, results, pastSessions, paymentPlans, grouped, myTestsTotal, myTests }: DashboardClientProps) {
+export function DashboardClient({ name, nextClass, upcoming, courses, recordings, results, pastSessions, paymentPlans, grouped, myTestsTotal, myTests, errors }: DashboardClientProps) {
   const [greeting, setGreeting] = useState('');
   const [joining, setJoining] = useState(false);
   useEffect(() => setGreeting(getGreeting()), []);
+  const router = useRouter();
+  const handleRetry = () => router.refresh();
 
   const [joinError, setJoinError] = useState<string | null>(null);
   const handleJoin = async () => {
@@ -266,94 +278,128 @@ export function DashboardClient({ name, nextClass, upcoming, continueContent, co
               <div className="space-y-6 lg:col-span-2">
                 {!isDuplicateContinue && <NextActionCard action={nextAction} />}
 
-                <ContinueLearningCard item={continueCardItem} />
+                {errors.recordings ? (
+                  <Alert variant="error" title="Couldn't load recordings" role="alert">
+                    <p>Please try again.</p>
+                    <button onClick={handleRetry} className="mt-3 inline-flex min-h-[44px] items-center justify-center rounded-xl bg-white px-4 py-2 text-sm font-medium text-red-700 border border-red-200 hover:bg-red-50">
+                      Retry
+                    </button>
+                  </Alert>
+                ) : (
+                  <>
+                    <ContinueLearningCard item={continueCardItem} />
 
-                {!isDuplicateContinue && continueCardItem && nextAction.type === 'continue_video' && (
-                  <p className="text-xs text-text-muted -mt-3 px-1">Also: <Link href={`/student/videos/${(nextAction as any).id}`} className="font-medium text-brand-600 hover:text-brand-700">View in Next Up</Link> — same lesson</p>
+                    {!isDuplicateContinue && continueCardItem && nextAction.type === 'continue_video' && (
+                      <p className="text-xs text-text-muted -mt-3 px-1">Also: <Link href={`/student/videos/${(nextAction as any).id}`} className="font-medium text-brand-600 hover:text-brand-700">View in Next Up</Link> — same lesson</p>
+                    )}
+
+                    <RecentLearning recordings={recordings} />
+
+                    <CourseProgressHero total={total} completed={completed} inProgress={inProgress} courseName={courseName} batchName={batchName} />
+                  </>
                 )}
 
-                <RecentLearning recordings={recordings} />
+                {errors.grouped ? (
+                  <Alert variant="error" title="Couldn't load learning journey" role="alert">
+                    <p>Please try again.</p>
+                    <button onClick={handleRetry} className="mt-3 inline-flex min-h-[44px] items-center justify-center rounded-xl bg-white px-4 py-2 text-sm font-medium text-red-700 border border-red-200 hover:bg-red-50">
+                      Retry
+                    </button>
+                  </Alert>
+                ) : (
+                  <div>
+                    <h2 className="mb-3 text-sm font-semibold text-text-primary">Learning Journey</h2>
+                    <LearningJourney data={grouped} />
+                  </div>
+                )}
 
-                {/* Course Progress Hero */}
-                <CourseProgressHero total={total} completed={completed} inProgress={inProgress} courseName={courseName} batchName={batchName} />
-
-                {/* Learning Journey */}
-                <div>
-                  <h2 className="mb-3 text-sm font-semibold text-text-primary">Learning Journey</h2>
-                  <LearningJourney data={grouped} />
-                </div>
-
-                {/* Assessment progress */}
-                <AssessmentProgress availableCount={myTestsTotal} completedCount={completedTests} latest={lastResult} />
+                {errors.tests || errors.results ? (
+                  <Alert variant="error" title="Couldn't load tests" role="alert">
+                    <p>Please try again.</p>
+                    <button onClick={handleRetry} className="mt-3 inline-flex min-h-[44px] items-center justify-center rounded-xl bg-white px-4 py-2 text-sm font-medium text-red-700 border border-red-200 hover:bg-red-50">
+                      Retry
+                    </button>
+                  </Alert>
+                ) : (
+                  <AssessmentProgress availableCount={myTestsTotal} completedCount={completedTests} latest={lastResult} />
+                )}
               </div>
 
               <div className="space-y-6">
-                {/* Upcoming Class — live clarity */}
-                <div className="animate-fade-in-up" style={{ animationDelay: '120ms' }}>
-                  <h2 className="mb-3 text-sm font-semibold text-text-primary">{isLive ? 'Live Now' : isStartingSoon ? 'Starting Soon' : nextClass ? 'Upcoming Class' : 'No Upcoming Classes'}</h2>
-                  {nextClass ? (
-                    <Card className="relative overflow-hidden" padding="lg" hover>
-                      {(isLive || isStartingSoon) && (
-                        <div className="absolute right-0 top-0 flex items-center gap-1.5 rounded-bl-card bg-red-500 px-3 py-1 text-2xs font-bold text-white">
-                          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" aria-hidden="true" />
-                          {isLive ? 'LIVE' : 'SOON'}
-                        </div>
-                      )}
-                      <div className="flex flex-col gap-3">
-                        <div className="flex items-center gap-2">
-                          <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl', isLive || isStartingSoon ? 'bg-red-50' : 'bg-brand-50')}>
-                            <Radio className={cn('h-5 w-5', isLive || isStartingSoon ? 'text-red-500' : 'text-brand-600')} aria-hidden="true" />
-                          </div>
-                          <div className="min-w-0">
-                            <h3 className="truncate text-sm font-bold text-text-primary">{nextClass.topic}</h3>
-                            <p className="text-xs text-text-muted">
-                              {formatDate(nextClass.start_time)} · {formatTime(nextClass.start_time)} · {nextClass.duration_minutes} min
-                            </p>
-                          </div>
-                        </div>
-                        <p className={cn('text-xs font-medium', isLive ? 'text-red-600' : isStartingSoon ? 'text-amber-600' : 'text-text-muted')}>
-                          {timeLabel}
-                        </p>
-                        {!isLive && !isStartingSoon && (
-                          <p className="text-xs text-text-muted">Join opens 15 minutes before start</p>
-                        )}
-                        {(isStartingSoon || isLive) && canJoin && (
-                          <p className="text-xs font-medium text-emerald-600">Join available now</p>
-                        )}
-                        {!canJoin && !isLive && !isStartingSoon && nextClass.status !== 'cancelled' && (
-                          <div className="flex items-center gap-2 rounded-lg bg-surface-muted px-3 py-2 text-xs text-text-secondary">
-                            <Clock className="h-3.5 w-3.5" aria-hidden="true" />
-                            Starts in {timeUntil(nextClass.start_time)}
+                {errors.sessions ? (
+                  <Alert variant="error" title="Couldn't load live sessions" role="alert">
+                    <p>Please try again.</p>
+                    <button onClick={handleRetry} className="mt-3 inline-flex min-h-[44px] items-center justify-center rounded-xl bg-white px-4 py-2 text-sm font-medium text-red-700 border border-red-200 hover:bg-red-50">
+                      Retry
+                    </button>
+                  </Alert>
+                ) : (
+                  <div className="animate-fade-in-up" style={{ animationDelay: '120ms' }}>
+                    <h2 className="mb-3 text-sm font-semibold text-text-primary">{isLive ? 'Live Now' : isStartingSoon ? 'Starting Soon' : nextClass ? 'Upcoming Class' : 'No Upcoming Classes'}</h2>
+                    {nextClass ? (
+                      <Card className="relative overflow-hidden" padding="lg" hover>
+                        {(isLive || isStartingSoon) && (
+                          <div className="absolute right-0 top-0 flex items-center gap-1.5 rounded-bl-card bg-red-500 px-3 py-1 text-2xs font-bold text-white">
+                            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" aria-hidden="true" />
+                            {isLive ? 'LIVE' : 'SOON'}
                           </div>
                         )}
-                        <div className="flex flex-wrap gap-2">
-                          {canJoin ? (
-                            <Button variant="primary" size="md" loading={joining} onClick={handleJoin} className={cn('min-h-[44px]', isLive && 'motion-safe:animate-pulse-soft')}>
-                              Join Now
-                              <ExternalLink className="h-4 w-4" aria-hidden="true" />
-                            </Button>
-                          ) : isLive || isStartingSoon ? (
-                            <Button variant="outline" size="md" loading={joining} onClick={handleJoin} className="min-h-[44px]">
-                              Join Now
-                              <ExternalLink className="h-4 w-4" aria-hidden="true" />
-                            </Button>
-                          ) : (
-                            <Link href={`/student/live-sessions/${nextClass.id}`} className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-surface-border bg-white px-4 py-2 text-sm font-medium text-text-primary hover:bg-surface-muted">
-                              View Details
-                            </Link>
+                        <div className="flex flex-col gap-3">
+                          <div className="flex items-center gap-2">
+                            <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl', isLive || isStartingSoon ? 'bg-red-50' : 'bg-brand-50')}>
+                              <Radio className={cn('h-5 w-5', isLive || isStartingSoon ? 'text-red-500' : 'text-brand-600')} aria-hidden="true" />
+                            </div>
+                            <div className="min-w-0">
+                              <h3 className="truncate text-sm font-bold text-text-primary">{nextClass.topic}</h3>
+                              <p className="text-xs text-text-muted">
+                                {formatDate(nextClass.start_time)} · {formatTime(nextClass.start_time)} · {nextClass.duration_minutes} min
+                              </p>
+                            </div>
+                          </div>
+                          <p className={cn('text-xs font-medium', isLive ? 'text-red-600' : isStartingSoon ? 'text-amber-600' : 'text-text-muted')}>
+                            {timeLabel}
+                          </p>
+                          {!isLive && !isStartingSoon && (
+                            <p className="text-xs text-text-muted">Join opens 15 minutes before start</p>
                           )}
+                          {(isStartingSoon || isLive) && canJoin && (
+                            <p className="text-xs font-medium text-emerald-600">Join available now</p>
+                          )}
+                          {!canJoin && !isLive && !isStartingSoon && nextClass.status !== 'cancelled' && (
+                            <div className="flex items-center gap-2 rounded-lg bg-surface-muted px-3 py-2 text-xs text-text-secondary">
+                              <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+                              Starts in {timeUntil(nextClass.start_time)}
+                            </div>
+                          )}
+                          <div className="flex flex-wrap gap-2">
+                            {canJoin ? (
+                              <Button variant="primary" size="md" loading={joining} onClick={handleJoin} className={cn('min-h-[44px]', isLive && 'motion-safe:animate-pulse-soft')}>
+                                Join Now
+                                <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                              </Button>
+                            ) : isLive || isStartingSoon ? (
+                              <Button variant="outline" size="md" loading={joining} onClick={handleJoin} className="min-h-[44px]">
+                                Join Now
+                                <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                              </Button>
+                            ) : (
+                              <Link href={`/student/live-sessions/${nextClass.id}`} className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-surface-border bg-white px-4 py-2 text-sm font-medium text-text-primary hover:bg-surface-muted">
+                                View Details
+                              </Link>
+                            )}
+                          </div>
+                          {joinError && <div><p className="text-xs font-medium text-red-600" role="alert">{joinError}</p><button onClick={handleJoin} className="mt-1 min-h-[44px] text-xs font-semibold text-brand-600 underline hover:text-brand-700">Retry</button></div>}
                         </div>
-                        {joinError && <div><p className="text-xs font-medium text-red-600" role="alert">{joinError}</p><button onClick={handleJoin} className="mt-1 min-h-[44px] text-xs font-semibold text-brand-600 underline hover:text-brand-700">Retry</button></div>}
-                      </div>
-                    </Card>
-                  ) : (
-                    <Card className="text-center py-8">
-                      <Calendar className="mx-auto h-8 w-8 text-text-muted" aria-hidden="true" />
-                      <p className="mt-2 text-sm text-text-secondary">All caught up! No upcoming classes.</p>
-                      {!hasAnyContent && <p className="mt-1 text-xs text-text-muted">New sessions will appear here once scheduled.</p>}
-                    </Card>
-                  )}
-                </div>
+                      </Card>
+                    ) : (
+                      <Card className="text-center py-8">
+                        <Calendar className="mx-auto h-8 w-8 text-text-muted" aria-hidden="true" />
+                        <p className="mt-2 text-sm text-text-secondary">All caught up! No upcoming classes.</p>
+                        {!hasAnyContent && <p className="mt-1 text-xs text-text-muted">New sessions will appear here once scheduled.</p>}
+                      </Card>
+                    )}
+                  </div>
+                )}
 
                 {/* Quick stats - real only */}
                 <div className="grid grid-cols-2 gap-3">
@@ -394,39 +440,48 @@ export function DashboardClient({ name, nextClass, upcoming, continueContent, co
                 )}
 
                 {/* Payments */}
-                {paymentPlans.length > 0 && (
-                  <div className="space-y-3">
-                    <h2 className="text-sm font-semibold text-text-primary">Payments</h2>
-                    <div className="grid grid-cols-1 gap-3">
-                      <Card padding="md">
-                        <div className="flex items-center gap-2">
-                          <IndianRupee className="h-4 w-4 text-emerald-500" aria-hidden="true" />
-                          <span className="text-xs text-text-secondary">Upcoming Dues</span>
-                        </div>
-                        <p className="mt-1 text-lg font-bold text-text-primary">{formatCurrency(upcomingDues)}</p>
-                      </Card>
-                      {overdueAmount > 0 && (
-                        <Card padding="md" className="border-status-error/30">
-                          <div className="flex items-center gap-2">
-                            <AlertCircle className="h-4 w-4 text-status-error" aria-hidden="true" />
-                            <span className="text-xs text-text-secondary">Overdue</span>
-                          </div>
-                          <p className="mt-1 text-lg font-bold text-status-error">{formatCurrency(overdueAmount)}</p>
-                        </Card>
-                      )}
-                      {nextDueDate && (
+                {errors.payments ? (
+                  <Alert variant="error" title="Couldn't load payments" role="alert">
+                    <p>Please try again.</p>
+                    <button onClick={handleRetry} className="mt-3 inline-flex min-h-[44px] items-center justify-center rounded-xl bg-white px-4 py-2 text-sm font-medium text-red-700 border border-red-200 hover:bg-red-50">
+                      Retry
+                    </button>
+                  </Alert>
+                ) : (
+                  paymentPlans.length > 0 && (
+                    <div className="space-y-3">
+                      <h2 className="text-sm font-semibold text-text-primary">Payments</h2>
+                      <div className="grid grid-cols-1 gap-3">
                         <Card padding="md">
                           <div className="flex items-center gap-2">
-                            <CreditCard className="h-4 w-4 text-brand-500" aria-hidden="true" />
-                            <span className="text-xs text-text-secondary">Next Due</span>
+                            <IndianRupee className="h-4 w-4 text-emerald-500" aria-hidden="true" />
+                            <span className="text-xs text-text-secondary">Upcoming Dues</span>
                           </div>
-                          <p className="mt-1 text-sm font-bold text-text-primary">
-                            {new Date(nextDueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                          </p>
+                          <p className="mt-1 text-lg font-bold text-text-primary">{formatCurrency(upcomingDues)}</p>
                         </Card>
-                      )}
+                        {overdueAmount > 0 && (
+                          <Card padding="md" className="border-status-error/30">
+                            <div className="flex items-center gap-2">
+                              <AlertCircle className="h-4 w-4 text-status-error" aria-hidden="true" />
+                              <span className="text-xs text-text-secondary">Overdue</span>
+                            </div>
+                            <p className="mt-1 text-lg font-bold text-status-error">{formatCurrency(overdueAmount)}</p>
+                          </Card>
+                        )}
+                        {nextDueDate && (
+                          <Card padding="md">
+                            <div className="flex items-center gap-2">
+                              <CreditCard className="h-4 w-4 text-brand-500" aria-hidden="true" />
+                              <span className="text-xs text-text-secondary">Next Due</span>
+                            </div>
+                            <p className="mt-1 text-sm font-bold text-text-primary">
+                              {new Date(nextDueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            </p>
+                          </Card>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )
                 )}
               </div>
             </div>
