@@ -92,7 +92,10 @@ export function DataTable<T>({
     <div className={cn('relative', className)}>
       <div
         ref={scrollRef}
-        className="overflow-x-auto overflow-y-hidden rounded-xl border border-surface-border scrollbar-thin overscroll-x-contain"
+        tabIndex={0}
+        role="region"
+        aria-label="Table content, scroll horizontally to see more"
+        className="overflow-x-auto overflow-y-hidden rounded-xl border border-surface-border scrollbar-thin overscroll-x-contain focus:outline-none focus:ring-2 focus:ring-brand-500/20"
       >
         {canScroll && (
           <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-white via-white/80 to-transparent md:hidden" aria-hidden="true" />
