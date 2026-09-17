@@ -33,6 +33,8 @@ import { ContinueLearningCard } from '@/components/student/dashboard/ContinueLea
 import { NextActionCard } from '@/components/student/dashboard/NextActionCard';
 import { LearningJourney } from '@/components/student/dashboard/LearningJourney';
 import { AssessmentProgress } from '@/components/student/dashboard/AssessmentProgress';
+import { RecentLearning } from '@/components/student/dashboard/RecentLearning';
+import { deriveSessionState, canShowJoin, getTimeLabel, isJoinable } from '@/lib/session-status';
 
 interface DashboardClientProps {
   name: string;
@@ -79,6 +81,17 @@ function timeUntil(startTime: string) {
   if (hours > 0) return `${hours}h ${minutes}m`;
   return `${minutes}m`;
 }
+function formatDueDate(iso: string | null) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  const diff = d.getTime() - Date.now();
+  const days = Math.floor(diff / 86400000);
+  if (days < 0) return `Overdue — due ${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`;
+  if (days === 0) return 'Due today';
+  if (days === 1) return 'Due tomorrow';
+  if (days < 7) return `Due in ${days} days`;
+  return `Due ${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`;
+}
 
 export function DashboardClient({ name, nextClass, upcoming, continueContent, courses, recordings, results, pastSessions, paymentPlans, grouped, myTestsTotal, myTests }: DashboardClientProps) {
   const [greeting, setGreeting] = useState('');
@@ -107,14 +120,11 @@ export function DashboardClient({ name, nextClass, upcoming, continueContent, co
     } finally { setJoining(false); }
   };
 
-  const isLiveByTime = (() => {
-    if (!nextClass) return false;
-    const s = new Date(nextClass.start_time).getTime();
-    const e = s + (nextClass.duration_minutes ?? 60) * 60000;
-    const n = Date.now();
-    return n >= s && n < e && nextClass.status !== 'cancelled' && nextClass.status !== 'ended';
-  })();
-  const isLive = nextClass?.status === 'live' || isLiveByTime;
+  const derivedState = nextClass ? deriveSessionState(nextClass, Date.now()) : null;
+  const isLive = derivedState === 'live';
+  const isStartingSoon = derivedState === 'starting_soon';
+  const canJoin = nextClass ? canShowJoin(nextClass, Date.now()) : false;
+  const timeLabel = nextClass ? getTimeLabel(nextClass, Date.now()) : '';
   const lastResult = results.length > 0 ? (results[0] as Record<string, unknown>) : null;
 
   // Real metrics — no fake data
@@ -148,22 +158,38 @@ export function DashboardClient({ name, nextClass, upcoming, continueContent, co
       }
     : null;
 
-  // Next action priority: continue > live > pending test > first unwatched
-  let nextAction: React.ComponentProps<typeof NextActionCard>['action'] = { type: 'start_learning', title: 'Browse videos to start' };
-  if (continueCardItem && continueCardItem.watchedSeconds > 0) {
+  // Next action priority: live (if joinable) > continue > pending test > first unwatched
+  // Use derivedState for live clarity, and pending test sorted by due date
+  const sortedPendingTests = [...myTests]
+    .filter((t: any) => t.status === 'published' || t.status === 'active')
+    .sort((a: any, b: any) => {
+      const ae = a.end_time ? new Date(a.end_time).getTime() : Infinity;
+      const be = b.end_time ? new Date(b.end_time).getTime() : Infinity;
+      return ae - be;
+    });
+  let nextAction: React.ComponentProps<typeof NextActionCard>['action'] = { type: 'start_learning', title: 'Browse videos to start', reason: 'Your learning journey starts here' };
+  if (nextClass && (derivedState === 'live' || derivedState === 'starting_soon')) {
+    const reason = derivedState === 'live' ? 'Live now — join immediately' : 'Starting soon — join opens now (15 min window)';
+    nextAction = { type: 'join_live', id: nextClass.id, title: nextClass.topic, status: derivedState, reason, startTime: nextClass.start_time } as any;
+  } else if (continueCardItem && continueCardItem.watchedSeconds > 0) {
     const pct = continueCardItem.durationSeconds ? Math.round((continueCardItem.watchedSeconds / continueCardItem.durationSeconds) * 100) : undefined;
-    nextAction = { type: 'continue_video', id: continueCardItem.id, title: continueCardItem.title, pct };
-  } else if (nextClass && (nextClass.status === 'live' || nextClass.status === 'scheduled')) {
-    nextAction = { type: 'join_live', id: nextClass.id, title: nextClass.topic, status: nextClass.status };
+    const reason = pct != null ? `${pct}% completed — pick up where you left off` : 'Continue where you left off';
+    nextAction = { type: 'continue_video', id: continueCardItem.id, title: continueCardItem.title, pct, reason } as any;
   } else if (myTestsTotal > results.length) {
-    const pendingTest = myTests.find((t: any) => t.status === 'published' || t.status === 'active');
-    if (pendingTest) nextAction = { type: 'pending_test', id: pendingTest.id, title: pendingTest.title };
-    else if (notStarted[0]) nextAction = { type: 'continue_video', id: notStarted[0].id, title: notStarted[0].title };
+    const pendingTest = sortedPendingTests[0];
+    if (pendingTest) {
+      const dueReason = formatDueDate(pendingTest.end_time ?? null);
+      const attemptsLeft = (pendingTest.max_attempts ?? 1) - (results.filter((r: any) => r.test_id === pendingTest.id).length);
+      const reason = dueReason ? `${dueReason}${attemptsLeft > 0 ? ` · ${pendingTest.max_attempts ?? 1} attempt${(pendingTest.max_attempts ?? 1) !== 1 ? 's' : ''}` : ''}` : `${pendingTest.max_attempts ?? 1} attempt${(pendingTest.max_attempts ?? 1) !== 1 ? 's' : ''} · requires attention`;
+      nextAction = { type: 'pending_test', id: pendingTest.id, title: pendingTest.title, reason } as any;
+    } else if (notStarted[0]) nextAction = { type: 'continue_video', id: notStarted[0].id, title: notStarted[0].title, reason: 'Start your next lesson' } as any;
   } else if (notStarted[0]) {
-    nextAction = { type: 'continue_video', id: notStarted[0].id, title: notStarted[0].title };
+    nextAction = { type: 'continue_video', id: notStarted[0].id, title: notStarted[0].title, reason: 'Start your next lesson' } as any;
   } else if (lastResult) {
-    nextAction = { type: 'view_result', id: 'latest', title: String((lastResult as any).test_title || 'View results'), pct: Number((lastResult as any).percentage || 0) };
+    nextAction = { type: 'view_result', id: 'latest', title: String((lastResult as any).test_title || 'View results'), pct: Number((lastResult as any).percentage || 0), reason: `You scored ${Number((lastResult as any).percentage || 0)}% — review your results` } as any;
   }
+
+  const isDuplicateContinue = nextAction.type === 'continue_video' && continueCardItem && (nextAction as any).id === continueCardItem.id;
 
   const completedTests = results.length;
   const pendingTests = Math.max(0, myTestsTotal - completedTests);
@@ -183,6 +209,9 @@ export function DashboardClient({ name, nextClass, upcoming, continueContent, co
       .filter((i) => i.status === 'pending')
       .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())[0]?.due_date ?? null;
 
+  const hasAnyContent = total > 0 || upcoming.length > 0 || myTestsTotal > 0;
+  const isAllCaughtUp = !isDuplicateContinue && !canJoin && !isLive && !isStartingSoon && pendingTests === 0 && inProgress === 0 && completed === total && total > 0;
+
   return (
     <ErrorBoundary name="StudentDashboard">
       <>
@@ -195,7 +224,7 @@ export function DashboardClient({ name, nextClass, upcoming, continueContent, co
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-lg">{getGreetingEmoji()}</span>
+                      <span className="text-lg" aria-hidden="true">{getGreetingEmoji()}</span>
                       <h1 className="text-lg font-bold md:text-xl">
                         {greeting}, <span className="text-white">{name}</span>
                       </h1>
@@ -208,25 +237,41 @@ export function DashboardClient({ name, nextClass, upcoming, continueContent, co
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs backdrop-blur-sm">
-                    <BookOpen className="h-3.5 w-3.5 text-brand-200" /> {courses.length} Courses
+                    <BookOpen className="h-3.5 w-3.5 text-brand-200" aria-hidden="true" /> {courses.length} Courses
                   </span>
                   <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs backdrop-blur-sm">
-                    <Video className="h-3.5 w-3.5 text-brand-200" /> {total} Videos
+                    <Video className="h-3.5 w-3.5 text-brand-200" aria-hidden="true" /> {total} Videos
                   </span>
                   <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs backdrop-blur-sm">
-                    <BarChart3 className="h-3.5 w-3.5 text-brand-200" /> {completedTests} Tests done
+                    <BarChart3 className="h-3.5 w-3.5 text-brand-200" aria-hidden="true" /> {completedTests} Tests done
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* Mobile priority: Continue Learning first */}
+            {isAllCaughtUp && (
+              <Card padding="lg" className="text-center border-brand-200 bg-brand-50/30">
+                <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-600" aria-hidden="true" />
+                <p className="mt-2 text-sm font-semibold text-text-primary">You&apos;re all caught up!</p>
+                <p className="mt-1 text-xs text-text-muted">All videos completed and no pending tests. Check back for new content.</p>
+                <Link href="/student/videos" className="mt-4 inline-flex min-h-[44px] items-center justify-center rounded-xl bg-white px-4 py-2 text-sm font-medium text-brand-700 border border-brand-200 hover:bg-brand-50">
+                  Browse videos
+                </Link>
+              </Card>
+            )}
+
+            {/* Cockpit grid: Today’s focus first */}
             <div className="grid gap-6 lg:grid-cols-3">
               <div className="space-y-6 lg:col-span-2">
+                {!isDuplicateContinue && <NextActionCard action={nextAction} />}
+
                 <ContinueLearningCard item={continueCardItem} />
 
-                {/* Next Action */}
-                <NextActionCard action={nextAction} />
+                {!isDuplicateContinue && continueCardItem && nextAction.type === 'continue_video' && (
+                  <p className="text-xs text-text-muted -mt-3 px-1">Also: <Link href={`/student/videos/${(nextAction as any).id}`} className="font-medium text-brand-600 hover:text-brand-700">View in Next Up</Link> — same lesson</p>
+                )}
+
+                <RecentLearning recordings={recordings} />
 
                 {/* Course Progress Hero */}
                 <CourseProgressHero total={total} completed={completed} inProgress={inProgress} courseName={courseName} batchName={batchName} />
@@ -242,21 +287,21 @@ export function DashboardClient({ name, nextClass, upcoming, continueContent, co
               </div>
 
               <div className="space-y-6">
-                {/* Upcoming Class */}
+                {/* Upcoming Class — live clarity */}
                 <div className="animate-fade-in-up" style={{ animationDelay: '120ms' }}>
-                  <h2 className="mb-3 text-sm font-semibold text-text-primary">{isLive ? 'Live Now' : nextClass ? 'Upcoming Class' : 'No Upcoming Classes'}</h2>
+                  <h2 className="mb-3 text-sm font-semibold text-text-primary">{isLive ? 'Live Now' : isStartingSoon ? 'Starting Soon' : nextClass ? 'Upcoming Class' : 'No Upcoming Classes'}</h2>
                   {nextClass ? (
                     <Card className="relative overflow-hidden" padding="lg" hover>
-                      {isLive && (
+                      {(isLive || isStartingSoon) && (
                         <div className="absolute right-0 top-0 flex items-center gap-1.5 rounded-bl-card bg-red-500 px-3 py-1 text-2xs font-bold text-white">
-                          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
-                          LIVE
+                          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" aria-hidden="true" />
+                          {isLive ? 'LIVE' : 'SOON'}
                         </div>
                       )}
                       <div className="flex flex-col gap-3">
                         <div className="flex items-center gap-2">
-                          <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl', isLive ? 'bg-red-50' : 'bg-brand-50')}>
-                            <Radio className={cn('h-5 w-5', isLive ? 'text-red-500' : 'text-brand-600')} />
+                          <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl', isLive || isStartingSoon ? 'bg-red-50' : 'bg-brand-50')}>
+                            <Radio className={cn('h-5 w-5', isLive || isStartingSoon ? 'text-red-500' : 'text-brand-600')} aria-hidden="true" />
                           </div>
                           <div className="min-w-0">
                             <h3 className="truncate text-sm font-bold text-text-primary">{nextClass.topic}</h3>
@@ -265,23 +310,46 @@ export function DashboardClient({ name, nextClass, upcoming, continueContent, co
                             </p>
                           </div>
                         </div>
-                        {!isLive && (
-                          <div className="flex items-center gap-2 rounded-lg bg-brand-50 px-3 py-2 text-xs font-medium text-brand-700">
-                            <Clock className="h-3.5 w-3.5" />
+                        <p className={cn('text-xs font-medium', isLive ? 'text-red-600' : isStartingSoon ? 'text-amber-600' : 'text-text-muted')}>
+                          {timeLabel}
+                        </p>
+                        {!isLive && !isStartingSoon && (
+                          <p className="text-xs text-text-muted">Join opens 15 minutes before start</p>
+                        )}
+                        {(isStartingSoon || isLive) && canJoin && (
+                          <p className="text-xs font-medium text-emerald-600">Join available now</p>
+                        )}
+                        {!canJoin && !isLive && !isStartingSoon && nextClass.status !== 'cancelled' && (
+                          <div className="flex items-center gap-2 rounded-lg bg-surface-muted px-3 py-2 text-xs text-text-secondary">
+                            <Clock className="h-3.5 w-3.5" aria-hidden="true" />
                             Starts in {timeUntil(nextClass.start_time)}
                           </div>
                         )}
-                        <Button variant={isLive ? 'primary' : 'outline'} size="md" loading={joining} onClick={handleJoin} className={cn('min-h-[44px]', isLive && 'animate-pulse-soft')}>
-                          {isLive ? 'Join Now' : 'View Details'}
-                          <ExternalLink className="h-4 w-4" />
-                        </Button>
-                        {joinError && <div><p className="text-xs font-medium text-red-600" role="alert">{joinError}</p><button onClick={handleJoin} className="mt-1 text-xs font-semibold text-brand-600 underline hover:text-brand-700">Retry</button></div>}
+                        <div className="flex flex-wrap gap-2">
+                          {canJoin ? (
+                            <Button variant="primary" size="md" loading={joining} onClick={handleJoin} className={cn('min-h-[44px]', isLive && 'animate-pulse-soft')}>
+                              Join Now
+                              <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                            </Button>
+                          ) : isLive || isStartingSoon ? (
+                            <Button variant="outline" size="md" loading={joining} onClick={handleJoin} className="min-h-[44px]">
+                              Join Now
+                              <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                            </Button>
+                          ) : (
+                            <Link href={`/student/live-sessions/${nextClass.id}`} className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-surface-border bg-white px-4 py-2 text-sm font-medium text-text-primary hover:bg-surface-muted">
+                              View Details
+                            </Link>
+                          )}
+                        </div>
+                        {joinError && <div><p className="text-xs font-medium text-red-600" role="alert">{joinError}</p><button onClick={handleJoin} className="mt-1 min-h-[44px] text-xs font-semibold text-brand-600 underline hover:text-brand-700">Retry</button></div>}
                       </div>
                     </Card>
                   ) : (
                     <Card className="text-center py-8">
-                      <Calendar className="mx-auto h-8 w-8 text-text-muted" />
+                      <Calendar className="mx-auto h-8 w-8 text-text-muted" aria-hidden="true" />
                       <p className="mt-2 text-sm text-text-secondary">All caught up! No upcoming classes.</p>
+                      {!hasAnyContent && <p className="mt-1 text-xs text-text-muted">New sessions will appear here once scheduled.</p>}
                     </Card>
                   )}
                 </div>
@@ -291,28 +359,28 @@ export function DashboardClient({ name, nextClass, upcoming, continueContent, co
                   <div className="stat-card">
                     <div className="flex items-center justify-between">
                       <span className="stat-label">Courses</span>
-                      <BookOpen className="h-4 w-4 text-brand-500" />
+                      <BookOpen className="h-4 w-4 text-brand-500" aria-hidden="true" />
                     </div>
                     <p className="stat-value mt-2">{courses.length}</p>
                   </div>
                   <div className="stat-card">
                     <div className="flex items-center justify-between">
                       <span className="stat-label">Completed</span>
-                      <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500" aria-hidden="true" />
                     </div>
                     <p className="stat-value mt-2">{completed}</p>
                   </div>
                   <div className="stat-card">
                     <div className="flex items-center justify-between">
                       <span className="stat-label">Watched</span>
-                      <Clock className="h-4 w-4 text-blue-500" />
+                      <Clock className="h-4 w-4 text-blue-500" aria-hidden="true" />
                     </div>
                     <p className="stat-value mt-2">{Math.floor(totalWatchedSeconds / 3600)}h</p>
                   </div>
                   <div className="stat-card">
                     <div className="flex items-center justify-between">
                       <span className="stat-label">Pending Tests</span>
-                      <BarChart3 className="h-4 w-4 text-amber-500" />
+                      <BarChart3 className="h-4 w-4 text-amber-500" aria-hidden="true" />
                     </div>
                     <p className="stat-value mt-2">{pendingTests}</p>
                   </div>
@@ -324,7 +392,7 @@ export function DashboardClient({ name, nextClass, upcoming, continueContent, co
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-50">
-                          <Trophy className="h-5 w-5 text-brand-600" />
+                          <Trophy className="h-5 w-5 text-brand-600" aria-hidden="true" />
                         </div>
                         <div>
                           <p className="text-sm font-semibold text-text-primary">{String((lastResult as any).test_title || (lastResult as any).title || 'Recent Test')}</p>
@@ -338,7 +406,7 @@ export function DashboardClient({ name, nextClass, upcoming, continueContent, co
                           </div>
                         </div>
                       </div>
-                      <Link href="/student/results" className="text-xs font-medium text-brand-600 hover:text-brand-700">
+                      <Link href="/student/results" className="min-h-[44px] flex items-center text-xs font-medium text-brand-600 hover:text-brand-700">
                         View
                       </Link>
                     </div>
@@ -355,7 +423,7 @@ export function DashboardClient({ name, nextClass, upcoming, continueContent, co
                     <div className="grid grid-cols-1 gap-3">
                       <Card padding="md">
                         <div className="flex items-center gap-2">
-                          <IndianRupee className="h-4 w-4 text-emerald-500" />
+                          <IndianRupee className="h-4 w-4 text-emerald-500" aria-hidden="true" />
                           <span className="text-xs text-text-secondary">Upcoming Dues</span>
                         </div>
                         <p className="mt-1 text-lg font-bold text-text-primary">{formatCurrency(upcomingDues)}</p>
@@ -363,7 +431,7 @@ export function DashboardClient({ name, nextClass, upcoming, continueContent, co
                       {overdueAmount > 0 && (
                         <Card padding="md" className="border-status-error/30">
                           <div className="flex items-center gap-2">
-                            <AlertCircle className="h-4 w-4 text-status-error" />
+                            <AlertCircle className="h-4 w-4 text-status-error" aria-hidden="true" />
                             <span className="text-xs text-text-secondary">Overdue</span>
                           </div>
                           <p className="mt-1 text-lg font-bold text-status-error">{formatCurrency(overdueAmount)}</p>
@@ -372,7 +440,7 @@ export function DashboardClient({ name, nextClass, upcoming, continueContent, co
                       {nextDueDate && (
                         <Card padding="md">
                           <div className="flex items-center gap-2">
-                            <CreditCard className="h-4 w-4 text-brand-500" />
+                            <CreditCard className="h-4 w-4 text-brand-500" aria-hidden="true" />
                             <span className="text-xs text-text-secondary">Next Due</span>
                           </div>
                           <p className="mt-1 text-sm font-bold text-text-primary">

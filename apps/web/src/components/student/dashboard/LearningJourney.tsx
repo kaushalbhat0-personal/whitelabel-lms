@@ -7,8 +7,27 @@ import { cn } from '@/lib/utils';
 import type { StudentBatchRecordings } from '@/lib/api/videos';
 
 export function LearningJourney({ data }: { data: StudentBatchRecordings[] }) {
-  const [openBatch, setOpenBatch] = useState<string | null>(data[0]?.batchId ?? null);
-  const [openSection, setOpenSection] = useState<string | null>(null);
+  const findCurrent = () => {
+    for (const batch of data) {
+      for (const section of batch.sections) {
+        const sInProgress = section.recordings.filter((r) => !r.progress.completed && r.progress.watchedSeconds > 0).length;
+        const sCompleted = section.recordings.filter((r) => r.progress.completed).length;
+        const state = sCompleted === section.recordings.length && section.recordings.length > 0 ? 'completed' : sInProgress > 0 ? 'inprogress' : 'notstarted';
+        if (state === 'inprogress') return { batchId: batch.batchId, sectionKey: `${batch.batchId}-${section.sectionName}` };
+      }
+    }
+    // fallback: first notstarted with unwatched
+    for (const batch of data) {
+      for (const section of batch.sections) {
+        const hasUnstarted = section.recordings.some((r) => !r.progress.completed && r.progress.watchedSeconds === 0);
+        if (hasUnstarted) return { batchId: batch.batchId, sectionKey: `${batch.batchId}-${section.sectionName}` };
+      }
+    }
+    return { batchId: data[0]?.batchId ?? null, sectionKey: null as string | null };
+  };
+  const initial = findCurrent();
+  const [openBatch, setOpenBatch] = useState<string | null>(initial.batchId);
+  const [openSection, setOpenSection] = useState<string | null>(initial.sectionKey);
 
   if (!data || data.length === 0) {
     return (
