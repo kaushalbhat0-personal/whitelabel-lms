@@ -207,13 +207,17 @@ export class UsersService {
       throw new BadRequestException('Failed to create user profile');
     }
 
-    // Fire-and-forget welcome email — failure must NOT block user creation
+    // Await welcome email safely — failure must NOT block user creation,
+    // but result must be observable via email_logs (and not hang admin UI)
     // Use the actual password that was persisted (effectivePassword)
-    this.emailService
-      .sendWelcomeEmail(dto.email, dto.name, effectivePassword)
-      .catch((emailErr: any) =>
-        this.logger.warn(`Welcome email failed for ${dto.email}: ${emailErr.message}`),
-      );
+    try {
+      const emailSent = await this.emailService.sendWelcomeEmail(dto.email, dto.name, effectivePassword);
+      if (!emailSent) {
+        this.logger.warn(`Welcome email not delivered for ${dto.email} — check email_logs/suppression`);
+      }
+    } catch (emailErr: any) {
+      this.logger.warn(`Welcome email failed for ${dto.email}: ${emailErr.message}`);
+    }
 
     return profile as unknown as UserType;
   }
@@ -789,5 +793,57 @@ export class UsersService {
     }
 
     return (data ?? []).map((item: any) => item.batches);
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  //  resendWelcome
+  // ──────────────────────────────────────────────────────────────
+
+  /**
+   * Regenerate temp password and resend welcome email (admin-only recovery).
+   * Does not return or log plaintext password.
+   */
+  async resendWelcome(userId: string): Promise<{ emailSent: boolean }> {
+    const { data: profile, error: fetchError } = await this.supabaseService.client
+      .from(TABLES.PROFILES)
+      .select('id, name, email, is_active')
+      .eq('id', userId)
+      .single();
+
+    if (fetchError || !profile) {
+      throw new NotFoundException('User not found');
+    }
+
+    const newPassword = generateTempPassword();
+
+    const { error: updateError } = await this.supabaseService.client.auth.admin.updateUserById(
+      profile.id,
+      { password: newPassword },
+    );
+
+    if (updateError) {
+      this.logger.error(`Failed to reset password for resendWelcome ${userId}: ${updateError.message}`);
+      throw new BadRequestException('Failed to reset password');
+    }
+
+    // Ensure must_change_password so student is prompted — failure after password rotation is not silent
+    const { error: profileUpdateError } = await this.supabaseService.client
+      .from(TABLES.PROFILES)
+      .update({ must_change_password: true })
+      .eq('id', profile.id);
+    if (profileUpdateError) {
+      this.logger.error(`Failed to set must_change_password for resendWelcome ${userId}: ${profileUpdateError.message}`);
+      throw new BadRequestException('Password was reset but profile update failed — please retry resend');
+    }
+
+    let emailSent = false;
+    try {
+      emailSent = await this.emailService.sendWelcomeEmail(profile.email, profile.name, newPassword);
+    } catch (e: any) {
+      this.logger.warn(`Resend welcome email failed for ${profile.email}: ${e?.message}`);
+      emailSent = false;
+    }
+
+    return { emailSent };
   }
 }

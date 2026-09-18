@@ -83,10 +83,28 @@ export class BulkUploadService {
   ): Promise<void> {
     try {
       const results: RowResult[] = [];
+      // Case-insensitive dedupe: keep first occurrence, emit failures for duplicates
+      const seen = new Map<string, ParsedUser>();
+      const duplicates: RowResult[] = [];
+      for (const u of parsedUsers) {
+        const normalized = u.email.trim().toLowerCase();
+        if (seen.has(normalized)) {
+          duplicates.push({
+            rowNumber: u.rowNumber,
+            email: u.email,
+            status: 'failure',
+            error: `Duplicate email in file (first occurrence at row ${seen.get(normalized)!.rowNumber})`,
+          });
+        } else {
+          seen.set(normalized, u);
+        }
+      }
+      const dedupedUsers = Array.from(seen.values());
+      results.push(...duplicates);
 
       // Process rows in parallel chunks of CHUNK_SIZE
-      for (let i = 0; i < parsedUsers.length; i += CHUNK_SIZE) {
-        const chunk = parsedUsers.slice(i, i + CHUNK_SIZE);
+      for (let i = 0; i < dedupedUsers.length; i += CHUNK_SIZE) {
+        const chunk = dedupedUsers.slice(i, i + CHUNK_SIZE);
         const chunkResults = await Promise.all(
           chunk.map((user) => this.processSingleRow(user, dto)),
         );
@@ -159,18 +177,22 @@ export class BulkUploadService {
       if (authError) {
         const msg = authError.message.toLowerCase();
         if (msg.includes('already') || msg.includes('exists') || msg.includes('registered')) {
-          const { data: listData } =
-            await this.supabaseService.client.auth.admin.listUsers();
-          const existing = listData?.users.find((u: any) => u.email === user.email);
-          if (!existing) {
+          const normalizedEmail = user.email.trim().toLowerCase();
+          // Use service-role profiles lookup (case-insensitive, no pagination limit)
+          const { data: existingProfile } = await this.supabaseService.client
+            .from(TABLES.PROFILES)
+            .select('id, email')
+            .eq('email', normalizedEmail)
+            .maybeSingle();
+          if (!existingProfile) {
             return {
               rowNumber: user.rowNumber,
               email: user.email,
               status: 'failure',
-              error: 'User exists in auth but could not be retrieved',
+              error: 'User exists in auth but profile not found — contact support',
             };
           }
-          userId = existing.id;
+          userId = (existingProfile as any).id;
         } else {
           return {
             rowNumber: user.rowNumber,
@@ -201,6 +223,15 @@ export class BulkUploadService {
         );
 
       if (profileError) {
+        // Compensating delete for newly-created auth user only
+        if (isNewUser && userId) {
+          try {
+            await this.supabaseService.client.auth.admin.deleteUser(userId);
+            this.logger.log(`Compensated orphan auth user ${userId} after profile failure for ${user.email}`);
+          } catch (delErr: any) {
+            this.logger.error(`Failed to compensate orphan auth user ${userId}: ${delErr?.message ?? delErr}`);
+          }
+        }
         return {
           rowNumber: user.rowNumber,
           email: user.email,

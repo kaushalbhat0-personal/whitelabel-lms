@@ -111,6 +111,12 @@ export class UsersController {
    * Only admins can suspend users.
    */
   @Roles(UserRole.ADMIN)
+  @Post(':id/resend-welcome')
+  resendWelcome(@Param('id') id: string) {
+    return this.usersService.resendWelcome(id);
+  }
+
+  @Roles(UserRole.ADMIN)
   @Post(':id/suspend')
   suspend(@Param('id') id: string) {
     return this.usersService.suspend(id);

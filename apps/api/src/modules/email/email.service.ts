@@ -92,13 +92,13 @@ export class EmailService implements OnModuleInit {
     }).catch(() => undefined);
 
     if (this.isStub || !this.resend) {
-      this.logger.warn(`[STUB] Would send email to=${to} subject="${subject}" body(length)=${html.length}`);
+      this.logger.warn(`[STUB] Would send email to=${to} subject="${subject}" body(length)=${html.length} — stub mode, marking as failed`);
       if (logId) {
-        await this.emailLogsService.markSent(logId, 'stub').catch(() => {});
-        await this.logEmailAudit('EMAIL_SENT', logId, to, subject, effectiveTemplate, 'stub').catch(() => {});
-        await this.logObservabilityEvent('EMAIL_SENT', `Stub email sent to ${to}`, effectiveTemplate, to).catch(() => {});
+        await this.emailLogsService.markFailed(logId, 'stub - no provider configured').catch(() => {});
+        await this.logEmailAudit('EMAIL_FAILED', logId, to, subject, effectiveTemplate, 'stub', 'no provider configured').catch(() => {});
+        await this.logObservabilityEvent('EMAIL_FAILED', `Stub email not sent to ${to} — no provider`, effectiveTemplate, to, 'warning').catch(() => {});
       }
-      return true;
+      return false;
     }
 
     try {
@@ -157,13 +157,13 @@ export class EmailService implements OnModuleInit {
     }).catch(() => undefined);
 
     if (this.isStub || !this.resend) {
-      this.logger.log(`[STUB EMAIL] To: ${toEmail} | Name: ${studentName} | welcome email stub`);
+      this.logger.warn(`[STUB EMAIL] To: ${toEmail} | Name: ${studentName} | welcome email stub — marking as failed`);
       if (logId) {
-        await this.emailLogsService.markSent(logId, 'stub').catch(() => {});
-        await this.logEmailAudit('EMAIL_SENT', logId, toEmail, 'Your MCT Learn account is ready', EMAIL_TEMPLATES.WELCOME, 'stub').catch(() => {});
-        await this.logObservabilityEvent('EMAIL_SENT', `Welcome email stub sent to ${toEmail}`, EMAIL_TEMPLATES.WELCOME, toEmail).catch(() => {});
+        await this.emailLogsService.markFailed(logId, 'stub - no provider configured').catch(() => {});
+        await this.logEmailAudit('EMAIL_FAILED', logId, toEmail, 'Your MCT Learn account is ready', EMAIL_TEMPLATES.WELCOME, 'stub', 'no provider configured').catch(() => {});
+        await this.logObservabilityEvent('EMAIL_FAILED', `Welcome email stub not sent to ${toEmail} — no provider`, EMAIL_TEMPLATES.WELCOME, toEmail, 'warning').catch(() => {});
       }
-      return true;
+      return false;
     }
 
     try {
