@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { fetchApi, ApiError } from '@/lib/api-client';
 import { API_ROUTES, ROUTES } from '@/lib/constants';
 import { getAccessTokenSync } from '@/lib/auth-token';
-import { clearMustChangePassword } from '@/lib/auth';
+import { clearMustChangePassword, getSessionCache } from '@/lib/auth';
+import { useAuthStore } from '@/stores/auth.store';
 
 export default function ChangePasswordPage() {
   const router = useRouter();
@@ -50,12 +51,22 @@ export default function ChangePasswordPage() {
       clearMustChangePassword();
       document.cookie =
         'must_change_password=; path=/; max-age=0; secure; samesite=lax';
+      // Keep existing JWT/Redis session — do not delete access_token
+      // Update persisted session cache and Zustand state so mustChangePassword=false
+      try {
+        const cached = getSessionCache();
+        if (cached) {
+          cached.mustChangePassword = false;
+          localStorage.setItem('session_persistence', JSON.stringify(cached));
+        }
+      } catch {}
+      try {
+        useAuthStore.setState({ mustChangePassword: false });
+      } catch {}
       setSuccess(true);
 
       setTimeout(() => {
-        document.cookie =
-          'access_token=; path=/; max-age=0; secure; samesite=lax';
-        router.push(ROUTES.LOGIN);
+        router.push(ROUTES.STUDENT.HOME);
       }, 2000);
     } catch (err) {
       if (err instanceof ApiError) {
