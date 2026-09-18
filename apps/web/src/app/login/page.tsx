@@ -54,7 +54,7 @@ export default function LoginPage() {
         setSessionReplaced(true);
         setError(
           serverMessage ||
-            'Your account was logged in on another device. We have logged out the previous device for security. Please log in again to continue.',
+            'An active session was found for this account. For security, the previous session has been signed out. Please log in again.',
         );
         // Ensure no stale session remains on this device
         try {
@@ -95,9 +95,9 @@ export default function LoginPage() {
         <p className="mb-6 text-sm text-text-secondary">Sign in to your account</p>
 
         {sessionReplaced ? (
-          <Alert variant="warning" title="Account Already Active" className="mb-4 text-center">
+          <Alert variant="warning" title="Active Session Found" className="mb-4 text-center">
             <div className="space-y-1">
-              <p>Your account was logged in on another device. We have logged out the previous device for security.</p>
+              <p>An active session was found for this account. For security, the previous session has been signed out.</p>
               <p className="font-medium">Please log in again to continue.</p>
             </div>
             <div className="mt-3 flex justify-center">

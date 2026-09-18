@@ -136,6 +136,10 @@ export function setupMultiTabSync(): () => void {
         handleTakeover();
         break;
       }
+      case 'auth:expired': {
+        handleExpiredSession();
+        break;
+      }
     }
   };
 
@@ -154,6 +158,34 @@ export function broadcastLogin(user: { id: string; email: string; role: string }
 
 export function broadcastLogout(): void {
   channel?.postMessage({ type: 'auth:logout' });
+}
+
+export function broadcastTakeover(): void {
+  try {
+    // Use existing channel if available, otherwise create ephemeral one (fetchApi has no channel ref)
+    if (channel) {
+      channel.postMessage({ type: 'auth:takeover' });
+    } else {
+      const bc = new BroadcastChannel(CHANNEL_NAME);
+      bc.postMessage({ type: 'auth:takeover' });
+      bc.close();
+    }
+  } catch {}
+}
+
+export function broadcastExpired(): void {
+  try {
+    // Generic expiry — frontend cannot distinguish takeover vs plain expiry
+    // without a backend discriminator, so broadcast expired to avoid false
+    // "another device" claims in other tabs.
+    if (channel) {
+      channel.postMessage({ type: 'auth:expired' });
+    } else {
+      const bc = new BroadcastChannel(CHANNEL_NAME);
+      bc.postMessage({ type: 'auth:expired' });
+      bc.close();
+    }
+  } catch {}
 }
 
 // --- Offline handling ---

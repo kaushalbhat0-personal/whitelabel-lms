@@ -156,11 +156,14 @@ export class AuthService {
         `Invalidated old session ${existingSessionId} for user ${userId} — session replacement, requiring re-login`,
       );
       // Do NOT create a new session yet. Tell the client to show
-      // the graceful "Account Already Active" message and retry.
+      // the graceful session-replaced message and retry.
+      // Wording is intentionally neutral — the existing user_session may be
+      // stale (browser closed, network drop, cookie cleared) rather than
+      // proof of a second physical device.
       throw new ConflictException({
         code: 'SESSION_REPLACED',
         message:
-          'Your account was logged in on another device. We have logged out the previous device for security. Please log in again to continue.',
+          'An active session was found for this account. For security, the previous session has been signed out. Please log in again.',
       });
     }
 

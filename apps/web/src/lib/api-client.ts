@@ -121,6 +121,39 @@ export async function fetchApi<T = unknown>(
           continue;
         }
         if (typeof window !== 'undefined') {
+          // Single-device takeover or expiry: clear all local auth state,
+          // stop heartbeat/validation, broadcast to same-browser tabs, then redirect.
+          // This mirrors handleExpiredSession/handleTakeover without importing
+          // session-manager statically (avoids circular deps in some bundles).
+          try {
+            const { clearSessionCache, clearAuthCookies } = await import('./auth');
+            clearSessionCache();
+            clearAuthCookies();
+          } catch {}
+          try {
+            const { stopBackgroundValidation } = await import('./session-manager');
+            stopBackgroundValidation();
+          } catch {}
+          try {
+            const { stopHeartbeat } = await import('./session-heartbeat');
+            stopHeartbeat();
+          } catch {}
+          try {
+            const { useAuthStore } = await import('@/stores/auth.store');
+            // Mark expired — overlay/guard will show correct UX before hard redirect
+            useAuthStore.getState().setStatus('expired');
+            useAuthStore.getState().setError('Session expired. Please log in again.');
+          } catch {}
+          try {
+            const { broadcastExpired } = await import('./session-manager');
+            broadcastExpired();
+          } catch {
+            try {
+              const bc = new BroadcastChannel('mct-auth-channel');
+              bc.postMessage({ type: 'auth:expired' });
+              bc.close();
+            } catch {}
+          }
           document.cookie = 'access_token=; path=/; max-age=0; secure; samesite=lax';
           window.location.href = '/login';
         }
