@@ -199,11 +199,11 @@ export class RecordingsController {
   authorizePlayback(
     @Param('id') id: string,
     @Body('deviceId') deviceId: string | undefined,
-    @CurrentUser() user: { id: string },
+    @CurrentUser() user: { id: string; sessionId: string },
     @Req() req: Request,
   ) {
     const ip = (req.ip || req.headers['x-forwarded-for'] || undefined) as string | undefined;
-    return this.recordingsService.authorizePlayback(id, user.id, deviceId, ip);
+    return this.recordingsService.authorizePlayback(id, user.id, user.sessionId, deviceId, ip);
   }
 
   @Roles(UserRole.STUDENT)
@@ -355,11 +355,11 @@ export class RecordingsController {
   legacyAuthorizePlayback(
     @Param('id') id: string,
     @Body('deviceId') deviceId: string | undefined,
-    @CurrentUser() user: { id: string },
+    @CurrentUser() user: { id: string; sessionId: string },
     @Req() req: Request,
   ) {
     const ip = (req.ip || req.headers['x-forwarded-for'] || undefined) as string | undefined;
-    return this.recordingsService.authorizePlayback(id, user.id, deviceId, ip);
+    return this.recordingsService.authorizePlayback(id, user.id, user.sessionId, deviceId, ip);
   }
 
   @Roles(UserRole.STUDENT)

@@ -32,6 +32,7 @@ export interface PlaybackTokenPayload {
   recordingId: string;
   deviceId: string | null;
   sessionId: string;
+  authSessionId: string | null;
   ip: string;
 }
 
@@ -51,6 +52,7 @@ export class PlaybackGuardService {
   async authorize(
     userId: string,
     recordingId: string,
+    authSessionId?: string | null,
     deviceId?: string,
     ip?: string,
   ): Promise<{ playbackToken: string; sessionId: string; expiresInSeconds: number }> {
@@ -61,6 +63,7 @@ export class PlaybackGuardService {
       recordingId,
       deviceId: deviceId ?? null,
       sessionId,
+      authSessionId: authSessionId ?? null,
       ip: ip ?? 'unknown',
     };
 
@@ -117,6 +120,21 @@ export class PlaybackGuardService {
     if (deviceId && payload.deviceId && payload.deviceId !== deviceId) {
       await this.logViolation(expectedUserId, expectedRecordingId, 'device_mismatch', { tokenDeviceId: payload.deviceId, requestDeviceId: deviceId }, ip);
       throw new ForbiddenException('Playback token is bound to a different device.');
+    }
+
+    // ── Phase 28.2 session-bound playback enforcement ─────────────────────
+    // Legacy tokens without authSessionId are allowed until natural 600s expiry (safe rollout).
+    // All newly minted tokens contain authSessionId; mismatched or missing user_session is rejected.
+    if (payload.authSessionId !== null && payload.authSessionId !== undefined) {
+      const currentAuthSession = await this.redis.get(REDIS_KEYS.userSession(expectedUserId));
+      if (!currentAuthSession) {
+        await this.logViolation(expectedUserId, expectedRecordingId, 'session_replaced_token_use', { reason: 'no_active_session', tokenAuthSessionId: payload.authSessionId }, ip);
+        throw new UnauthorizedException('Session expired or signed in on another device');
+      }
+      if (payload.authSessionId !== currentAuthSession) {
+        await this.logViolation(expectedUserId, expectedRecordingId, 'session_replaced_token_use', { reason: 'authSessionId_mismatch', tokenAuthSessionId: payload.authSessionId, currentAuthSessionId: currentAuthSession }, ip);
+        throw new UnauthorizedException('Session expired or signed in on another device');
+      }
     }
 
     await this.redis.setex(

@@ -1662,9 +1662,9 @@ export class RecordingsService {
    * @throws BadRequestException if recording is not in 'ready' status.
    * @throws ForbiddenException if student has no batch access to the recording.
    */
-  async authorizePlayback(recordingId: string, userId: string, deviceId?: string, ip?: string) {
+  async authorizePlayback(recordingId: string, userId: string, authSessionId?: string | null, deviceId?: string, ip?: string) {
     await this.validateAccess(recordingId, userId);
-    return this.playbackGuard.authorize(userId, recordingId, deviceId, ip);
+    return this.playbackGuard.authorize(userId, recordingId, authSessionId ?? null, deviceId, ip);
   }
 
   /**

@@ -126,4 +126,68 @@ describe('AuthService — one-device graceful replacement', () => {
     expect(await redis.get('user_session:u1')).toBeNull();
     expect(await redis.get('session:sess1')).toBeNull();
   });
+
+  // ── Phase 28.1 playback logout regression ───────────────────────
+  it('TEST 7: normal logout does NOT create playback_revoked', async () => {
+    await redis.setex('user_session:u1', 86400, 'sess1');
+    await redis.setex('session:sess1', 86400, '{}');
+    // Seed mock revoke spy
+    const playbackGuard = (service as any).playbackGuard as { revokeUserTokens: jest.Mock };
+    playbackGuard.revokeUserTokens.mockClear();
+    await service.logout('u1', 'sess1');
+    expect(playbackGuard.revokeUserTokens).not.toHaveBeenCalled();
+    expect(redis._store.has('playback_revoked:u1')).toBe(false);
+    expect(await redis.get('playback_revoked:u1')).toBeNull();
+  });
+
+  it('TEST 8: normal logout remains idempotent and does NOT create playback_revoked on second call', async () => {
+    await redis.setex('user_session:u1', 86400, 'sess1');
+    await redis.setex('session:sess1', 86400, '{}');
+    const playbackGuard = (service as any).playbackGuard as { revokeUserTokens: jest.Mock };
+    playbackGuard.revokeUserTokens.mockClear();
+    await service.logout('u1', 'sess1');
+    // Second logout with same (now missing) session — still succeeds per idempotent contract
+    const res2 = await service.logout('u1', 'sess1');
+    expect(res2.message).toMatch(/Logged out/);
+    expect(playbackGuard.revokeUserTokens).not.toHaveBeenCalled();
+    expect(await redis.get('playback_revoked:u1')).toBeNull();
+  });
+
+  it('TEST 9: session replacement does NOT create playback_revoked', async () => {
+    await redis.setex('user_session:u1', 86400, 'old-session-id');
+    await redis.setex('session:old-session-id', 86400, JSON.stringify({ userId: 'u1' }));
+    const playbackGuard = (service as any).playbackGuard as { revokeUserTokens: jest.Mock };
+    playbackGuard.revokeUserTokens.mockClear();
+    await expect(service.login({ email: 's@mct.com', password: 'pass123' } as any, '2.2.2.2', 'UA')).rejects.toThrow(ConflictException);
+    expect(playbackGuard.revokeUserTokens).not.toHaveBeenCalled();
+    expect(await redis.get('playback_revoked:u1')).toBeNull();
+    // Old session gone
+    expect(await redis.get('user_session:u1')).toBeNull();
+    expect(await redis.get('session:old-session-id')).toBeNull();
+  });
+
+  it('TEST 10: retry login after SESSION_REPLACED succeeds and still does NOT create playback_revoked', async () => {
+    await redis.setex('user_session:u1', 86400, 'old-id');
+    await redis.setex('session:old-id', 86400, '{}');
+    const playbackGuard = (service as any).playbackGuard as { revokeUserTokens: jest.Mock };
+    playbackGuard.revokeUserTokens.mockClear();
+    await expect(service.login({ email: 's@mct.com', password: 'pass123' } as any, '2.2.2.2', 'UA')).rejects.toThrow(ConflictException);
+    expect(playbackGuard.revokeUserTokens).not.toHaveBeenCalled();
+    // Retry
+    const result = await service.login({ email: 's@mct.com', password: 'pass123' } as any, '2.2.2.2', 'UA');
+    expect(result.token).toBe('jwt-token');
+    expect(playbackGuard.revokeUserTokens).not.toHaveBeenCalled();
+    expect(await redis.get('playback_revoked:u1')).toBeNull();
+    const newSession = await redis.get('user_session:u1');
+    expect(newSession).toBeTruthy();
+    expect(newSession).not.toBe('old-id');
+  });
+
+  it('TEST 11: logout invalidates authentication session (validateSession false after)', async () => {
+    await redis.setex('user_session:u1', 86400, 'sess-logout-test');
+    await redis.setex('session:sess-logout-test', 86400, '{}');
+    await service.logout('u1', 'sess-logout-test');
+    expect(await service.validateSession('u1', 'sess-logout-test')).toBe(false);
+    expect(await service.validateSession('u1', 'any-other')).toBe(false);
+  });
 });

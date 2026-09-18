@@ -152,8 +152,6 @@ export class AuthService {
     if (existingSessionId) {
       await this.redis.del(REDIS_KEYS.session(existingSessionId));
       await this.redis.del(REDIS_KEYS.userSession(userId));
-      // Revoke any playback tokens tied to the old device (security)
-      await this.playbackGuard.revokeUserTokens(userId).catch(() => {});
       this.logger.log(
         `Invalidated old session ${existingSessionId} for user ${userId} — session replacement, requiring re-login`,
       );
@@ -263,7 +261,6 @@ export class AuthService {
     await Promise.all([
       this.redis.del(REDIS_KEYS.session(sessionId)),
       this.redis.del(REDIS_KEYS.userSession(userId)),
-      this.playbackGuard.revokeUserTokens(userId),
     ]);
 
     this.logger.log(`User ${userId} logged out (session ${sessionId})`);
