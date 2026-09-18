@@ -22,7 +22,7 @@ export function LoadingSkeleton({
 }: SkeletonProps) {
   return (
     <div
-      className={cn('animate-pulse bg-surface-border', variantClasses[variant], className)}
+      className={cn('motion-safe:animate-pulse bg-surface-border', variantClasses[variant], className)}
       style={{
         width: width ?? '100%',
         height: height ?? (variant === 'text' ? '1rem' : undefined),
