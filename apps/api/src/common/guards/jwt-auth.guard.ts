@@ -33,6 +33,7 @@ import Redis from 'ioredis';
 import { Request } from 'express';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { REDIS_KEYS, REDIS_TTL } from '../constants/redis-keys.constant';
+import { ObservabilityService } from '../../modules/observability/observability.service';
 
 @Injectable()
 export class JwtAuthGuard {
@@ -42,7 +43,30 @@ export class JwtAuthGuard {
     private readonly reflector: Reflector,
     private readonly jwtService: JwtService,
     private readonly redisService: RedisService,
+    private readonly observabilityService: ObservabilityService,
   ) {}
+
+  private logSessionExpired(request: Request, message: string, userId?: string) {
+    try {
+      this.observabilityService
+        .logEvent({
+          eventType: 'SESSION_EXPIRED',
+          source: 'auth',
+          severity: 'info',
+          message,
+          metadata: {
+            url: (request as any).url ?? request.url,
+            method: request.method,
+            statusCode: 401,
+            errorType: 'UnauthorizedException',
+            userAgent: request.headers['user-agent'],
+            ip: (request as any).ip ?? (request as any).headers?.['x-forwarded-for'],
+            userId,
+          },
+        })
+        .catch(() => {});
+    } catch {}
+  }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     // ── Step 1: Skip auth for @Public() routes ──────────────────────────
@@ -56,6 +80,7 @@ export class JwtAuthGuard {
     const request = context.switchToHttp().getRequest<Request>();
     const authHeader = request.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      this.logSessionExpired(request, 'Missing or malformed Authorization header');
       throw new UnauthorizedException('Missing or malformed Authorization header');
     }
     const token = authHeader.split(' ')[1];
@@ -69,6 +94,7 @@ export class JwtAuthGuard {
         sessionId: string;
       }>(token);
     } catch {
+      this.logSessionExpired(request, 'Invalid or expired token');
       throw new UnauthorizedException('Invalid or expired token');
     }
 
@@ -79,10 +105,12 @@ export class JwtAuthGuard {
     );
 
     if (!storedSessionId) {
+      this.logSessionExpired(request, 'Session expired — please log in again', payload.sub);
       throw new UnauthorizedException('Session expired — please log in again');
     }
 
     if (storedSessionId !== payload.sessionId) {
+      this.logSessionExpired(request, 'Session expired or signed in on another device', payload.sub);
       throw new UnauthorizedException(
         'Session expired or signed in on another device',
       );
