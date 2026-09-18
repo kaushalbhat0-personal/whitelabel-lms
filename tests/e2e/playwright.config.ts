@@ -65,6 +65,11 @@ export default defineConfig({
       testMatch: 'assessments/*.spec.ts',
       use: { ...devices['Desktop Chrome'] },
     },
+    {
+      name: 'auth-logout',
+      testMatch: 'auth/*.spec.ts',
+      use: { ...devices['Desktop Chrome'] },
+    },
   ],
 
   webServer: [
