@@ -6,6 +6,7 @@ import { ROUTES } from '@/lib/constants';
 import { useSession } from '@/hooks/useSession';
 import Image from 'next/image';
 import { NavigationLink } from '@/components/shared/NavigationLink';
+import { Button } from '@/components/ui/Button';
 import {
   LayoutDashboard,
   BookOpen,
@@ -34,7 +35,7 @@ function isActive(href: string, exact: boolean | undefined, pathname: string) {
 
 export function StudentSidebar() {
   const pathname = usePathname();
-  const { logout } = useSession();
+  const { logout, isLoggingOut } = useSession();
 
   return (
     <>
@@ -84,13 +85,15 @@ export function StudentSidebar() {
             <p className="truncate text-2xs text-brand-200">Online</p>
           </div>
         </div>
-        <button
+        <Button
           onClick={logout}
-          className="mt-2 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-brand-200 transition-colors hover:bg-sidebar-hover hover:text-white"
+          loading={isLoggingOut}
+          variant="ghost"
+          className="mt-2 min-h-[44px] w-full justify-start gap-2 rounded-xl px-3 py-2 text-sm font-medium text-brand-200 hover:bg-sidebar-hover hover:text-white"
         >
-          <LogOut className="h-4 w-4" />
-          Sign out
-        </button>
+          {!isLoggingOut && <LogOut className="h-4 w-4" />}
+          {isLoggingOut ? 'Signing out…' : 'Sign out'}
+        </Button>
       </div>
     </>
   );

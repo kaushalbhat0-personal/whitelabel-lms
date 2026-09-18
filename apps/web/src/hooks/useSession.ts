@@ -1,15 +1,16 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore, type AuthUser, type SessionStatus } from '@/stores/auth.store';
 import { fetchApi, ApiError } from '@/lib/api-client';
 import { API_ROUTES, ROUTES } from '@/lib/constants';
 import {
   setSessionCache,
-  clearSessionCache,
+  clearSessionCacheIfNotNewer,
   clearAuthCookies,
   setMustChangePassword,
+  getSessionCache,
 } from '@/lib/auth';
 import {
   startBackgroundValidation,
@@ -19,6 +20,13 @@ import {
 } from '@/lib/session-manager';
 import { startHeartbeat, stopHeartbeat } from '@/lib/session-heartbeat';
 import type { DeviceFingerprint } from '@/lib/hooks/useDeviceFingerprint';
+
+let globalLogoutInFlight = false;
+let globalLogoutResetTimer: ReturnType<typeof setTimeout> | null = null;
+
+export function isLogoutInFlight(): boolean {
+  return globalLogoutInFlight;
+}
 
 interface UseSessionReturn {
   user: AuthUser | null;
@@ -31,6 +39,7 @@ interface UseSessionReturn {
   isExpired: boolean;
   isTakeover: boolean;
   isOffline: boolean;
+  isLoggingOut: boolean;
   login: (email: string, password: string, device?: DeviceFingerprint) => Promise<void>;
   logout: () => void;
   clearError: () => void;
@@ -39,6 +48,7 @@ interface UseSessionReturn {
 export function useSession(): UseSessionReturn {
   const store = useAuthStore();
   const router = useRouter();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const login = useCallback(
     async (email: string, password: string, device?: DeviceFingerprint) => {
@@ -111,24 +121,53 @@ export function useSession(): UseSessionReturn {
   );
 
   const logout = useCallback(() => {
+    if (globalLogoutInFlight) return;
+    globalLogoutInFlight = true;
+    setIsLoggingOut(true);
+    if (globalLogoutResetTimer) {
+      clearTimeout(globalLogoutResetTimer);
+      globalLogoutResetTimer = null;
+    }
+    // Bounded fallback — navigation unmounts this component, but guard must not stay stuck if push fails
+    globalLogoutResetTimer = setTimeout(() => {
+      globalLogoutInFlight = false;
+      globalLogoutResetTimer = null;
+    }, 5000);
+
     const storeState = useAuthStore.getState();
     console.log('[AUTH LOGOUT] Called — status:', storeState.status, 'user:', storeState.user?.id);
+    const startCount = storeState.sessionCount;
+    const currentStatus = storeState.status;
+    const shouldPostLogout = currentStatus === 'authenticated';
 
     // Server-side session invalidation (best-effort, fire-and-forget) — ensures
     // next login does NOT hit SESSION_REPLACED from a stale Redis user_session.
     // Local state is cleared immediately so UX is not blocked by network.
     // `fetchApi` failure is swallowed — session may already be expired.
-    fetchApi(API_ROUTES.AUTH.LOGOUT, {
-      method: 'POST',
-      skipAuthRedirect: true,
-    } as any).catch(() => {});
+    // Skip POST for already-expired/takeover/offline/idle sessions.
+    if (shouldPostLogout) {
+      fetchApi(API_ROUTES.AUTH.LOGOUT, {
+        method: 'POST',
+        skipAuthRedirect: true,
+      } as any).catch(() => {});
+    }
 
-    // Clear everything locally
-    clearSessionCache();
-    clearAuthCookies();
+    // Guarded local cleanup — never delete a newer session written after startCount
+    const preClearCache = getSessionCache();
+    const hasNewerCacheBeforeClear = !!preClearCache && typeof preClearCache.sessionCount === 'number' && preClearCache.sessionCount > startCount;
+    const cleared = clearSessionCacheIfNotNewer(startCount);
+    // Only clear cookies if no newer session was detected before clear and count not advanced
+    if (!hasNewerCacheBeforeClear && cleared) {
+      const currentCount = useAuthStore.getState().sessionCount;
+      if (currentCount <= startCount) {
+        clearAuthCookies();
+      }
+    } else if (hasNewerCacheBeforeClear || !cleared) {
+      // Newer session detected — preserve its cookies/storage
+    }
     stopBackgroundValidation();
     stopHeartbeat();
-    broadcastLogout();
+    broadcastLogout(startCount);
 
     storeState.logout();
 
@@ -150,6 +189,7 @@ export function useSession(): UseSessionReturn {
     isExpired: store.status === 'expired',
     isTakeover: store.status === 'takeover',
     isOffline: store.status === 'offline',
+    isLoggingOut,
     login,
     logout,
     clearError,

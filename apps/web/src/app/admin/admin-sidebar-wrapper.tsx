@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { ROUTES } from '@/lib/constants';
 import { useSession } from '@/hooks/useSession';
 import { NavigationLink } from '@/components/shared/NavigationLink';
+import { Button } from '@/components/ui/Button';
 import {
   LayoutDashboard,
   Users,
@@ -114,12 +115,14 @@ function SidebarContent({
   onLogout,
   collapsed,
   toggleGroup,
+  isLoggingOut,
 }: {
   pathname: string;
   onNavigate?: () => void;
   onLogout: () => void;
   collapsed: Record<string, boolean>;
   toggleGroup: (label: string) => void;
+  isLoggingOut?: boolean;
 }) {
   const isGroupActive = (group: NavGroup) =>
     group.items.some((item) => pathname === item.href || (item.href !== ROUTES.ADMIN.HOME && pathname.startsWith(item.href)));
@@ -174,10 +177,15 @@ function SidebarContent({
         })}
       </nav>
       <div className="border-t border-sidebar-divider px-3 py-4">
-        <button onClick={onLogout} className="sidebar-link w-full">
-          <LogOut className="h-5 w-5 shrink-0" />
-          <span>Logout</span>
-        </button>
+        <Button
+          onClick={onLogout}
+          loading={!!isLoggingOut}
+          variant="ghost"
+          className="sidebar-link w-full justify-start min-h-[44px] border border-transparent text-sidebar-text hover:bg-sidebar-hover hover:text-white"
+        >
+          {!isLoggingOut && <LogOut className="h-5 w-5 shrink-0" />}
+          <span>{isLoggingOut ? 'Signing out…' : 'Logout'}</span>
+        </Button>
       </div>
     </>
   );
@@ -186,7 +194,7 @@ function SidebarContent({
 export function AdminSidebarWrapper() {
   const pathname = usePathname();
   const router = useRouter();
-  const { logout } = useSession();
+  const { logout, isLoggingOut } = useSession();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -240,6 +248,7 @@ export function AdminSidebarWrapper() {
           onLogout={handleLogout}
           collapsed={collapsed}
           toggleGroup={toggleGroup}
+          isLoggingOut={isLoggingOut}
         />
       </aside>
 
@@ -282,6 +291,7 @@ export function AdminSidebarWrapper() {
               onLogout={handleLogout}
               collapsed={collapsed}
               toggleGroup={toggleGroup}
+              isLoggingOut={isLoggingOut}
             />
           </div>
         </div>

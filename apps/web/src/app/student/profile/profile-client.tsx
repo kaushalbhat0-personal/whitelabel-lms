@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { User, Shield, Lock, LogOut, Users } from 'lucide-react';
 import { ROUTES } from '@/lib/constants';
 import { useSession } from '@/hooks/useSession';
+import { Button } from '@/components/ui/Button';
 
 interface Props {
   email: string;
@@ -11,7 +12,7 @@ interface Props {
 }
 
 export function ProfileClient({ email, batchNames }: Props) {
-  const { logout, user } = useSession();
+  const { logout, isLoggingOut, user } = useSession();
   const displayEmail = email || user?.email || '';
 
   return (
@@ -58,13 +59,15 @@ export function ProfileClient({ email, batchNames }: Props) {
         <span className="text-sm text-text-muted">&rarr;</span>
       </Link>
 
-      <button
+      <Button
         onClick={logout}
-        className="flex w-full items-center justify-center gap-2 rounded-card border border-status-live px-4 py-3 text-sm font-semibold text-status-live transition-colors hover:bg-red-50"
+        loading={isLoggingOut}
+        variant="outline"
+        className="flex w-full items-center justify-center gap-2 rounded-card border border-status-live px-4 py-3 text-sm font-semibold text-status-live hover:bg-red-50 min-h-[44px]"
       >
-        <LogOut className="h-4 w-4" />
-        Logout
-      </button>
+        {!isLoggingOut && <LogOut className="h-4 w-4" />}
+        {isLoggingOut ? 'Signing out…' : 'Logout'}
+      </Button>
     </div>
   );
 }

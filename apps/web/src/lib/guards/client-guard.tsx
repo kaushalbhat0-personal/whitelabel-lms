@@ -8,6 +8,7 @@ import { useSession } from '@/hooks/useSession';
 import { getRoleForPath, hasRequiredRole } from './permissions';
 import { logAuthDenied, logAccessDenied } from './audit';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/Button';
 
 interface GuardResult {
   allowed: boolean;
@@ -62,7 +63,7 @@ export function useGuard(): GuardResult {
 
 export function GuardRoute({ children }: { children: React.ReactNode }) {
   const { allowed, isLoading, reason } = useGuard();
-  const { error, logout } = useSession();
+  const { error, logout, isLoggingOut } = useSession();
 
   if (isLoading) {
     return <AuthLoadingScreen />;
@@ -85,6 +86,7 @@ export function GuardRoute({ children }: { children: React.ReactNode }) {
       <UnauthorizedPage
         reason={reason}
         onLogin={logout}
+        isLoggingOut={isLoggingOut}
       />
     );
   }
@@ -145,9 +147,11 @@ function AuthErrorScreen({
 function UnauthorizedPage({
   reason,
   onLogin,
+  isLoggingOut,
 }: {
   reason: GuardResult['reason'];
   onLogin: () => void;
+  isLoggingOut?: boolean;
 }) {
   const title =
     reason === 'wrong-role'
@@ -171,12 +175,13 @@ function UnauthorizedPage({
         </div>
         <h2 className="mt-4 text-lg font-bold text-text-primary">{title}</h2>
         <p className="mt-2 text-sm text-text-secondary">{description}</p>
-        <button
+        <Button
           onClick={onLogin}
-          className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-brand-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-700"
+          loading={!!isLoggingOut}
+          className="mt-6 w-full rounded-xl bg-brand-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 min-h-[44px]"
         >
-          Go to Login
-        </button>
+          {isLoggingOut ? 'Signing out…' : 'Go to Login'}
+        </Button>
       </div>
     </div>
   );

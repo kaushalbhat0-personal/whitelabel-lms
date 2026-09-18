@@ -116,9 +116,27 @@ export async function fetchApi<T = unknown>(
         if (!shouldRedirect) {
           throw new UnauthorizedError('Session expired');
         }
+        // If explicit logout is in flight, suppress hard expiry redirect — caller already navigating
+        try {
+          const { isLogoutInFlight } = await import('@/hooks/useSession');
+          if (isLogoutInFlight?.() === true) {
+            throw new UnauthorizedError('Session expired');
+          }
+        } catch (e) {
+          if (e instanceof UnauthorizedError) throw e;
+        }
         const sessionValid = await validateSession();
         if (sessionValid) {
           continue;
+        }
+        // Re-check after async validate — logout may have started during validation
+        try {
+          const { isLogoutInFlight: checkAgain } = await import('@/hooks/useSession');
+          if (checkAgain?.() === true) {
+            throw new UnauthorizedError('Session expired');
+          }
+        } catch (e) {
+          if (e instanceof UnauthorizedError) throw e;
         }
         if (typeof window !== 'undefined') {
           // Single-device takeover or expiry: clear all local auth state,

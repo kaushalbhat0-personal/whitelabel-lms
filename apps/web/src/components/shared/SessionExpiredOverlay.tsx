@@ -1,13 +1,11 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { useSession } from '@/hooks/useSession';
-import { ROUTES } from '@/lib/constants';
 import { LogOut, AlertTriangle } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
 
 export function SessionExpiredOverlay() {
-  const { isExpired, isTakeover, error, logout } = useSession();
-  const router = useRouter();
+  const { isExpired, isTakeover, error, logout, isLoggingOut } = useSession();
 
   if (!isExpired && !isTakeover) return null;
 
@@ -29,15 +27,13 @@ export function SessionExpiredOverlay() {
         </div>
         <h2 className="mt-4 text-lg font-bold text-gray-900">{title}</h2>
         <p className="mt-2 text-sm text-gray-500">{description}</p>
-        <button
-          onClick={() => {
-            logout();
-            router.push(ROUTES.LOGIN);
-          }}
-          className="mt-6 w-full rounded-lg bg-brand-navy px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-navyDark"
+        <Button
+          onClick={logout}
+          loading={isLoggingOut}
+          className="mt-6 w-full rounded-lg bg-brand-navy px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-navyDark min-h-[44px]"
         >
-          Go to Login
-        </button>
+          {isLoggingOut ? 'Signing out…' : 'Go to Login'}
+        </Button>
       </div>
     </div>
   );

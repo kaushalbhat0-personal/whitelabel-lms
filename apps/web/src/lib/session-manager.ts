@@ -125,6 +125,15 @@ export function setupMultiTabSync(): () => void {
         break;
       }
       case 'auth:logout': {
+        const incomingCount = typeof msg.sessionCount === 'number' ? msg.sessionCount : -1;
+        const currentCount = useAuthStore.getState().sessionCount;
+        if (incomingCount !== -1 && currentCount > incomingCount) {
+          break;
+        }
+        const currentCache = getSessionCache();
+        if (currentCache && typeof currentCache.sessionCount === 'number' && incomingCount !== -1 && currentCache.sessionCount > incomingCount) {
+          break;
+        }
         useAuthStore.getState().logout();
         clearSessionCache();
         clearAuthCookies();
@@ -156,8 +165,9 @@ export function broadcastLogin(user: { id: string; email: string; role: string }
   channel?.postMessage({ type: 'auth:login', user, token, mustChangePassword, sessionCount });
 }
 
-export function broadcastLogout(): void {
-  channel?.postMessage({ type: 'auth:logout' });
+export function broadcastLogout(sessionCount?: number): void {
+  const count = typeof sessionCount === 'number' ? sessionCount : useAuthStore.getState().sessionCount;
+  channel?.postMessage({ type: 'auth:logout', sessionCount: count });
 }
 
 export function broadcastTakeover(): void {

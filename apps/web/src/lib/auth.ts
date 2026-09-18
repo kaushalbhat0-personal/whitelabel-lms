@@ -54,6 +54,24 @@ export function clearSessionCache(): void {
   localStorage.removeItem(SESSION_KEY);
 }
 
+export function clearSessionCacheIfNotNewer(maxCountToDelete: number): boolean {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return true;
+    const parsed = JSON.parse(raw) as SessionCache;
+    if (typeof parsed?.sessionCount === 'number' && parsed.sessionCount > maxCountToDelete) {
+      return false;
+    }
+    localStorage.removeItem(SESSION_KEY);
+    return true;
+  } catch {
+    try {
+      localStorage.removeItem(SESSION_KEY);
+    } catch {}
+    return true;
+  }
+}
+
 // --- Must-change-password helpers ---
 
 export function getMustChangePassword(): boolean {
