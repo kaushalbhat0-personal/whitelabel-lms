@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { ROUTES } from '@/lib/constants';
+import { NavigationLink } from '@/components/shared/NavigationLink';
 import {
   LayoutDashboard,
   BookOpen,
@@ -64,7 +64,7 @@ export function StudentBottomNav() {
         {visibleTabs.map((tab) => {
           const active = isActive(tab.href, tab.exact);
           return (
-            <Link
+            <NavigationLink
               key={tab.href}
               href={tab.href}
               aria-label={tab.label}
@@ -83,7 +83,7 @@ export function StudentBottomNav() {
               >
                 {tab.label}
               </span>
-            </Link>
+            </NavigationLink>
           );
         })}
 
@@ -117,7 +117,7 @@ export function StudentBottomNav() {
               {moreItems.map((item) => {
                 const active = isActive(item.href, false);
                 return (
-                  <Link
+                  <NavigationLink
                     key={item.href}
                     href={item.href}
                     onClick={() => setMoreOpen(false)}
@@ -130,7 +130,7 @@ export function StudentBottomNav() {
                   >
                     <item.icon className="h-4 w-4" />
                     {item.label}
-                  </Link>
+                  </NavigationLink>
                 );
               })}
             </div>

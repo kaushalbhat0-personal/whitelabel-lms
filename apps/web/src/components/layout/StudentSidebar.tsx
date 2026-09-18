@@ -1,11 +1,11 @@
 'use client';
 
-import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { ROUTES } from '@/lib/constants';
 import { useSession } from '@/hooks/useSession';
 import Image from 'next/image';
+import { NavigationLink } from '@/components/shared/NavigationLink';
 import {
   LayoutDashboard,
   BookOpen,
@@ -59,7 +59,7 @@ export function StudentSidebar() {
         {navItems.map((item) => {
           const active = isActive(item.href, item.exact, pathname);
           return (
-            <Link
+            <NavigationLink
               key={item.href}
               href={item.href}
               className={cn(
@@ -69,7 +69,7 @@ export function StudentSidebar() {
             >
               <item.icon className="h-5 w-5 shrink-0" />
               <span>{item.label}</span>
-            </Link>
+            </NavigationLink>
           );
         })}
       </nav>

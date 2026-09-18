@@ -2,10 +2,10 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { ROUTES } from '@/lib/constants';
 import { useSession } from '@/hooks/useSession';
+import { NavigationLink } from '@/components/shared/NavigationLink';
 import {
   LayoutDashboard,
   Users,
@@ -158,14 +158,14 @@ function SidebarContent({
               <div className={cn('overflow-hidden transition-all duration-200', isOpen ? 'max-h-96' : 'max-h-0')}>
                 <div className="ml-2 space-y-0.5 border-l border-sidebar-divider/30 pl-4 py-0.5">
                   {group.items.map((item) => (
-                    <Link
+                    <NavigationLink
                       key={item.href}
                       href={item.href}
                       onClick={onNavigate}
                       className={cn('sidebar-link', isItemActive(item.href) && 'active')}
                     >
                       <span className="truncate">{item.label}</span>
-                    </Link>
+                    </NavigationLink>
                   ))}
                 </div>
               </div>
