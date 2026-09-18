@@ -28,9 +28,11 @@ import {
   getEvents,
   resolveError,
   reopenError,
+  reconcileErrors,
   type DashboardOverview,
   type ErrorLogEntry,
   type EventLogEntry,
+  type ReconcileResult,
 } from '@/lib/api/observability';
 import { getEmailQueueStats, type EmailQueueStats } from '@/lib/api/email-logs';
 
@@ -132,6 +134,10 @@ export default function AdminMonitoringPage() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [now, setNow] = useState(Date.now());
 
+  const [reconciling, setReconciling] = useState(false);
+  const [reconcileResult, setReconcileResult] = useState<ReconcileResult | null>(null);
+  const [reconcileError, setReconcileError] = useState<string | null>(null);
+
   const resolving = useRef(new Set<string>());
 
   useEffect(() => {
@@ -223,6 +229,38 @@ export default function AdminMonitoringPage() {
       resolving.current.delete(id);
     }
   };
+
+  const handleRefresh = useCallback(async () => {
+    await Promise.all([
+      loadDashboard(),
+      activeTab === 'errors' ? loadErrors(errorsPage, errorFilter) : Promise.resolve(),
+      activeTab === 'events' ? loadEvents(eventsPage) : Promise.resolve(),
+      activeTab === 'email-queue' ? loadQueueStats() : Promise.resolve(),
+    ]);
+  }, [loadDashboard, loadErrors, loadEvents, loadQueueStats, activeTab, errorsPage, errorFilter, eventsPage]);
+
+  const handleReconcile = useCallback(async () => {
+    if (reconciling) return;
+    setReconciling(true);
+    setReconcileError(null);
+    setReconcileResult(null);
+    try {
+      const result = await reconcileErrors();
+      setReconcileResult(result);
+      // Force fresh server reload after reconciliation
+      await Promise.all([
+        loadDashboard(),
+        loadErrors(errorsPage, errorFilter),
+        activeTab === 'events' ? loadEvents(eventsPage) : Promise.resolve(),
+        activeTab === 'email-queue' ? loadQueueStats() : Promise.resolve(),
+      ]);
+      setLastUpdated(new Date());
+    } catch (err: any) {
+      setReconcileError(err?.message ?? 'Reconciliation failed');
+    } finally {
+      setReconciling(false);
+    }
+  }, [reconciling, loadDashboard, loadErrors, loadEvents, loadQueueStats, activeTab, errorsPage, errorFilter, eventsPage]);
 
   const errorsTotalPages = Math.ceil(errorsTotal / errorsLimit);
   const eventsTotalPages = Math.ceil(eventsTotal / eventsLimit);
@@ -345,6 +383,22 @@ export default function AdminMonitoringPage() {
                   <h2 className="text-lg font-semibold text-text-primary">Error Log</h2>
                   <div className="flex items-center gap-2">
                     {loadingErrors && <Loader2 className="h-4 w-4 animate-spin text-text-muted" />}
+                    <button
+                      onClick={handleRefresh}
+                      disabled={loadingDashboard || loadingErrors || reconciling}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-surface-border bg-surface-card px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-surface-muted hover:text-text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <RefreshCw className={`h-3.5 w-3.5 ${loadingDashboard ? 'animate-spin' : ''}`} />
+                      Refresh
+                    </button>
+                    <button
+                      onClick={handleReconcile}
+                      disabled={reconciling || loadingDashboard}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {reconciling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+                      {reconciling ? 'Reconciling...' : 'Reconcile Errors'}
+                    </button>
                     <div className="flex gap-1 rounded-lg border border-surface-border p-0.5">
                       {(['open', 'resolved', 'all'] as const).map((f) => (
                         <button
@@ -363,6 +417,22 @@ export default function AdminMonitoringPage() {
                     </div>
                   </div>
                 </div>
+                {reconcileError && (
+                  <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {reconcileError}
+                  </div>
+                )}
+                {reconcileResult && (
+                  <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+                    <p className="text-sm font-semibold text-emerald-800">Reconciliation complete</p>
+                    <p className="mt-1 text-xs text-emerald-700">
+                      Checked: {reconcileResult.checkedGroups} groups · Auto-resolved: {reconcileResult.autoResolvedRows} errors · Still active: {reconcileResult.stillActiveGroups} groups · Skipped critical: {reconcileResult.skippedCriticalGroups} groups · Stale threshold: {reconcileResult.staleDays} days
+                    </p>
+                    {reconcileResult.autoResolvedRows === 0 && (
+                      <p className="mt-1 text-xs text-text-muted">No stale errors found.</p>
+                    )}
+                  </div>
+                )}
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>

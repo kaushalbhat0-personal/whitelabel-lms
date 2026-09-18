@@ -164,6 +164,21 @@ export async function resolveError(id: string) {
   });
 }
 
+export interface ReconcileResult {
+  checkedGroups: number;
+  autoResolvedRows: number;
+  stillActiveGroups: number;
+  skippedCriticalGroups: number;
+  staleDays: number;
+}
+
+export async function reconcileErrors(staleDays?: number) {
+  return fetchApi<ReconcileResult>(`${API_ROUTES.OBSERVABILITY_ERRORS}/reconcile`, {
+    method: 'PATCH',
+    body: JSON.stringify(staleDays !== undefined ? { staleDays } : {}),
+  });
+}
+
 export async function reopenError(id: string) {
   return fetchApi<{ resolved: boolean }>(`${API_ROUTES.OBSERVABILITY_ERRORS}/${id}/reopen`, {
     method: 'PATCH',

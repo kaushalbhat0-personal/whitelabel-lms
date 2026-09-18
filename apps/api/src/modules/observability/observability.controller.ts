@@ -12,6 +12,7 @@ import { ObservabilityService } from './observability.service';
 import { LogErrorDto } from './dto/log-error.dto';
 import { LogEventDto } from './dto/log-event.dto';
 import { TrackMetricDto } from './dto/track-metric.dto';
+import { ReconcileErrorsDto } from './dto/reconcile-errors.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
@@ -97,6 +98,15 @@ export class ObservabilityController {
       startDate,
       endDate,
     });
+  }
+
+  @Roles(UserRole.ADMIN)
+  @Patch('errors/reconcile')
+  reconcileErrors(
+    @Body() dto: ReconcileErrorsDto,
+    @CurrentUser() user: { id: string },
+  ) {
+    return this.observabilityService.reconcileErrors(dto, user.id);
   }
 
   @Roles(UserRole.ADMIN)

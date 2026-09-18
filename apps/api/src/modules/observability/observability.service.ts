@@ -247,6 +247,141 @@ export class ObservabilityService {
     return { resolved: false };
   }
 
+  async reconcileErrors(
+    dto: { staleDays?: number },
+    userId: string,
+  ): Promise<{
+    checkedGroups: number;
+    autoResolvedRows: number;
+    stillActiveGroups: number;
+    skippedCriticalGroups: number;
+    staleDays: number;
+  }> {
+    const staleDays = dto.staleDays ?? 7;
+    const threshold = new Date(Date.now() - staleDays * 24 * 60 * 60 * 1000).toISOString();
+    const nowIso = new Date().toISOString();
+    const resolutionNote = `auto: stale >${staleDays}d no recurrence`;
+
+    // Fetch all rows in batches to avoid large memory spike on very large tables
+    const allRows: Array<{
+      id: string;
+      error_type: string;
+      message: string;
+      url: string | null;
+      severity: string;
+      created_at: string;
+      resolved: boolean;
+    }> = [];
+    const pageSize = 1000;
+    let page = 0;
+    while (true) {
+      const { data, error } = await this.supabaseService.client
+        .from(TABLES.SYSTEM_ERRORS)
+        .select('id, error_type, message, url, severity, created_at, resolved')
+        .order('created_at', { ascending: true })
+        .range(page * pageSize, (page + 1) * pageSize - 1);
+      if (error) {
+        this.logger.error(`Failed to fetch errors for reconciliation: ${error.message}`);
+        throw error;
+      }
+      if (!data || data.length === 0) break;
+      allRows.push(...(data as any));
+      if (data.length < pageSize) break;
+      page++;
+      // Safety cap for extreme tables
+      if (allRows.length > 100000) break;
+    }
+
+    type Group = {
+      error_type: string;
+      message: string;
+      url: string | null;
+      maxCreatedAt: string;
+      openRows: Array<{ id: string; created_at: string; severity: string }>;
+      hasCritical: boolean;
+    };
+    const groups = new Map<string, Group>();
+
+    for (const row of allRows) {
+      const key = `${row.error_type}|${row.message}|${row.url ?? ''}`;
+      let g = groups.get(key);
+      if (!g) {
+        g = {
+          error_type: row.error_type,
+          message: row.message,
+          url: row.url,
+          maxCreatedAt: row.created_at,
+          openRows: [],
+          hasCritical: false,
+        };
+        groups.set(key, g);
+      }
+      if (row.created_at > g.maxCreatedAt) g.maxCreatedAt = row.created_at;
+      if (!row.resolved) {
+        g.openRows.push({ id: row.id, created_at: row.created_at, severity: row.severity });
+        if (String(row.severity).toLowerCase() === 'critical') g.hasCritical = true;
+      }
+    }
+
+    let checkedGroups = 0;
+    let stillActiveGroups = 0;
+    let skippedCriticalGroups = 0;
+    const staleGroups: Group[] = [];
+
+    for (const g of groups.values()) {
+      if (g.openRows.length === 0) continue;
+      checkedGroups++;
+      if (g.hasCritical) {
+        skippedCriticalGroups++;
+        stillActiveGroups++;
+        continue;
+      }
+      if (g.maxCreatedAt >= threshold) {
+        stillActiveGroups++;
+        continue;
+      }
+      staleGroups.push(g);
+    }
+
+    let autoResolvedRows = 0;
+    const batchSize = 500;
+
+    for (const g of staleGroups) {
+      const eligibleIds = g.openRows
+        .filter((r) => r.created_at < threshold && String(r.severity).toLowerCase() !== 'critical')
+        .map((r) => r.id);
+      if (eligibleIds.length === 0) continue;
+      for (let i = 0; i < eligibleIds.length; i += batchSize) {
+        const batch = eligibleIds.slice(i, i + batchSize);
+        const { data, error } = await this.supabaseService.client
+          .from(TABLES.SYSTEM_ERRORS)
+          .update({
+            resolved: true,
+            resolved_at: nowIso,
+            resolved_by: userId,
+            resolution_note: resolutionNote,
+          })
+          .in('id', batch)
+          .eq('resolved', false)
+          .lt('created_at', threshold)
+          .select('id');
+        if (error) {
+          this.logger.error(`Failed to reconcile batch for group ${g.error_type}: ${error.message}`);
+          throw error;
+        }
+        autoResolvedRows += (data as any[])?.length ?? batch.length;
+      }
+    }
+
+    return {
+      checkedGroups,
+      autoResolvedRows,
+      stillActiveGroups,
+      skippedCriticalGroups,
+      staleDays,
+    };
+  }
+
   async getDashboard() {
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
