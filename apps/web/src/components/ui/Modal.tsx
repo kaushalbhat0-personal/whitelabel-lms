@@ -47,12 +47,16 @@ export function Modal({
   const titleId = useId();
   const descId = useId();
 
-  const handleEscape = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    },
-    [onClose],
-  );
+  // Keep latest onClose without changing handler identity — avoids
+  // re-running focus effect when parent re-renders with inline onClose.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  const handleEscape = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape') onCloseRef.current();
+  }, []);
 
   const handleTab = useCallback((e: KeyboardEvent) => {
     if (e.key !== 'Tab') return;

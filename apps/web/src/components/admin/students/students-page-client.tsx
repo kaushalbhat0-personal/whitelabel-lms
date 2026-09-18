@@ -140,6 +140,11 @@ export function StudentsPageClient({ initialStudents, initialTotal }: StudentsPa
     } finally { setPermLoading(false); }
   };
 
+  const handleCloseAddStudent = useCallback(() => {
+    setShowAddModal(false);
+    setAddError('');
+  }, []);
+
   const handleSingleAdd = async (e: React.FormEvent) => {
     e.preventDefault(); setAddError(''); setSubmitting(true);
     try {
@@ -237,7 +242,7 @@ export function StudentsPageClient({ initialStudents, initialTotal }: StudentsPa
         />
       )}
 
-      <Modal isOpen={showAddModal} onClose={() => { setShowAddModal(false); setAddError(''); }} title="Add Student">
+      <Modal isOpen={showAddModal} onClose={handleCloseAddStudent} title="Add Student">
         <div className="flex border-b border-surface-border">
           <button onClick={() => setAddTab('single')} className={`flex flex-1 items-center justify-center gap-2 px-4 py-3 text-sm font-medium ${addTab === 'single' ? 'border-b-2 border-brand-600 text-brand-600' : 'text-text-muted'}`}>Single</button>
           <button onClick={() => setAddTab('bulk')} className={`flex flex-1 items-center justify-center gap-2 px-4 py-3 text-sm font-medium ${addTab === 'bulk' ? 'border-b-2 border-brand-600 text-brand-600' : 'text-text-muted'}`}>Bulk</button>
