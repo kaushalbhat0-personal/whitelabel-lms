@@ -74,7 +74,7 @@ CREATE TABLE business_config (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE UNIQUE INDEX business_config_singleton ON business_config ((TRUE));
+CREATE UNIQUE INDEX IF NOT EXISTS business_config_singleton ON business_config ((TRUE));
 
 -- 2.2 profiles (links to Supabase auth.users)
 CREATE TABLE profiles (
@@ -90,8 +90,8 @@ CREATE TABLE profiles (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_profiles_role ON profiles(role);
-CREATE INDEX idx_profiles_email ON profiles(email);
+CREATE INDEX IF NOT EXISTS idx_profiles_role ON profiles(role);
+CREATE INDEX IF NOT EXISTS idx_profiles_email ON profiles(email);
 
 -- 2.3 courses (NEW — parent of batches)
 CREATE TABLE courses (
@@ -105,7 +105,7 @@ CREATE TABLE courses (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_courses_active ON courses(is_active);
+CREATE INDEX IF NOT EXISTS idx_courses_active ON courses(is_active);
 
 -- 2.4 batches (UPDATED — now has course_id FK)
 CREATE TABLE batches (
@@ -121,8 +121,8 @@ CREATE TABLE batches (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_batches_course ON batches(course_id);
-CREATE INDEX idx_batches_active ON batches(is_active);
+CREATE INDEX IF NOT EXISTS idx_batches_course ON batches(course_id);
+CREATE INDEX IF NOT EXISTS idx_batches_active ON batches(is_active);
 
 -- 2.5 batch_students and batch_teachers (junction tables)
 CREATE TABLE batch_students (
@@ -139,8 +139,8 @@ CREATE TABLE batch_teachers (
   PRIMARY KEY (batch_id, user_id)
 );
 
-CREATE INDEX idx_batch_students_user ON batch_students(user_id);
-CREATE INDEX idx_batch_teachers_user ON batch_teachers(user_id);
+CREATE INDEX IF NOT EXISTS idx_batch_students_user ON batch_students(user_id);
+CREATE INDEX IF NOT EXISTS idx_batch_teachers_user ON batch_teachers(user_id);
 
 -- 2.6 sessions and webinar_attendance (live trading sessions)
 CREATE TABLE sessions (
@@ -154,9 +154,9 @@ CREATE TABLE sessions (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_sessions_batch ON sessions(batch_id);
-CREATE INDEX idx_sessions_start ON sessions(start_time);
-CREATE INDEX idx_sessions_live ON sessions(is_live) WHERE is_live = TRUE;
+CREATE INDEX IF NOT EXISTS idx_sessions_batch ON sessions(batch_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_start ON sessions(start_time);
+CREATE INDEX IF NOT EXISTS idx_sessions_live ON sessions(is_live) WHERE is_live = TRUE;
 
 CREATE TABLE session_batch_mappings (
   session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
@@ -164,8 +164,8 @@ CREATE TABLE session_batch_mappings (
   PRIMARY KEY (session_id, batch_id)
 );
 
-CREATE INDEX idx_sbm_session ON session_batch_mappings(session_id);
-CREATE INDEX idx_sbm_batch ON session_batch_mappings(batch_id);
+CREATE INDEX IF NOT EXISTS idx_sbm_session ON session_batch_mappings(session_id);
+CREATE INDEX IF NOT EXISTS idx_sbm_batch ON session_batch_mappings(batch_id);
 
 CREATE TABLE webinar_attendance (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -177,8 +177,8 @@ CREATE TABLE webinar_attendance (
   UNIQUE (session_id, user_id)
 );
 
-CREATE INDEX idx_webinar_attendance_session ON webinar_attendance(session_id);
-CREATE INDEX idx_webinar_attendance_user ON webinar_attendance(user_id);
+CREATE INDEX IF NOT EXISTS idx_webinar_attendance_session ON webinar_attendance(session_id);
+CREATE INDEX IF NOT EXISTS idx_webinar_attendance_user ON webinar_attendance(user_id);
 
 CREATE TRIGGER set_updated_at_sessions
   BEFORE UPDATE ON sessions
@@ -199,8 +199,8 @@ CREATE TABLE payment_plans (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_payment_plans_student ON payment_plans(student_id);
-CREATE INDEX idx_payment_plans_course ON payment_plans(course_id);
+CREATE INDEX IF NOT EXISTS idx_payment_plans_student ON payment_plans(student_id);
+CREATE INDEX IF NOT EXISTS idx_payment_plans_course ON payment_plans(course_id);
 
 CREATE TABLE payment_installments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -215,9 +215,9 @@ CREATE TABLE payment_installments (
   UNIQUE (payment_plan_id, installment_number)
 );
 
-CREATE INDEX idx_installments_plan ON payment_installments(payment_plan_id);
-CREATE INDEX idx_installments_status ON payment_installments(status);
-CREATE INDEX idx_installments_due ON payment_installments(due_date);
+CREATE INDEX IF NOT EXISTS idx_installments_plan ON payment_installments(payment_plan_id);
+CREATE INDEX IF NOT EXISTS idx_installments_status ON payment_installments(status);
+CREATE INDEX IF NOT EXISTS idx_installments_due ON payment_installments(due_date);
 
 -- 2.7 payments
 CREATE TABLE payments (
@@ -236,10 +236,10 @@ CREATE TABLE payments (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_payments_student ON payments(student_id);
-CREATE INDEX idx_payments_course ON payments(course_id);
-CREATE INDEX idx_payments_plan ON payments(payment_plan_id);
-CREATE INDEX idx_payments_date ON payments(paid_on);
+CREATE INDEX IF NOT EXISTS idx_payments_student ON payments(student_id);
+CREATE INDEX IF NOT EXISTS idx_payments_course ON payments(course_id);
+CREATE INDEX IF NOT EXISTS idx_payments_plan ON payments(payment_plan_id);
+CREATE INDEX IF NOT EXISTS idx_payments_date ON payments(paid_on);
 
 -- Now add the FK from installments back to payments
 ALTER TABLE payment_installments
@@ -267,8 +267,8 @@ CREATE TABLE invoices (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_invoices_student ON invoices(student_id);
-CREATE INDEX idx_invoices_number ON invoices(invoice_number);
+CREATE INDEX IF NOT EXISTS idx_invoices_student ON invoices(student_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_number ON invoices(invoice_number);
 
 CREATE TABLE receipts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -286,9 +286,9 @@ CREATE TABLE receipts (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_receipts_student ON receipts(student_id);
-CREATE INDEX idx_receipts_payment ON receipts(payment_id);
-CREATE INDEX idx_receipts_number ON receipts(receipt_number);
+CREATE INDEX IF NOT EXISTS idx_receipts_student ON receipts(student_id);
+CREATE INDEX IF NOT EXISTS idx_receipts_payment ON receipts(payment_id);
+CREATE INDEX IF NOT EXISTS idx_receipts_number ON receipts(receipt_number);
 
 -- 2.9 live_sessions, session_batches, session_registrants, attendance
 CREATE TABLE live_sessions (
@@ -305,9 +305,9 @@ CREATE TABLE live_sessions (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_sessions_teacher ON live_sessions(teacher_id);
-CREATE INDEX idx_sessions_start ON live_sessions(start_time);
-CREATE INDEX idx_sessions_status ON live_sessions(status);
+CREATE INDEX IF NOT EXISTS idx_live_sessions_teacher ON live_sessions(teacher_id);
+CREATE INDEX IF NOT EXISTS idx_live_sessions_start ON live_sessions(start_time);
+CREATE INDEX IF NOT EXISTS idx_live_sessions_status ON live_sessions(status);
 
 CREATE TABLE session_batches (
   session_id UUID NOT NULL REFERENCES live_sessions(id) ON DELETE CASCADE,
@@ -338,8 +338,8 @@ CREATE TABLE attendance (
   UNIQUE (session_id, user_id)
 );
 
-CREATE INDEX idx_attendance_session ON attendance(session_id);
-CREATE INDEX idx_attendance_user ON attendance(user_id);
+CREATE INDEX IF NOT EXISTS idx_attendance_session ON attendance(session_id);
+CREATE INDEX IF NOT EXISTS idx_attendance_user ON attendance(user_id);
 
 -- 2.10 recordings + recording_batches (multi-batch flexibility, unified with old videos)
 -- provider (Phase 7B): which video infrastructure owns the asset — 'mux' | 'bunny'.
@@ -365,9 +365,9 @@ CREATE TABLE recordings (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_recordings_session ON recordings(session_id);
-CREATE INDEX idx_recordings_status ON recordings(status);
-CREATE INDEX idx_recordings_topic ON recordings(topic_id);
+CREATE INDEX IF NOT EXISTS idx_recordings_session ON recordings(session_id);
+CREATE INDEX IF NOT EXISTS idx_recordings_status ON recordings(status);
+CREATE INDEX IF NOT EXISTS idx_recordings_topic ON recordings(topic_id);
 
 CREATE TABLE recording_batches (
   recording_id UUID NOT NULL REFERENCES recordings(id) ON DELETE CASCADE,
@@ -376,8 +376,8 @@ CREATE TABLE recording_batches (
   PRIMARY KEY (recording_id, batch_id)
 );
 
-CREATE INDEX idx_recording_batches_recording ON recording_batches(recording_id);
-CREATE INDEX idx_recording_batches_batch ON recording_batches(batch_id);
+CREATE INDEX IF NOT EXISTS idx_recording_batches_recording ON recording_batches(recording_id);
+CREATE INDEX IF NOT EXISTS idx_recording_batches_batch ON recording_batches(batch_id);
 
 -- 2.11 topics, video_progress, video_views
 CREATE TABLE topics (
@@ -406,8 +406,8 @@ CREATE TABLE video_views (
   ip_address TEXT
 );
 
-CREATE INDEX idx_video_views_user ON video_views(user_id);
-CREATE INDEX idx_video_views_video ON video_views(video_id);
+CREATE INDEX IF NOT EXISTS idx_video_views_user ON video_views(user_id);
+CREATE INDEX IF NOT EXISTS idx_video_views_video ON video_views(video_id);
 
 -- 2.12 tests, test_questions, test_attempts
 CREATE TABLE tests (
@@ -458,7 +458,7 @@ CREATE TABLE upload_queue (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_upload_queue_status ON upload_queue(status);
+CREATE INDEX IF NOT EXISTS idx_upload_queue_status ON upload_queue(status);
 
 -- 2.14 bulk_upload_jobs (NEW — track CSV/Excel uploads)
 CREATE TABLE bulk_upload_jobs (
@@ -475,8 +475,8 @@ CREATE TABLE bulk_upload_jobs (
   completed_at TIMESTAMPTZ
 );
 
-CREATE INDEX idx_bulk_jobs_user ON bulk_upload_jobs(uploaded_by);
-CREATE INDEX idx_bulk_jobs_type ON bulk_upload_jobs(job_type);
+CREATE INDEX IF NOT EXISTS idx_bulk_jobs_user ON bulk_upload_jobs(uploaded_by);
+CREATE INDEX IF NOT EXISTS idx_bulk_jobs_type ON bulk_upload_jobs(job_type);
 
 -- ────────────────────────────────────────────────────────────────────────────
 -- 3. RPC function to mark absentees after session ends
