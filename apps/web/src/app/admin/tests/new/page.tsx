@@ -29,6 +29,8 @@ interface SelectedQuestion {
   marks: number;
   sortOrder: number;
   questionText: string;
+  questionType?: string;
+  difficulty?: string;
 }
 
 const STEPS = [
@@ -37,6 +39,18 @@ const STEPS = [
   { id: 3, label: 'Batches', desc: 'Assignment' },
   { id: 4, label: 'Schedule', desc: 'Timing & settings' },
 ] as const;
+
+const typeColors: Record<string, string> = {
+  single_choice: 'bg-blue-100 text-blue-700',
+  multiple_choice: 'bg-purple-100 text-purple-700',
+  true_false: 'bg-cyan-100 text-cyan-700',
+  numerical: 'bg-orange-100 text-orange-700',
+};
+const difficultyColors: Record<string, string> = {
+  easy: 'bg-green-100 text-green-700',
+  medium: 'bg-yellow-100 text-yellow-700',
+  hard: 'bg-red-100 text-red-700',
+};
 
 export default function CreateTestPage() {
   const router = useRouter();
@@ -96,7 +110,7 @@ export default function CreateTestPage() {
   const fetchQuestions = async () => {
     setLoadingQuestions(true);
     try {
-      const result = await getQuestions({ page: questionPage, limit: 20 });
+      const result = await getQuestions({ search: questionSearch || undefined, page: questionPage, limit: 20 });
       setAvailableQuestions(result.items);
     } catch {
       setAvailableQuestions([]);
@@ -132,6 +146,8 @@ export default function CreateTestPage() {
         marks: 1,
         sortOrder: selectedQuestions.length,
         questionText: q.question_text,
+        questionType: q.question_type,
+        difficulty: q.difficulty,
       },
     ]);
   };
@@ -224,7 +240,7 @@ export default function CreateTestPage() {
       </nav>
 
       {/* Stepper */}
-      <div className="flex items-center gap-2 overflow-x-auto scrollbar-thin pb-2" role="navigation" aria-label="Test creation steps">
+      <div className="flex items-center gap-2 overflow-x-auto scrollbar-thin pb-2" aria-label="Test creation steps">
         {STEPS.map((step, idx) => (
           <div key={step.id} className="flex items-center gap-2 shrink-0">
             <button
@@ -237,8 +253,7 @@ export default function CreateTestPage() {
               aria-current={activeStep === step.id ? 'step' : undefined}
             >
               <span className={cn('flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold', activeStep === step.id ? 'bg-white/20' : 'bg-white border border-surface-border')}>{step.id}</span>
-              <span className="hidden sm:inline">{step.label}</span>
-              <span className="sm:hidden">{step.label.slice(0,3)}</span>
+              <span>{step.label}</span>
             </button>
             {idx < STEPS.length - 1 && <div className={cn('h-px w-6 shrink-0', activeStep > step.id ? 'bg-brand-navy' : 'bg-surface-border')} />}
           </div>
@@ -261,7 +276,7 @@ export default function CreateTestPage() {
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                className="w-full rounded-xl border border-surface-border bg-surface-page px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-brand-navy focus:outline-none"
+                className="w-full rounded-xl border border-surface-border bg-surface-page px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                 placeholder="e.g. Mock Test 1"
               />
             </div>
@@ -270,7 +285,7 @@ export default function CreateTestPage() {
               <input
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                className="w-full rounded-xl border border-surface-border bg-surface-page px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-brand-navy focus:outline-none"
+                className="w-full rounded-xl border border-surface-border bg-surface-page px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                 placeholder="Brief description of the test"
               />
             </div>
@@ -280,7 +295,7 @@ export default function CreateTestPage() {
                 value={instructions}
                 onChange={(e) => setInstructions(e.target.value)}
                 rows={3}
-                className="w-full rounded-xl border border-surface-border bg-surface-page px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-brand-navy focus:outline-none"
+                className="w-full rounded-xl border border-surface-border bg-surface-page px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                 placeholder="Instructions for students..."
               />
             </div>
@@ -299,7 +314,7 @@ export default function CreateTestPage() {
                 min="1"
                 value={durationMinutes}
                 onChange={(e) => setDurationMinutes(e.target.value)}
-                className="w-full rounded-xl border border-surface-border bg-surface-page px-4 py-2.5 text-sm text-text-primary focus:border-brand-navy focus:outline-none"
+                className="w-full rounded-xl border border-surface-border bg-surface-page px-4 py-2.5 text-sm text-text-primary focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                 placeholder="e.g. 60"
               />
             </div>
@@ -310,7 +325,7 @@ export default function CreateTestPage() {
                 min="1"
                 value={maxAttempts}
                 onChange={(e) => setMaxAttempts(e.target.value)}
-                className="w-full rounded-xl border border-surface-border bg-surface-page px-4 py-2.5 text-sm text-text-primary focus:border-brand-navy focus:outline-none"
+                className="w-full rounded-xl border border-surface-border bg-surface-page px-4 py-2.5 text-sm text-text-primary focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
               />
             </div>
             <div>
@@ -319,7 +334,7 @@ export default function CreateTestPage() {
                 type="datetime-local"
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
-                className="w-full rounded-xl border border-surface-border bg-surface-page px-4 py-2.5 text-sm text-text-primary focus:border-brand-navy focus:outline-none"
+                className="w-full rounded-xl border border-surface-border bg-surface-page px-4 py-2.5 text-sm text-text-primary focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
               />
             </div>
             <div>
@@ -328,7 +343,7 @@ export default function CreateTestPage() {
                 type="datetime-local"
                 value={endTime}
                 onChange={(e) => setEndTime(e.target.value)}
-                className="w-full rounded-xl border border-surface-border bg-surface-page px-4 py-2.5 text-sm text-text-primary focus:border-brand-navy focus:outline-none"
+                className="w-full rounded-xl border border-surface-border bg-surface-page px-4 py-2.5 text-sm text-text-primary focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
               />
             </div>
           </div>
@@ -347,7 +362,7 @@ export default function CreateTestPage() {
                 required
                 value={totalMarks}
                 onChange={(e) => setTotalMarks(e.target.value)}
-                className="w-full rounded-xl border border-surface-border bg-surface-page px-4 py-2.5 text-sm text-text-primary focus:border-brand-navy focus:outline-none"
+                className="w-full rounded-xl border border-surface-border bg-surface-page px-4 py-2.5 text-sm text-text-primary focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
               />
             </div>
             <div>
@@ -357,7 +372,7 @@ export default function CreateTestPage() {
                 min="0"
                 value={passingMarks}
                 onChange={(e) => setPassingMarks(e.target.value)}
-                className="w-full rounded-xl border border-surface-border bg-surface-page px-4 py-2.5 text-sm text-text-primary focus:border-brand-navy focus:outline-none"
+                className="w-full rounded-xl border border-surface-border bg-surface-page px-4 py-2.5 text-sm text-text-primary focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
               />
             </div>
           </div>
@@ -367,7 +382,7 @@ export default function CreateTestPage() {
                 type="checkbox"
                 checked={negativeMarking}
                 onChange={(e) => setNegativeMarking(e.target.checked)}
-                className="h-4 w-4 rounded border-surface-border text-brand-navy focus:ring-brand-navy"
+                className="h-4 w-4 rounded border-surface-border text-brand-600 focus:ring-brand-500"
               />
               <span className="text-sm font-medium text-text-secondary">Enable Negative Marking</span>
             </label>
@@ -380,7 +395,7 @@ export default function CreateTestPage() {
                   step="0.25"
                   value={negativePerQuestion}
                   onChange={(e) => setNegativePerQuestion(e.target.value)}
-                  className="w-full max-w-xs rounded-xl border border-surface-border bg-surface-page px-4 py-2.5 text-sm text-text-primary focus:border-brand-navy focus:outline-none"
+                  className="w-full max-w-xs rounded-xl border border-surface-border bg-surface-page px-4 py-2.5 text-sm text-text-primary focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                   placeholder="e.g. 0.25"
                 />
               </div>
@@ -403,7 +418,7 @@ export default function CreateTestPage() {
                   type="checkbox"
                   checked={value}
                   onChange={(e) => set(e.target.checked)}
-                  className="h-4 w-4 rounded border-surface-border text-brand-navy focus:ring-brand-navy"
+                  className="h-4 w-4 rounded border-surface-border text-brand-600 focus:ring-brand-500"
                 />
                 <span className="text-sm font-medium text-text-secondary">{label}</span>
               </label>
@@ -425,7 +440,7 @@ export default function CreateTestPage() {
                     type="checkbox"
                     checked={batches.includes(batch.id)}
                     onChange={() => toggleBatch(batch.id)}
-                    className="h-4 w-4 rounded border-surface-border text-brand-navy focus:ring-brand-navy"
+                    className="h-4 w-4 rounded border-surface-border text-brand-600 focus:ring-brand-500"
                   />
                   <span className="text-sm text-text-primary">{batch.name}</span>
                 </label>
@@ -455,11 +470,10 @@ export default function CreateTestPage() {
             <div className="space-y-3">
               {sections.map((section) => (
                 <div key={section.id} className="flex items-center gap-3">
-                  <GripVertical className="h-4 w-4 text-text-muted" />
                   <input
                     value={section.title}
                     onChange={(e) => updateSection(section.id, e.target.value)}
-                    className="flex-1 rounded-xl border border-surface-border bg-surface-page px-4 py-2 text-sm text-text-primary focus:border-brand-navy focus:outline-none"
+                    className="flex-1 rounded-xl border border-surface-border bg-surface-page px-4 py-2 text-sm text-text-primary focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                     placeholder="Section title"
                   />
                   <button
@@ -488,32 +502,45 @@ export default function CreateTestPage() {
             </button>
           </div>
           {selectedQuestions.length === 0 ? (
-            <p className="text-sm text-text-muted">No questions added yet.</p>
+            <p className="text-sm text-text-muted">No questions added yet. Use “Add from Question Bank” to select questions.</p>
           ) : (
             <div className="divide-y divide-surface-border">
-              {selectedQuestions.map((sq, i) => (
-                <div key={sq.questionBankId} className="flex items-center gap-3 py-3">
-                  <span className="text-sm font-medium text-text-muted w-6">{i + 1}.</span>
-                  <p className="flex-1 text-sm text-text-primary truncate">{sq.questionText}</p>
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs text-text-muted">Marks:</label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={sq.marks}
-                      onChange={(e) => updateQuestionMarks(sq.questionBankId, Number(e.target.value))}
-                      className="w-16 rounded-lg border border-surface-border bg-surface-page px-2 py-1 text-sm text-text-primary focus:border-brand-navy focus:outline-none"
-                    />
+              {selectedQuestions.map((sq, i) => {
+                const meta = availableQuestions.find((q) => q.id === sq.questionBankId);
+                const qType = sq.questionType || meta?.question_type;
+                const diff = sq.difficulty || meta?.difficulty;
+                return (
+                  <div key={sq.questionBankId} className="flex items-center gap-3 py-3">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-surface-muted text-xs font-bold text-text-secondary">{i + 1}</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-text-primary" title={sq.questionText}>{sq.questionText}</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        {qType && <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium capitalize', typeColors[qType] || 'bg-gray-100 text-gray-700')}>{qType.replace('_',' ')}</span>}
+                        {diff && <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium capitalize', difficultyColors[diff] || 'bg-gray-100 text-gray-700')}>{diff}</span>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <label htmlFor={`marks-${sq.questionBankId}`} className="text-xs font-medium text-text-secondary">Marks</label>
+                      <input
+                        id={`marks-${sq.questionBankId}`}
+                        type="number"
+                        min="0"
+                        value={sq.marks}
+                        onChange={(e) => updateQuestionMarks(sq.questionBankId, Number(e.target.value))}
+                        className="w-20 rounded-lg border border-surface-border bg-surface-page px-3 py-2 text-sm text-text-primary focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 min-h-[44px]"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeQuestion(sq.questionBankId)}
+                      aria-label={`Remove question ${i + 1}: ${sq.questionText.slice(0, 30)}`}
+                      className="rounded-lg p-2 text-text-muted hover:bg-surface-muted hover:text-red-600 min-h-[44px] min-w-[44px] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/20"
+                    >
+                      <X className="h-4 w-4" aria-hidden="true" />
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => removeQuestion(sq.questionBankId)}
-                    className="rounded-lg p-1.5 text-text-muted hover:bg-surface-muted hover:text-red-600"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -586,17 +613,25 @@ export default function CreateTestPage() {
                   value={questionSearch}
                   onChange={(e) => { setQuestionSearch(e.target.value); setQuestionPage(1); }}
                   placeholder="Search questions..."
-                  className="w-full rounded-xl border border-surface-border bg-surface-page py-2 pl-10 pr-4 text-sm text-text-primary focus:border-brand-navy focus:outline-none"
+                  className="w-full rounded-xl border border-surface-border bg-surface-page py-2 pl-10 pr-4 text-sm text-text-primary focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                 />
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-4">
               {loadingQuestions ? (
                 <div className="flex justify-center py-8">
-                  <div className="h-6 w-6 animate-spin rounded-full border-4 border-surface-border border-t-brand-navy" />
+                  <div className="h-6 w-6 animate-spin rounded-full border-4 border-surface-border border-t-brand-600" />
                 </div>
               ) : availableQuestions.length === 0 ? (
-                <p className="py-8 text-center text-sm text-text-muted">No questions found.</p>
+                <div className="py-8 text-center">
+                  <p className="text-sm font-medium text-text-primary">{questionSearch ? 'No matching questions' : 'No questions found'}</p>
+                  <p className="mt-1 text-xs text-text-muted">{questionSearch ? `No questions match “${questionSearch}”. Try different search.` : 'No questions in bank.'}</p>
+                  {questionSearch && (
+                    <button onClick={() => setQuestionSearch('')} className="mt-3 inline-flex min-h-[44px] items-center justify-center rounded-xl border border-surface-border px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-muted">
+                      Clear search
+                    </button>
+                  )}
+                </div>
               ) : (
                 <div className="space-y-2">
                   {availableQuestions.map((q) => {
@@ -619,17 +654,12 @@ export default function CreateTestPage() {
                           className="mt-0.5 h-4 w-4 rounded border-surface-border text-brand-navy"
                         />
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-text-primary truncate">{q.question_text}</p>
+                          <p className="text-sm font-medium text-text-primary truncate" title={q.question_text}>{q.question_text}</p>
                           <div className="mt-1 flex items-center gap-2">
-                            <span className="rounded-full bg-surface-muted px-2 py-0.5 text-xs capitalize text-text-secondary">
+                            <span className={cn('inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize', typeColors[q.question_type] || 'bg-gray-100 text-gray-700')}>
                               {q.question_type?.replace('_', ' ')}
                             </span>
-                            <span className={cn(
-                              'rounded-full px-2 py-0.5 text-xs capitalize',
-                              q.difficulty === 'easy' && 'bg-green-100 text-green-700',
-                              q.difficulty === 'medium' && 'bg-yellow-100 text-yellow-700',
-                              q.difficulty === 'hard' && 'bg-red-100 text-red-700',
-                            )}>
+                            <span className={cn('inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize', difficultyColors[q.difficulty] || 'bg-gray-100 text-gray-700')}>
                               {q.difficulty}
                             </span>
                           </div>
