@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, useId } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { ROUTES } from '@/lib/constants';
 import { useSession } from '@/hooks/useSession';
 import { NavigationLink } from '@/components/shared/NavigationLink';
 import { Button } from '@/components/ui/Button';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import {
   LayoutDashboard,
   Users,
@@ -197,6 +198,12 @@ export function AdminSidebarWrapper() {
   const { logout, isLoggingOut } = useSession();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [mobileOpen, setMobileOpen] = useState(false);
+  const drawerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const drawerTitleId = useId();
+  const closeDrawer = useCallback(() => setMobileOpen(false), []);
+  useFocusTrap(drawerRef as React.RefObject<HTMLElement>, mobileOpen, closeDrawer);
 
   useEffect(() => { setCollapsed(loadCollapsedState()); }, []);
 
@@ -217,13 +224,22 @@ export function AdminSidebarWrapper() {
   // Close mobile drawer on route change
   useEffect(() => { setMobileOpen(false); }, [pathname]);
 
+  // Focus return + body scroll lock (UX-2)
   useEffect(() => {
-    if (!mobileOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setMobileOpen(false);
+    if (mobileOpen) {
+      previousFocusRef.current = document.activeElement as HTMLElement | null;
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+      const prev = previousFocusRef.current;
+      if (prev && typeof prev.focus === 'function') {
+        setTimeout(() => prev.focus(), 0);
+      }
+      previousFocusRef.current = null;
+    }
+    return () => {
+      document.body.style.overflow = '';
     };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
   }, [mobileOpen]);
 
   const toggleGroup = useCallback((label: string) => {
@@ -259,9 +275,13 @@ export function AdminSidebarWrapper() {
           <span className="text-sm font-bold text-white">MCT Learn Admin</span>
         </div>
         <button
+          ref={triggerRef}
           onClick={() => setMobileOpen(true)}
-          className="rounded-lg p-2 text-sidebar-text hover:bg-sidebar-hover"
+          className="rounded-lg p-2 text-sidebar-text hover:bg-sidebar-hover min-h-[44px] min-w-[44px] flex items-center justify-center"
           aria-label="Open navigation menu"
+          aria-expanded={mobileOpen}
+          aria-controls="admin-mobile-drawer"
+          aria-haspopup="dialog"
         >
           <Menu className="h-5 w-5" />
         </button>
@@ -273,13 +293,22 @@ export function AdminSidebarWrapper() {
           <div
             className="absolute inset-0 bg-black/50 backdrop-blur-sm"
             onClick={() => setMobileOpen(false)}
+            aria-hidden="true"
           />
-          <div className="absolute left-0 top-0 bottom-0 w-72 bg-sidebar-bg shadow-xl flex flex-col motion-safe:animate-slide-in-right">
+          <div
+            ref={drawerRef}
+            id="admin-mobile-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={drawerTitleId}
+            tabIndex={-1}
+            className="absolute left-0 top-0 bottom-0 w-72 bg-sidebar-bg shadow-xl flex flex-col motion-safe:animate-slide-in-right outline-none"
+          >
             <div className="flex items-center justify-between p-4 border-b border-sidebar-divider">
-              <span className="text-sm font-bold text-white">Navigation</span>
+              <span id={drawerTitleId} className="text-sm font-bold text-white">Navigation</span>
               <button
                 onClick={() => setMobileOpen(false)}
-                className="rounded-lg p-2 text-sidebar-text hover:bg-sidebar-hover"
+                className="rounded-lg p-2 text-sidebar-text hover:bg-sidebar-hover min-h-[44px] min-w-[44px] flex items-center justify-center"
                 aria-label="Close navigation"
               >
                 <X className="h-5 w-5" />

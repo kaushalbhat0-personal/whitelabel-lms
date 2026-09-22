@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback, useId } from 'react';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { ROUTES } from '@/lib/constants';
 import { NavigationLink } from '@/components/shared/NavigationLink';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import {
   LayoutDashboard,
   BookOpen,
@@ -35,8 +36,14 @@ export function StudentBottomNav() {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+  const sheetTitleId = useId();
+
+  const closeMore = useCallback(() => setMoreOpen(false), []);
+
+  useFocusTrap(sheetRef as React.RefObject<HTMLElement>, moreOpen, closeMore);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -44,29 +51,26 @@ export function StudentBottomNav() {
         setMoreOpen(false);
       }
     }
-    function handleEscape(e: KeyboardEvent) {
-      if (e.key === 'Escape') setMoreOpen(false);
-    }
     document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleEscape);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleEscape);
-    };
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // UX-1A: restore focus to trigger when More sheet closes (mirrors Modal pattern)
+  // Restore focus + body scroll lock (UX-2)
   useEffect(() => {
     if (moreOpen) {
       previousFocusRef.current = document.activeElement as HTMLElement | null;
+      document.body.style.overflow = 'hidden';
     } else {
+      document.body.style.overflow = '';
       const prev = previousFocusRef.current;
       if (prev && typeof prev.focus === 'function') {
-        // delay to ensure DOM settled after sheet unmount
         setTimeout(() => prev.focus(), 0);
       }
       previousFocusRef.current = null;
     }
+    return () => {
+      document.body.style.overflow = '';
+    };
   }, [moreOpen]);
 
   const isActive = (href: string, exact?: boolean) =>
@@ -109,7 +113,8 @@ export function StudentBottomNav() {
             onClick={() => setMoreOpen(!moreOpen)}
             aria-label="More navigation options"
             aria-expanded={moreOpen}
-            aria-haspopup="true"
+            aria-haspopup="dialog"
+            aria-controls={moreOpen ? 'student-more-sheet' : undefined}
             className={cn(
               'bottom-nav-link',
               (anyMoreActive || moreOpen) && 'active',
@@ -130,27 +135,40 @@ export function StudentBottomNav() {
           </button>
 
           {moreOpen && (
-            <div className="absolute bottom-full right-0 mb-2 max-w-[calc(100vw-16px)] w-40 motion-safe:animate-fade-in rounded-card border border-surface-border bg-surface-card p-2 shadow-elevated">
-              {moreItems.map((item) => {
-                const active = isActive(item.href, false);
-                return (
-                  <NavigationLink
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setMoreOpen(false)}
-                    className={cn(
-                      'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
-                      active
-                        ? 'bg-brand-50 text-brand-700'
-                        : 'text-text-secondary hover:bg-surface-muted hover:text-text-primary',
-                    )}
-                  >
-                    <item.icon className="h-4 w-4" />
-                    {item.label}
-                  </NavigationLink>
-                );
-              })}
-            </div>
+            <>
+              {/* UX-2: inert backdrop — prevents background interaction/keyboard */}
+              <div className="fixed inset-0 z-40 bg-transparent" aria-hidden="true" onClick={closeMore} />
+              <div
+                ref={sheetRef}
+                id="student-more-sheet"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={sheetTitleId}
+                tabIndex={-1}
+                className="absolute bottom-full right-0 z-50 mb-2 max-w-[calc(100vw-16px)] w-40 motion-safe:animate-fade-in rounded-card border border-surface-border bg-surface-card p-2 shadow-elevated outline-none"
+              >
+                <span id={sheetTitleId} className="sr-only">More navigation</span>
+                {moreItems.map((item) => {
+                  const active = isActive(item.href, false);
+                  return (
+                    <NavigationLink
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setMoreOpen(false)}
+                      className={cn(
+                        'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors min-h-[44px]',
+                        active
+                          ? 'bg-brand-50 text-brand-700'
+                          : 'text-text-secondary hover:bg-surface-muted hover:text-text-primary',
+                      )}
+                    >
+                      <item.icon className="h-4 w-4" />
+                      {item.label}
+                    </NavigationLink>
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
       </div>

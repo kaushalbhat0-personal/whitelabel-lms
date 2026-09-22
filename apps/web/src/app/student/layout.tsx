@@ -1,6 +1,7 @@
 import { ReactNode } from 'react';
 import { StudentSidebar } from '@/components/layout/StudentSidebar';
 import { StudentBottomNav } from '@/components/layout/StudentBottomNav';
+import { StudentTopBar } from '@/components/layout/StudentTopBar';
 import { SessionExpiredOverlay } from '@/components/shared/SessionExpiredOverlay';
 import { GuardRoute } from '@/lib/guards/client-guard';
 import { NotificationBell } from '@/components/student/NotificationBell';
@@ -25,8 +26,8 @@ export default function StudentLayout({ children }: { children: ReactNode }) {
               {/* Desktop top bar — hidden on mobile */}
               <header className="hidden h-14 items-center border-b border-surface-border bg-white px-8 md:flex">
                 <div className="flex flex-1 items-center gap-2">
-                  <div className="h-1.5 w-1.5 motion-safe:animate-pulse rounded-full bg-brand-500" />
-                  <span className="text-sm font-medium text-text-secondary">Student Dashboard</span>
+                  <div className="h-1.5 w-1.5 motion-safe:animate-pulse rounded-full bg-brand-500" aria-hidden="true" />
+                  <StudentTopBar />
                 </div>
                 <div className="flex items-center gap-3">
                   <NotificationBell />
