@@ -248,26 +248,26 @@ export default function AdminQuestionsPage() {
                           {q.is_archived ? (
                             <button
                               onClick={() => handleUnarchive(q.id)}
-                              className="rounded-lg p-2 text-text-muted hover:bg-surface-muted hover:text-green-600"
-                              title="Unarchive"
+                              aria-label={`Unarchive question: ${q.question_text.slice(0, 40)}`}
+                              className="flex items-center justify-center rounded-lg p-2 min-h-[44px] min-w-[44px] text-text-muted hover:bg-surface-muted hover:text-green-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 transition-colors"
                             >
-                              <RefreshCw className="h-4 w-4" />
+                              <RefreshCw className="h-4 w-4" aria-hidden="true" />
                             </button>
                           ) : (
                             <button
                               onClick={() => handleArchive(q.id)}
-                              className="rounded-lg p-2 text-text-muted hover:bg-surface-muted hover:text-orange-600"
-                              title="Archive"
+                              aria-label={`Archive question: ${q.question_text.slice(0, 40)}`}
+                              className="flex items-center justify-center rounded-lg p-2 min-h-[44px] min-w-[44px] text-text-muted hover:bg-surface-muted hover:text-orange-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 transition-colors"
                             >
-                              <Archive className="h-4 w-4" />
+                              <Archive className="h-4 w-4" aria-hidden="true" />
                             </button>
                           )}
                           <button
                             onClick={() => setShowConfirmDelete(q)}
-                            className="rounded-lg p-2 text-text-muted hover:bg-surface-muted hover:text-red-600"
-                            title="Delete"
+                            aria-label={`Delete question: ${q.question_text.slice(0, 40)}`}
+                            className="flex items-center justify-center rounded-lg p-2 min-h-[44px] min-w-[44px] text-text-muted hover:bg-surface-muted hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 transition-colors"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-4 w-4" aria-hidden="true" />
                           </button>
                         </div>
                       </td>

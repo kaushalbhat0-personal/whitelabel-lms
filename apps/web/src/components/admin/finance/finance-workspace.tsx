@@ -193,10 +193,16 @@ export function FinanceWorkspace({
     { key: 'actions', header: 'Actions', render: (item: any) => (
       <div className="flex items-center gap-1.5">
         {item.status !== 'paid' && item.installmentId && (
-          <button onClick={() => setConfirmPay({ id: item.installmentId, label: item.name || item.email || 'student', amount: item.amount || 0 })} className="rounded-lg px-2 py-1 text-xs font-medium text-emerald-600 hover:bg-emerald-50 transition-colors">Mark Paid</button>
+          <button
+            onClick={() => setConfirmPay({ id: item.installmentId, label: item.name || item.email || 'student', amount: item.amount || 0 })}
+            aria-label={`Mark paid — ${formatCurrency(item.amount || 0)} for ${item.name || item.email || 'student'}`}
+            className="rounded-lg px-3 py-2 min-h-[40px] text-xs font-medium text-emerald-600 hover:bg-emerald-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
+          >
+            Mark Paid
+          </button>
         )}
-        <Link href={`/admin/students/${item.studentId || item.id}`} className="rounded-lg px-2 py-1 text-xs text-text-muted hover:text-text-secondary transition-colors">
-          <ChevronRight className="h-4 w-4" />
+        <Link href={`/admin/students/${item.studentId || item.id}`} aria-label={`View ${item.name || 'student'}`} className="flex items-center justify-center rounded-lg p-2 min-h-[44px] min-w-[44px] text-text-muted hover:bg-surface-muted hover:text-text-secondary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+          <ChevronRight className="h-4 w-4" aria-hidden="true" />
         </Link>
       </div>
     )},

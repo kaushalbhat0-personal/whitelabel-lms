@@ -170,8 +170,13 @@ function SessionTable({
   formatDateTime: (iso: string) => string;
 }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-      <table className="w-full text-left text-sm">
+    <div
+      className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm scrollbar-thin focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+      role="region"
+      aria-label="Sessions table"
+      tabIndex={0}
+    >
+      <table className="w-full min-w-[640px] text-left text-sm">
         <thead className="border-b border-gray-200 bg-gray-50">
           <tr>
             <th className="px-5 py-3 font-medium text-gray-600">Title</th>

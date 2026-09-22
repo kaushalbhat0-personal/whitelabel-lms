@@ -284,9 +284,13 @@ export function AdminDataTable<T>({
           <thead>
             <tr className="bg-surface-muted">
               {bulkActions && (
-                <th className="px-3 py-3 w-10">
-                  <button onClick={toggleSelectAll} className="p-0.5 rounded hover:bg-surface-border">
-                    {allSelected ? <CheckSquare className="h-4 w-4 text-brand-600" /> : <Square className="h-4 w-4 text-text-muted" />}
+                <th className="px-2 py-2 w-12">
+                  <button
+                    onClick={toggleSelectAll}
+                    aria-label="Select all rows"
+                    className="flex items-center justify-center rounded-lg p-2 min-h-[44px] min-w-[44px] hover:bg-surface-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 transition-colors"
+                  >
+                    {allSelected ? <CheckSquare className="h-4 w-4 text-brand-600" aria-hidden="true" /> : <Square className="h-4 w-4 text-text-muted" aria-hidden="true" />}
                   </button>
                 </th>
               )}
@@ -345,9 +349,13 @@ export function AdminDataTable<T>({
                       onClick={onRowClick ? () => onRowClick(item) : undefined}
                     >
                       {bulkActions && (
-                        <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
-                          <button onClick={() => toggleSelect(keyExtractor(item))} className="p-0.5 rounded hover:bg-surface-border">
-                            {selectedIds.has(keyExtractor(item)) ? <CheckSquare className="h-4 w-4 text-brand-600" /> : <Square className="h-4 w-4 text-text-muted" />}
+                        <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={() => toggleSelect(keyExtractor(item))}
+                            aria-label={`Select row ${keyExtractor(item)}`}
+                            className="flex items-center justify-center rounded-lg p-2 min-h-[44px] min-w-[44px] hover:bg-surface-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 transition-colors"
+                          >
+                            {selectedIds.has(keyExtractor(item)) ? <CheckSquare className="h-4 w-4 text-brand-600" aria-hidden="true" /> : <Square className="h-4 w-4 text-text-muted" aria-hidden="true" />}
                           </button>
                         </td>
                       )}
