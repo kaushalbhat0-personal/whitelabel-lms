@@ -47,12 +47,21 @@ export class PaymentsService {
    * - Due dates are spaced 30 days apart starting from startDate
    *   (defaults to today).
    *
+   * P1 finance foundation:
+   * - total_amount is the FINAL AGREED FEE (GST inclusive).
+   * - Optional standard_course_fee / discount_amount are snapshotted when
+   *   supplied. If supplied, validates standard - discount == total (cent-safe).
+   * - Optional booking_amount is snapshotted; 0 is valid explicit, NULL means
+   *   unspecified (legacy). Schedule redesign for booking/EMI split is P2;
+   *   this phase only stores and validates the amount.
+   *
    * Steps:
    *   1. Validate that the student exists and is a student.
    *   2. Validate that the course exists and is active.
-   *   3. Insert the payment_plan row.
-   *   4. Generate the installments array and bulk insert.
-   *   5. Return the plan with its installments.
+   *   3. Validate P1 finance fields (standard/discount/booking).
+   *   4. Insert the payment_plan row with snapshot fields.
+   *   5. Generate the installments array and bulk insert.
+   *   6. Return the plan with its installments.
    */
   async createPaymentPlan(dto: CreatePaymentPlanDto, adminId: string) {
     // Validate student
@@ -81,6 +90,56 @@ export class PaymentsService {
       throw new BadRequestException('Cannot create payment plan for an inactive course');
     }
 
+    // ── P1: agreed-fee validation (standard -> discount -> final)
+    // Keep currency-safe cent comparison to avoid float equality pitfalls.
+    const toCents = (n: number) => Math.round(n * 100);
+    const hasStandard = dto.standardCourseFee !== undefined && dto.standardCourseFee !== null;
+    const hasDiscount =
+      dto.discountAmount !== undefined && dto.discountAmount !== null;
+    const hasBooking =
+      dto.bookingAmount !== undefined && dto.bookingAmount !== null;
+
+    if (hasDiscount && !hasStandard) {
+      throw new BadRequestException(
+        'standardCourseFee is required when discountAmount is provided',
+      );
+    }
+
+    if (hasStandard) {
+      if (dto.standardCourseFee! < 0.01) {
+        throw new BadRequestException('standardCourseFee must be at least 0.01');
+      }
+      const stdCents = toCents(dto.standardCourseFee!);
+      const disCents = hasDiscount ? toCents(dto.discountAmount!) : 0;
+      if (disCents < 0) {
+        throw new BadRequestException('discountAmount must be at least 0');
+      }
+      if (disCents > stdCents) {
+        throw new BadRequestException('discountAmount cannot exceed standardCourseFee');
+      }
+      const expectedFinalCents = stdCents - disCents;
+      const actualFinalCents = toCents(dto.totalAmount);
+      if (expectedFinalCents !== actualFinalCents) {
+        throw new BadRequestException(
+          `Inconsistent totalAmount: standardCourseFee (${dto.standardCourseFee}) - discountAmount (${dto.discountAmount ?? 0}) = ${(expectedFinalCents / 100).toFixed(2)}, but totalAmount is ${dto.totalAmount.toFixed(2)}`,
+        );
+      }
+    } else if (hasDiscount) {
+      // already handled above (hasDiscount && !hasStandard) — kept for clarity
+      throw new BadRequestException(
+        'standardCourseFee is required when discountAmount is provided',
+      );
+    }
+
+    if (hasBooking) {
+      if (dto.bookingAmount! < 0) {
+        throw new BadRequestException('bookingAmount must be at least 0');
+      }
+      if (toCents(dto.bookingAmount!) > toCents(dto.totalAmount)) {
+        throw new BadRequestException('bookingAmount cannot exceed totalAmount (final agreed fee)');
+      }
+    }
+
     // 1. Insert payment plan
     const { data: plan, error: planError } = await this.supabaseService.client
       .from(TABLES.PAYMENT_PLANS)
@@ -92,6 +151,11 @@ export class PaymentsService {
         notes: dto.notes ?? null,
         status: PaymentPlanStatus.ACTIVE,
         created_by: adminId,
+        // P1 financial snapshot — NULL/0 preserved for legacy plans when fields not supplied
+        standard_course_fee: hasStandard ? dto.standardCourseFee! : null,
+        discount_amount: hasDiscount ? dto.discountAmount! : 0,
+        discount_reason: dto.discountReason ?? null,
+        booking_amount: hasBooking ? dto.bookingAmount! : null,
       })
       .select()
       .single();
@@ -108,7 +172,14 @@ export class PaymentsService {
       'payment_plan',
       planId,
       adminId,
-      { studentId: dto.studentId, courseId: dto.courseId, totalAmount: dto.totalAmount },
+      {
+        studentId: dto.studentId,
+        courseId: dto.courseId,
+        totalAmount: dto.totalAmount,
+        standardCourseFee: hasStandard ? dto.standardCourseFee : null,
+        discountAmount: hasDiscount ? dto.discountAmount : 0,
+        bookingAmount: hasBooking ? dto.bookingAmount : null,
+      },
     ).catch(() => {});
 
     // 2. Generate installments

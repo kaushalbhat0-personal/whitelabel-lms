@@ -159,6 +159,10 @@ export interface PaymentPlan {
   notes?: string;
   status: PaymentPlanStatus;
   createdBy: string;
+  standardCourseFee?: number | null;
+  discountAmount?: number;
+  discountReason?: string | null;
+  bookingAmount?: number | null;
 }
 
 export interface PaymentInstallment {
@@ -193,6 +197,7 @@ export interface Invoice {
   studentId: string;
   courseId: string;
   paymentId?: string;
+  paymentPlanId?: string | null;
   subtotal: number;
   cgstAmount: number;
   sgstAmount: number;
@@ -201,6 +206,7 @@ export interface Invoice {
   gstApplicable: boolean;
   issuedOn: string;
   pdfUrl?: string;
+  storagePath?: string | null;
   emailSentAt?: string;
   emailSentTo?: string;
   generatedBy: string;
@@ -216,6 +222,7 @@ export interface Receipt {
   amount: number;
   issuedOn: string;
   pdfUrl?: string;
+  storagePath?: string | null;
   emailSentAt?: string;
   emailSentTo?: string;
   generatedBy: string;
