@@ -459,11 +459,18 @@ export class PaymentsService {
       throw new BadRequestException('Booking amount must be greater than 0 for this plan');
     }
 
-    // Duplicate guard — booking payments have installment_id IS NULL
+    if (p.status !== PaymentPlanStatus.ACTIVE) {
+      throw new BadRequestException(
+        `Cannot record booking payment — plan is ${p.status}`,
+      );
+    }
+
+    // Duplicate guard — booking payments have installment_id IS NULL + amount == booking
     const { data: existing } = await this.supabaseService.client
       .from(TABLES.PAYMENTS)
       .select('id')
       .eq('payment_plan_id', planId)
+      .eq('amount', bookingAmount)
       .is('installment_id', null)
       .limit(1)
       .maybeSingle();

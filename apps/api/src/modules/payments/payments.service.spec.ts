@@ -415,25 +415,29 @@ describe('PaymentsService — P1 Finance Agreed Fee Foundation', () => {
   });
 
   describe('P2 booking payment', () => {
-    const PLAN_WITH_BOOKING = { id: PLAN_ID, student_id: STUDENT, course_id: COURSE, booking_amount: 5163, total_amount: 62705 };
+    const PLAN_WITH_BOOKING = { id: PLAN_ID, student_id: STUDENT, course_id: COURSE, booking_amount: 5163, total_amount: 62705, status: 'active' };
 
-    function mockBookingSetup(existingBooking: any) {
+    function mockBookingSetup(existingBooking: any, planOverride?: any) {
       // For recordBookingPayment: first call is payment_plans single, second is payments duplicate check, third is insert payments
       let call = 0;
+      const planData = planOverride ?? PLAN_WITH_BOOKING;
       client.from.mockImplementation((table: string) => {
         if (table === 'payment_plans') {
-          return { select: jest.fn(() => ({ eq: jest.fn(() => ({ single: jest.fn().mockResolvedValue({ data: PLAN_WITH_BOOKING, error: null }) })) })) } as any;
+          return { select: jest.fn(() => ({ eq: jest.fn(() => ({ single: jest.fn().mockResolvedValue({ data: planData, error: null }) })) })) } as any;
         }
         if (table === 'payments') {
           call++;
           if (call === 1) {
-            // duplicate check: maybeSingle
+            // duplicate check: eq(payment_plan_id) -> eq(amount) -> is(installment_id) -> limit -> maybeSingle
+            const eqAmount = jest.fn(() => ({
+              is: jest.fn(() => ({
+                limit: jest.fn(() => ({ maybeSingle: jest.fn().mockResolvedValue({ data: existingBooking, error: null }) })),
+              })),
+            }));
             return {
               select: jest.fn(() => ({
                 eq: jest.fn(() => ({
-                  is: jest.fn(() => ({
-                    limit: jest.fn(() => ({ maybeSingle: jest.fn().mockResolvedValue({ data: existingBooking, error: null }) })),
-                  })),
+                  eq: eqAmount,
                 })),
               })),
             } as any;
@@ -457,9 +461,36 @@ describe('PaymentsService — P1 Finance Agreed Fee Foundation', () => {
       expect(outbox.enqueue).toHaveBeenCalledWith('receipt', expect.objectContaining({ paymentId: 'pay1' }));
     });
 
-    it('duplicate booking rejected', async () => {
+    it('ACTIVE -> booking allowed', async () => {
+      mockBookingSetup(null, { ...PLAN_WITH_BOOKING, status: 'active' });
+      await expect(service.recordBookingPayment(PLAN_ID, { paymentMethod: 'upi' as any }, ADMIN)).resolves.toBeDefined();
+    });
+
+    it('COMPLETED -> booking rejected', async () => {
+      mockBookingSetup(null, { ...PLAN_WITH_BOOKING, status: 'completed' });
+      await expect(service.recordBookingPayment(PLAN_ID, { paymentMethod: 'upi' as any }, ADMIN)).rejects.toThrow(/plan is completed/);
+    });
+
+    it('CANCELLED -> booking rejected', async () => {
+      mockBookingSetup(null, { ...PLAN_WITH_BOOKING, status: 'cancelled' });
+      await expect(service.recordBookingPayment(PLAN_ID, { paymentMethod: 'upi' as any }, ADMIN)).rejects.toThrow(/plan is cancelled/);
+    });
+
+    it('duplicate booking rejected (same plan + same amount + NULL installment)', async () => {
       mockBookingSetup({ id: 'existing' });
       await expect(service.recordBookingPayment(PLAN_ID, { paymentMethod: 'upi' as any }, ADMIN)).rejects.toThrow(/already recorded/);
+    });
+
+    it('different NULL-installment payment amount does not falsely trigger duplicate guard', async () => {
+      // Guard now checks amount==bookingAmount, so a standalone payment of 1000 with NULL installment does not block 5163 booking
+      mockBookingSetup(null); // no matching bookingAmount row -> should allow
+      await expect(service.recordBookingPayment(PLAN_ID, { paymentMethod: 'upi' as any }, ADMIN)).resolves.toBeDefined();
+    });
+
+    it('existing EMI payment remains unaffected (installment_id not null not counted)', async () => {
+      // Even if an EMI payment exists, booking guard looks only for installment_id IS NULL, so EMI with installment_id set does not block
+      mockBookingSetup(null);
+      await expect(service.recordBookingPayment(PLAN_ID, { paymentMethod: 'upi' as any }, ADMIN)).resolves.toBeDefined();
     });
 
     it('booking NULL rejected', async () => {
