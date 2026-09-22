@@ -20,6 +20,7 @@ import { Transaction } from '../../common/utils/transaction.util';
 import { logEntityEvent } from '../../common/utils/observability-helper';
 import { CreatePaymentPlanDto } from './dto/create-payment-plan.dto';
 import { MarkInstallmentPaidDto } from './dto/mark-installment-paid.dto';
+import { RecordBookingPaymentDto } from './dto/record-booking-payment.dto';
 
 @Injectable()
 export class PaymentsService {
@@ -37,30 +38,36 @@ export class PaymentsService {
   // ──────────────────────────────────────────────────────────────
 
   /**
-   * Create a payment plan with EMI installments.
+   * Create a payment plan with booking-independent EMI installments.
    *
-   * EMI calculation:
-   * - Divide totalAmount by numberOfInstallments and round each installment
-   *   down to 2 decimal places (floor) so we never over-collect.
-   * - The last installment absorbs any remaining cents so that
-   *   sum(installments) === totalAmount exactly.
-   * - Due dates are spaced 30 days apart starting from startDate
-   *   (defaults to today).
+   * P2 business model:
+   * - total_amount is the FINAL AGREED FEE (GST inclusive).
+   * - booking_amount is an independent booking payment (NOT installment #1).
+   *   NULL (legacy) is treated as 0 for schedule generation.
+   * - installment_count means number of EMIs AFTER booking.
+   * - remaining = total_amount - (booking_amount ?? 0) is split across EMIs.
+   *
+   * EMI calculation (cent-safe):
+   * - remainingCents = totalCents - bookingCents
+   * - baseCents = floor(remainingCents / installment_count)
+   * - lastCents = remainingCents - baseCents * (count - 1)
+   * - Due dates are spaced 30 days apart starting from startDate (defaults to today).
+   * - Sum(EMIs) == remaining, and booking + sum(EMIs) == total.
+   * - Last EMI absorbs rounding remainder. Zero remaining (booking==total) yields zero-amount EMIs.
    *
    * P1 finance foundation:
    * - total_amount is the FINAL AGREED FEE (GST inclusive).
    * - Optional standard_course_fee / discount_amount are snapshotted when
    *   supplied. If supplied, validates standard - discount == total (cent-safe).
    * - Optional booking_amount is snapshotted; 0 is valid explicit, NULL means
-   *   unspecified (legacy). Schedule redesign for booking/EMI split is P2;
-   *   this phase only stores and validates the amount.
+   *   unspecified (legacy). P2 makes schedule booking-independent.
    *
    * Steps:
    *   1. Validate that the student exists and is a student.
    *   2. Validate that the course exists and is active.
    *   3. Validate P1 finance fields (standard/discount/booking).
    *   4. Insert the payment_plan row with snapshot fields.
-   *   5. Generate the installments array and bulk insert.
+   *   5. Generate EMI installments from remaining (not total) and bulk insert.
    *   6. Return the plan with its installments.
    */
   async createPaymentPlan(dto: CreatePaymentPlanDto, adminId: string) {
@@ -182,7 +189,8 @@ export class PaymentsService {
       },
     ).catch(() => {});
 
-    // 2. Generate installments
+    // 2. Generate booking-independent EMI installments (P2)
+    // installment_count = EMIs after booking; remaining = total - booking
     const startDate = dto.startDate
       ? new Date(dto.startDate)
       : new Date();
@@ -190,11 +198,15 @@ export class PaymentsService {
     const totalAmount = dto.totalAmount;
     const count = dto.numberOfInstallments;
 
-    // Floor each regular EMI to 2 decimals so we never over-collect
-    const rawEmi = totalAmount / count;
-    const regularEmi = Math.floor(rawEmi * 100) / 100;
-    // Last installment absorbs rounding difference
-    const lastEmi = +(totalAmount - regularEmi * (count - 1)).toFixed(2);
+    // P2: remaining after independent booking (NULL booking -> 0, legacy preserved)
+    const totalCents = toCents(totalAmount);
+    const bookingCents = hasBooking ? toCents(dto.bookingAmount!) : 0;
+    const remainingCents = totalCents - bookingCents;
+    // remainingCents >=0 guaranteed by P1 validation booking<=total
+    // Zero remaining (booking==total) is valid — yields zero-amount EMIs
+
+    const baseCents = Math.floor(remainingCents / count);
+    const lastCents = remainingCents - baseCents * (count - 1);
 
     const installments: {
       payment_plan_id: string;
@@ -208,7 +220,8 @@ export class PaymentsService {
       const dueDate = new Date(startDate);
       dueDate.setDate(dueDate.getDate() + i * 30);
 
-      const amount = i === count - 1 ? lastEmi : regularEmi;
+      const amountCents = i === count - 1 ? lastCents : baseCents;
+      const amount = amountCents / 100;
 
       installments.push({
         payment_plan_id: planId,
@@ -402,6 +415,103 @@ export class PaymentsService {
     ).catch(() => {});
 
     if (this.redisCache) await this.redisCache.invalidatePaymentsCacheForUser(plan.student_id).catch(() => {});
+
+    return payment as any;
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  //  recordBookingPayment (P2) — independent booking payment
+  // ──────────────────────────────────────────────────────────────
+
+  /**
+   * Record the booking payment for a payment plan.
+   *
+   * P2 model: booking is NOT an installment. It is a standalone payments row
+   * with installment_id=NULL, payment_plan_id=plan.id, amount=plan.booking_amount.
+   * Generates a receipt via outbox (one receipt per payment). Duplicate booking
+   * is rejected via app guard (SELECT existing booking payment). No DB unique
+   * for booking is added in P2 to avoid breaking legitimate non-booking payments
+   * with NULL installment_id — concurrency window is documented.
+   */
+  async recordBookingPayment(
+    planId: string,
+    dto: RecordBookingPaymentDto,
+    adminId: string,
+  ) {
+    const { data: plan, error: planErr } = await this.supabaseService.client
+      .from(TABLES.PAYMENT_PLANS)
+      .select('*')
+      .eq('id', planId)
+      .single();
+
+    if (planErr || !plan) {
+      throw new NotFoundException(`Payment plan ${planId} not found`);
+    }
+
+    const p = plan as any;
+
+    // Must have explicit booking_amount > 0
+    if (p.booking_amount === null || p.booking_amount === undefined) {
+      throw new BadRequestException('This payment plan has no booking amount configured');
+    }
+    const bookingAmount = Number(p.booking_amount);
+    if (bookingAmount <= 0) {
+      throw new BadRequestException('Booking amount must be greater than 0 for this plan');
+    }
+
+    // Duplicate guard — booking payments have installment_id IS NULL
+    const { data: existing } = await this.supabaseService.client
+      .from(TABLES.PAYMENTS)
+      .select('id')
+      .eq('payment_plan_id', planId)
+      .is('installment_id', null)
+      .limit(1)
+      .maybeSingle();
+
+    if (existing) {
+      throw new BadRequestException('Booking payment already recorded for this plan');
+    }
+
+    const paidOn = dto.paymentDate
+      ? new Date(dto.paymentDate).toISOString().split('T')[0]
+      : new Date().toISOString().split('T')[0];
+
+    const { data: payment, error: payErr } = await this.supabaseService.client
+      .from(TABLES.PAYMENTS)
+      .insert({
+        student_id: p.student_id,
+        course_id: p.course_id,
+        payment_plan_id: p.id,
+        installment_id: null,
+        amount: bookingAmount,
+        payment_method: dto.paymentMethod,
+        transaction_id: dto.transactionId ?? null,
+        paid_on: paidOn,
+        is_full_payment: false,
+        recorded_by: adminId,
+      })
+      .select()
+      .single();
+
+    if (payErr || !payment) {
+      this.logger.error(`Failed to record booking payment for plan ${planId}: ${payErr?.message}`);
+      throw new BadRequestException('Failed to record booking payment');
+    }
+
+    await this.outboxService.enqueue('receipt', { paymentId: (payment as any).id }).catch((err) =>
+      this.logger.error(`Failed to enqueue booking receipt for payment ${(payment as any).id}: ${err.message}`),
+    );
+
+    logEntityEvent(
+      this.observabilityService,
+      'BOOKING_PAYMENT_RECORDED',
+      'payment',
+      (payment as any).id,
+      adminId,
+      { planId, studentId: p.student_id, bookingAmount },
+    ).catch(() => {});
+
+    if (this.redisCache) await this.redisCache.invalidatePaymentsCacheForUser(p.student_id).catch(() => {});
 
     return payment as any;
   }

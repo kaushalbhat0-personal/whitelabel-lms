@@ -305,6 +305,18 @@ export class InvoicesService {
    *  10. Update the receipt record with email_sent_at and email_sent_to.
    */
   async createAndSendReceipt(paymentId: string): Promise<void> {
+    // 0. Idempotency — one receipt per payment (uq_receipts_payment_id)
+    // Outbox retry or duplicate enqueue must not create a second receipt.
+    const { data: existingReceipt } = await this.supabaseService.client
+      .from(TABLES.RECEIPTS)
+      .select('id')
+      .eq('payment_id', paymentId)
+      .maybeSingle();
+    if (existingReceipt) {
+      this.logger.log(`Receipt already exists for payment ${paymentId} — skipping duplicate generation`);
+      return;
+    }
+
     // 1. Fetch payment
     const { data: payment, error: payError } = await this.supabaseService.client
       .from(TABLES.PAYMENTS)
@@ -402,10 +414,15 @@ export class InvoicesService {
       });
 
     if (insertError) {
+      // Unique violation (23505) means concurrent retry already inserted receipt — treat as idempotent success
+      if ((insertError as any).code === '23505' || insertError.message?.includes('uq_receipts_payment_id') || insertError.message?.includes('duplicate key')) {
+        this.logger.warn(`Receipt insert conflict for payment ${paymentId} — concurrent duplicate, treating as success`);
+        return;
+      }
       this.logger.error(`Failed to insert receipt record: ${insertError.message}`);
     }
 
-    // 8. Email
+    // 8. Email (P2 keeps automatic email; P3 will separate)
     const emailSent = await this.emailService.sendEmail(
       student.email,
       `Payment Receipt — ${receiptNumber}`,

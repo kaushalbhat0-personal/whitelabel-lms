@@ -17,6 +17,7 @@ import { UserRole } from '@lms/shared-types';
 import { PaymentsService } from './payments.service';
 import { CreatePaymentPlanDto } from './dto/create-payment-plan.dto';
 import { MarkInstallmentPaidDto } from './dto/mark-installment-paid.dto';
+import { RecordBookingPaymentDto } from './dto/record-booking-payment.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
@@ -44,6 +45,16 @@ export class PaymentsController {
     @CurrentUser() user: any,
   ) {
     return this.paymentsService.markInstallmentPaid(id, dto, user.id);
+  }
+
+  @Roles(UserRole.ADMIN)
+  @Post('plans/:id/booking')
+  recordBookingPayment(
+    @Param('id') id: string,
+    @Body() dto: RecordBookingPaymentDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.paymentsService.recordBookingPayment(id, dto, user.id);
   }
 
   @Roles(UserRole.STUDENT)

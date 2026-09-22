@@ -12,6 +12,10 @@ export interface PaymentPlan {
   created_at: string;
   course?: { id: string; name: string };
   installments: PaymentInstallment[];
+  standard_course_fee?: number | null;
+  discount_amount?: number | null;
+  discount_reason?: string | null;
+  booking_amount?: number | null;
 }
 
 export interface PaymentInstallment {
@@ -36,9 +40,23 @@ export async function createPaymentPlan(
     totalAmount: number;
     numberOfInstallments: number;
     startDate?: string;
+    standardCourseFee?: number;
+    discountAmount?: number;
+    discountReason?: string;
+    bookingAmount?: number;
   },
 ) {
   return fetchApi<PaymentPlan>(`${API_ROUTES.PAYMENTS.PLANS}`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function recordBookingPayment(
+  planId: string,
+  data: { paymentMethod: string; transactionId?: string; paymentDate?: string },
+) {
+  return fetchApi<any>(`${API_ROUTES.PAYMENTS.PLANS}/${planId}/booking`, {
     method: 'POST',
     body: JSON.stringify(data),
   });

@@ -100,6 +100,12 @@ export function StudentLedger({ students }: StudentLedgerProps) {
               .filter((i) => i.status === 'paid')
               .reduce((sum, i) => sum + i.amount, 0);
 
+            const booking = (plan as any).booking_amount;
+            const hasBooking = booking !== null && booking !== undefined;
+            const remaining = hasBooking ? (plan.total_amount - booking) : plan.total_amount;
+            const stdFee = (plan as any).standard_course_fee;
+            const disc = (plan as any).discount_amount ?? 0;
+
             return (
               <div key={plan.id}>
                 {/* Plan summary header */}
@@ -114,9 +120,14 @@ export function StudentLedger({ students }: StudentLedgerProps) {
                       {(plan as any).course?.name ?? 'Course'}
                     </p>
                     <p className="text-xs text-gray-500">
-                      &#x20B9; {plan.total_amount.toFixed(2)} —{' '}
-                      {plan.installment_count} installment(s) —{' '}
-                      Paid: &#x20B9; {totalPaid.toFixed(2)}
+                      {stdFee != null ? (
+                        <>Std ₹{Number(stdFee).toFixed(0)} − Disc ₹{Number(disc).toFixed(0)} = </>
+                      ) : null}
+                      Final ₹{plan.total_amount.toFixed(2)} —{' '}
+                      {hasBooking ? (
+                        <>Booking ₹{Number(booking).toFixed(2)} · Remaining ₹{remaining.toFixed(2)} · </>
+                      ) : null}
+                      {plan.installment_count} EMI(s) after booking — Paid EMIs: ₹{totalPaid.toFixed(2)}
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
@@ -139,9 +150,27 @@ export function StudentLedger({ students }: StudentLedgerProps) {
                   </div>
                 </button>
 
-                {/* Expanded installments table */}
+                {/* Expanded booking + EMI schedule (P2: booking independent) */}
                 {isExpanded && (
-                  <div className="border-t border-gray-100 bg-gray-50 px-6 py-3">
+                  <div className="border-t border-gray-100 bg-gray-50 px-6 py-3 space-y-3">
+                    {/* Booking summary */}
+                    <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-medium text-gray-500">Booking Amount</p>
+                        <p className="text-sm font-semibold text-gray-900">
+                          {hasBooking
+                            ? `₹${Number(booking).toFixed(2)} ${Number(booking) === 0 ? '(No booking required)' : ''}`
+                            : 'Not configured (legacy plan)'}
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          Independent payment — not EMI #1 · {hasBooking ? `Remaining for EMIs: ₹${remaining.toFixed(2)}` : `Full fee in EMIs: ₹${plan.total_amount.toFixed(2)}`}
+                        </p>
+                      </div>
+                      <span className="text-xs text-gray-400">
+                        {hasBooking ? 'Record via API: POST /payments/plans/:id/booking' : '—'}
+                      </span>
+                    </div>
+
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="text-left text-xs font-medium uppercase text-gray-500">
