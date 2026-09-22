@@ -19,6 +19,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [sessionReplaced, setSessionReplaced] = useState(false);
   const submittingRef = useRef(false);
+  const forgotSubmittingRef = useRef(false);
   const { login } = useSession();
   const fingerprint = useDeviceFingerprint();
 
@@ -74,6 +75,8 @@ export default function LoginPage() {
 
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (forgotSubmittingRef.current) return;
+    forgotSubmittingRef.current = true;
     setResetLoading(true);
     try {
       await fetchApi(API_ROUTES.AUTH.FORGOT_PASSWORD, {
@@ -85,6 +88,7 @@ export default function LoginPage() {
       setResetSent(true);
     } finally {
       setResetLoading(false);
+      forgotSubmittingRef.current = false;
     }
   };
 
@@ -164,7 +168,7 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={() => setShowForgotPassword(true)}
-                className="text-sm text-brand-600 hover:text-brand-700"
+                className="text-sm text-brand-600 hover:text-brand-700 min-h-[44px] inline-flex items-center px-2 -mr-2"
               >
                 Forgot Password?
               </button>
@@ -194,21 +198,27 @@ export default function LoginPage() {
                 </div>
               ) : (
                 <form onSubmit={handleForgotPassword} className="mt-4 space-y-3">
+                  <label htmlFor="resetEmail" className="block text-xs font-medium text-gray-700">
+                    Email
+                  </label>
                   <input
+                    id="resetEmail"
                     type="email"
                     required
+                    autoComplete="email"
                     value={resetEmail}
                     onChange={(e) => setResetEmail(e.target.value)}
                     placeholder="you@example.com"
                     className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                   />
-                  <button
+                  <Button
                     type="submit"
+                    loading={resetLoading}
                     disabled={resetLoading}
-                    className="w-full rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
+                    className="w-full"
                   >
                     {resetLoading ? 'Sending...' : 'Send Reset Link'}
-                  </button>
+                  </Button>
                 </form>
               )}
 
