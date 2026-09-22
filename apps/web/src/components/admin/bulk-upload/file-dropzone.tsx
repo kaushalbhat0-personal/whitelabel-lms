@@ -111,24 +111,27 @@ export function FileDropzone({ onUploadSuccess }: FileDropzoneProps) {
   );
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-      <div className="mb-4 flex items-center justify-between">
+    <div className="rounded-xl border border-gray-200 bg-white p-4 sm:p-6 shadow-sm">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-semibold text-gray-900">Upload Students</h2>
         <a
           href={`${API_URL}${API_ROUTES.BULK_UPLOAD}/template`}
-          className="inline-flex items-center gap-1 text-sm font-medium text-brand-600 hover:text-brand-700"
+          className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-brand-200 bg-white px-3 py-1.5 text-sm font-medium text-brand-600 hover:text-brand-700 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
         >
-          <Download className="h-4 w-4" />
+          <Download className="h-4 w-4" aria-hidden="true" />
           Download Template
         </a>
       </div>
-      <p className="mb-4 text-sm text-gray-500">
+      <p className="mb-4 text-sm leading-relaxed text-gray-500">
         Upload a CSV or Excel file with columns:{' '}
-        <strong>Name</strong> (full name), <strong>Email</strong>,{' '}
-        <strong>Phone</strong> (optional),{' '}
-        <strong>Course Name</strong> (optional),{' '}
-        <strong>Batch Name</strong> (optional).{' '}
-        Leave Course Name and Batch Name blank if assigning batch later via UI.
+        <span className="inline-flex flex-wrap gap-1 align-middle">
+          <span className="rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs font-medium text-gray-700">Name</span>
+          <span className="rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs font-medium text-gray-700">Email</span>
+          <span className="rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs font-medium text-gray-700">Phone <span className="font-normal text-gray-500">optional</span></span>
+          <span className="rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs font-medium text-gray-700">Course Name <span className="font-normal text-gray-500">optional</span></span>
+          <span className="rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs font-medium text-gray-700">Batch Name <span className="font-normal text-gray-500">optional</span></span>
+        </span>{' '}
+        Leave Course and Batch blank if assigning later via UI.
       </p>
 
       <div
@@ -139,7 +142,11 @@ export function FileDropzone({ onUploadSuccess }: FileDropzoneProps) {
         onDragLeave={() => setIsDragging(false)}
         onDrop={onDrop}
         onClick={() => inputRef.current?.click()}
-        className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-10 transition-colors ${
+        role="button"
+        tabIndex={0}
+        aria-label="Upload CSV or Excel file"
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); inputRef.current?.click(); } }}
+        className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 sm:p-10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 ${
           isDragging
             ? 'border-brand-500 bg-brand-50'
             : 'border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-gray-100'

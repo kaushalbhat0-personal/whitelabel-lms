@@ -22,9 +22,9 @@ export function BulkUploadClient({ initialJobs }: BulkUploadClientProps) {
   }, []);
 
   return (
-    <div className="max-w-7xl mx-auto p-6 space-y-8">
+    <div className="mx-auto max-w-7xl p-4 sm:p-6 space-y-6 sm:space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Bulk Upload</h1>
+        <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Bulk Upload</h1>
         <p className="mt-1 text-sm text-gray-500">
           Import multiple student accounts at once using a CSV or Excel file.
         </p>

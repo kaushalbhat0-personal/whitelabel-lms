@@ -223,9 +223,9 @@ export function FinanceWorkspace({
         'bg-emerald-50 text-emerald-700 border-emerald-200',
       )}>{item.risk === 'high' ? 'High' : item.risk === 'medium' ? 'Medium' : 'Low'}</span>
     )},
-    { key: 'actions', header: 'Actions', render: (item: any) => (
-      <Link href={`/admin/students/${item.id}`} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-brand-600 hover:bg-brand-50 transition-colors">
-        View <ChevronRight className="h-3 w-3" />
+     { key: 'actions', header: 'Actions', render: (item: any) => (
+      <Link href={`/admin/students/${item.id}`} aria-label={`View ${item.name || 'student'}`} className="inline-flex min-h-[44px] items-center justify-center gap-1 rounded-lg px-3 py-2 text-xs font-medium text-brand-600 hover:bg-brand-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+        View <ChevronRight className="h-3 w-3" aria-hidden="true" />
       </Link>
     )},
   ];
@@ -257,18 +257,20 @@ export function FinanceWorkspace({
           { label: 'Students', value: String(studentCount) },
         ]}
         actions={
-          <button onClick={loadAllPlans} className="inline-flex items-center gap-1.5 rounded-xl border border-surface-border px-3 py-2 text-xs font-medium text-text-secondary hover:bg-surface-muted transition-colors">
-            <RefreshCw className="h-3.5 w-3.5" />
+          <button onClick={loadAllPlans} className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-surface-border px-3 py-2 text-xs font-medium text-text-secondary hover:bg-surface-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
             Refresh Data
           </button>
         }
       />
 
       {/* Tabs — scrollable on mobile, no new routes */}
-      <div className="border-b border-surface-border">
-        <nav className="-mb-px flex gap-0 overflow-x-auto scrollbar-thin" role="tablist">
+      <div className="relative -mx-4 border-b border-surface-border px-4 sm:mx-0 sm:px-0">
+        <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 z-10 hidden w-6 bg-gradient-to-r from-white to-transparent max-sm:block" />
+        <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 z-10 hidden w-6 bg-gradient-to-l from-white to-transparent max-sm:block" />
+        <nav className="-mb-px flex gap-0 overflow-x-auto scroll-smooth whitespace-nowrap scrollbar-thin snap-x snap-mandatory" role="tablist" aria-label="Finance sections">
           {TABS.map((tab) => (
-            <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={cn('flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium whitespace-nowrap transition-colors', activeTab === tab.key ? 'border-brand-600 text-brand-600' : 'border-transparent text-text-muted hover:text-text-secondary hover:border-surface-border')} role="tab" aria-selected={activeTab === tab.key}>
+            <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={cn('flex items-center gap-2 whitespace-nowrap border-b-2 px-4 text-sm font-medium transition-colors snap-start min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2', activeTab === tab.key ? 'border-brand-600 text-brand-600' : 'border-transparent text-text-muted hover:border-surface-border hover:text-text-secondary')} role="tab" aria-selected={activeTab === tab.key}>
               {tab.icon}{tab.label}
             </button>
           ))}

@@ -197,10 +197,10 @@ export function UploadRecordingModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header — fixed */}
-        <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-6 py-4">
+        <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-4 sm:px-6 py-4">
           <h2 className="text-lg font-semibold text-gray-900">Upload Recording</h2>
-          <button onClick={handleClose} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
-            <X className="h-5 w-5" />
+          <button onClick={handleClose} aria-label="Close dialog" className="flex items-center justify-center rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 min-h-[44px] min-w-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+            <X className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
 
@@ -432,12 +432,12 @@ export function UploadRecordingModal({
           </div>
 
         {/* Footer — fixed, always visible */}
-        <div className="flex shrink-0 items-center justify-end gap-3 border-t border-gray-200 bg-white px-6 py-4">
+        <div className="flex shrink-0 flex-col-reverse gap-3 border-t border-gray-200 bg-white px-4 sm:px-6 py-4 sm:flex-row sm:items-center sm:justify-end">
           <button
             type="button"
             onClick={handleClose}
             disabled={isSubmitting}
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
           >
             {phase.phase === 'uploading' ? 'Cancel' : 'Close'}
           </button>
@@ -445,7 +445,7 @@ export function UploadRecordingModal({
             <button
               onClick={handleSubmit}
               disabled={!isValid || isSubmitting}
-              className="flex items-center gap-2 rounded-lg bg-brand-600 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
+              className="flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
             >
               {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
               {phase.phase === 'requesting_url'

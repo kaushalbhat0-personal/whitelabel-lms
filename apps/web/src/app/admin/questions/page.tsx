@@ -131,8 +131,8 @@ export default function AdminQuestionsPage() {
         </div>
       </AdminSection>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[180px] max-w-xs">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+        <div className="relative flex-1 min-w-[160px] sm:min-w-[180px] max-w-full sm:max-w-xs">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
           <input
             value={searchQuery}
@@ -146,7 +146,7 @@ export default function AdminQuestionsPage() {
           value={topicFilter}
           onChange={(e) => { setTopicFilter(e.target.value); setPage(1); }}
           aria-label="Filter by topic"
-          className="rounded-xl border border-surface-border bg-surface-card py-2.5 px-4 text-sm text-text-primary focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+          className="w-full sm:w-auto flex-1 sm:flex-none min-w-[130px] rounded-xl border border-surface-border bg-surface-card py-2.5 px-4 text-sm text-text-primary focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 min-h-[44px]"
         >
           <option value="">All Topics</option>
           {topics.map((t) => (
@@ -157,7 +157,7 @@ export default function AdminQuestionsPage() {
           value={difficultyFilter}
           onChange={(e) => { setDifficultyFilter(e.target.value); setPage(1); }}
           aria-label="Filter by difficulty"
-          className="rounded-xl border border-surface-border bg-surface-card py-2.5 px-4 text-sm text-text-primary focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+          className="w-full sm:w-auto flex-1 sm:flex-none min-w-[130px] rounded-xl border border-surface-border bg-surface-card py-2.5 px-4 text-sm text-text-primary focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 min-h-[44px]"
         >
           <option value="">All Difficulties</option>
           <option value="easy">Easy</option>
@@ -168,7 +168,7 @@ export default function AdminQuestionsPage() {
           value={typeFilter}
           onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}
           aria-label="Filter by type"
-          className="rounded-xl border border-surface-border bg-surface-card py-2.5 px-4 text-sm text-text-primary focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+          className="w-full sm:w-auto flex-1 sm:flex-none min-w-[130px] rounded-xl border border-surface-border bg-surface-card py-2.5 px-4 text-sm text-text-primary focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 min-h-[44px]"
         >
           <option value="">All Types</option>
           <option value="single_choice">Single Choice</option>
@@ -278,7 +278,7 @@ export default function AdminQuestionsPage() {
             </div>
 
             {totalPages > 1 && (
-              <div className="flex items-center justify-between border-t border-surface-border px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-surface-border px-4 py-3">
                 <p className="text-sm text-text-muted">
                   Showing {(page - 1) * limit + 1}–{Math.min(page * limit, total)} of {total}
                 </p>
@@ -286,17 +286,19 @@ export default function AdminQuestionsPage() {
                   <button
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
                     disabled={page === 1}
-                    className="rounded-lg p-2 text-text-muted hover:bg-surface-muted hover:text-text-primary disabled:opacity-40"
+                    aria-label="Previous page"
+                    className="flex items-center justify-center rounded-lg p-2 min-h-[44px] min-w-[44px] text-text-muted hover:bg-surface-muted hover:text-text-primary disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
                   >
-                    <ChevronLeft className="h-4 w-4" />
+                    <ChevronLeft className="h-4 w-4" aria-hidden="true" />
                   </button>
-                  <span className="text-sm font-medium text-text-primary">{page}</span>
+                  <span className="text-sm font-medium text-text-primary min-w-[20px] text-center">{page}</span>
                   <button
                     onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                     disabled={page === totalPages}
-                    className="rounded-lg p-2 text-text-muted hover:bg-surface-muted hover:text-text-primary disabled:opacity-40"
+                    aria-label="Next page"
+                    className="flex items-center justify-center rounded-lg p-2 min-h-[44px] min-w-[44px] text-text-muted hover:bg-surface-muted hover:text-text-primary disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
                   >
-                    <ChevronRight className="h-4 w-4" />
+                    <ChevronRight className="h-4 w-4" aria-hidden="true" />
                   </button>
                 </div>
               </div>
@@ -321,7 +323,7 @@ export default function AdminQuestionsPage() {
 
       {showConfirmDelete && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
           onClick={() => setShowConfirmDelete(null)}
         >
           <div
@@ -330,8 +332,8 @@ export default function AdminQuestionsPage() {
           >
             <div className="flex items-center justify-between border-b border-surface-border px-6 py-4">
               <h2 className="text-lg font-semibold text-text-primary">Delete Question</h2>
-              <button onClick={() => setShowConfirmDelete(null)} className="rounded-lg p-1 text-text-muted hover:bg-surface-muted hover:text-text-primary">
-                <X className="h-5 w-5" />
+              <button onClick={() => setShowConfirmDelete(null)} aria-label="Close dialog" className="flex items-center justify-center rounded-lg p-1 text-text-muted hover:bg-surface-muted hover:text-text-primary min-h-[44px] min-w-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+                <X className="h-5 w-5" aria-hidden="true" />
               </button>
             </div>
             <div className="space-y-4 px-6 py-4">
@@ -341,16 +343,16 @@ export default function AdminQuestionsPage() {
                   Are you sure you want to delete this question? This action cannot be undone.
                 </p>
               </div>
-              <div className="flex justify-end gap-3">
+              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                 <button
                   onClick={() => setShowConfirmDelete(null)}
-                  className="rounded-lg border border-surface-border px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-muted"
+                  className="rounded-lg border border-surface-border px-4 py-2.5 text-sm font-medium text-text-secondary hover:bg-surface-muted min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={() => handleDelete(showConfirmDelete.id)}
-                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+                  className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                 >
                   Delete
                 </button>
@@ -455,15 +457,15 @@ function AddQuestionModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl bg-surface-card shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between border-b border-surface-border px-6 py-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto overscroll-contain" onClick={onClose}>
+      <div className="w-full max-w-2xl max-h-[90dvh] max-h-[90svh] overflow-y-auto overscroll-contain rounded-xl bg-surface-card shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-surface-border px-4 sm:px-6 py-4">
           <h2 className="text-lg font-semibold text-text-primary">Add Question</h2>
-          <button onClick={onClose} className="rounded-lg p-1 text-text-muted hover:bg-surface-muted hover:text-text-primary">
-            <X className="h-5 w-5" />
+          <button onClick={onClose} aria-label="Close dialog" className="flex items-center justify-center rounded-lg p-1 text-text-muted hover:bg-surface-muted hover:text-text-primary min-h-[44px] min-w-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+            <X className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4">
           {error && (
             <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
           )}
@@ -479,13 +481,13 @@ function AddQuestionModal({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-1.5 block text-sm font-medium text-text-secondary">Question Type</label>
               <select
                 value={questionType}
                 onChange={(e) => { setQuestionType(e.target.value); setCorrectAnswer(''); }}
-                className="w-full rounded-xl border border-surface-border bg-surface-page px-4 py-2.5 text-sm text-text-primary focus:border-brand-500 focus:outline-none"
+                className="w-full rounded-xl border border-surface-border bg-surface-page px-4 py-2.5 text-sm text-text-primary focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
               >
                 <option value="single_choice">Single Choice</option>
                 <option value="multiple_choice">Multiple Choice</option>
@@ -502,7 +504,7 @@ function AddQuestionModal({
               <select
                 value={difficulty}
                 onChange={(e) => setDifficulty(e.target.value)}
-                className="w-full rounded-xl border border-surface-border bg-surface-page px-4 py-2.5 text-sm text-text-primary focus:border-brand-500 focus:outline-none"
+                className="w-full rounded-xl border border-surface-border bg-surface-page px-4 py-2.5 text-sm text-text-primary focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
               >
                 <option value="easy">Easy</option>
                 <option value="medium">Medium</option>
@@ -664,16 +666,16 @@ function AddQuestionModal({
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={onClose} className="rounded-xl border border-surface-border px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-muted">
+          <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
+            <button type="button" onClick={onClose} className="rounded-xl border border-surface-border px-4 py-2.5 text-sm font-medium text-text-secondary hover:bg-surface-muted min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
               Cancel
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-brand-600-dark disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-brand-600-dark disabled:opacity-60 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
             >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Save className="h-4 w-4" aria-hidden="true" />}
               {saving ? 'Saving...' : 'Save Question'}
             </button>
           </div>
@@ -875,8 +877,12 @@ function BulkImportModal({
               </ol>
               <div className="mt-3">
                 <p className="text-xs font-medium text-text-secondary">Columns (header must match):</p>
-                <p className="mt-1 font-mono text-[11px] leading-relaxed text-text-muted break-all">{csvHeaders.join(', ')}</p>
-                <ul className="mt-2 text-xs text-text-muted list-disc pl-4">
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {csvHeaders.map((h) => (
+                    <span key={h} className="inline-flex rounded-full border border-surface-border bg-white px-2 py-0.5 font-mono text-[10px] leading-none text-text-secondary">{h}</span>
+                  ))}
+                </div>
+                <ul className="mt-2 text-xs text-text-muted list-disc pl-4 space-y-0.5">
                   <li><span className="font-medium">Required:</span> question_text, question_type</li>
                   <li>single/multiple: need ≥2 options (option_a…e) + correct_answer (e.g. B or A,C)</li>
                   <li>true_false: correct_answer true/false · numerical: numeric correct_answer</li>
@@ -884,7 +890,7 @@ function BulkImportModal({
                   <li>Commas inside text: wrap cell in quotes; UTF-8, quoted values supported</li>
                 </ul>
               </div>
-              <button onClick={downloadTemplate} className="mt-4 inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-brand-200 bg-white px-4 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50">
+              <button onClick={downloadTemplate} className="mt-4 inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-brand-200 bg-white px-4 py-2.5 text-sm font-medium text-brand-700 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
                 Download CSV Template
               </button>
             </div>
