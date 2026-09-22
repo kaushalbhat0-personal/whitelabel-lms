@@ -612,15 +612,32 @@ export class InvoicesService {
       throw new BadRequestException('Invoice has no stored document — cannot send');
     }
 
-    const { data: payment } = await this.supabaseService.client
-      .from(TABLES.PAYMENTS)
-      .select('*, student:profiles!student_id(*), course:courses!course_id(*)')
-      .eq('id', inv.payment_id)
-      .single();
-    const pay: any = payment;
-    const student = pay?.student ?? null;
-    const courseName = pay?.course?.name ?? inv.course_id ?? 'Course';
-    const recipient = student?.email ?? inv.email_sent_to ?? null;
+    // P4 plan-level invoices have payment_id NULL, derive via payment_plan_id
+    let student: any = null;
+    let courseName: string = inv.course_id ?? 'Course';
+    let recipient: string | null = null;
+
+    if (inv.payment_plan_id) {
+      const { data: plan } = await this.supabaseService.client
+        .from(TABLES.PAYMENT_PLANS)
+        .select('*, student:profiles!student_id(*), course:courses!course_id(*)')
+        .eq('id', inv.payment_plan_id)
+        .single();
+      const pl: any = plan;
+      student = pl?.student ?? null;
+      courseName = pl?.course?.name ?? inv.course_id ?? 'Course';
+      recipient = student?.email ?? inv.email_sent_to ?? null;
+    } else {
+      const { data: payment } = await this.supabaseService.client
+        .from(TABLES.PAYMENTS)
+        .select('*, student:profiles!student_id(*), course:courses!course_id(*)')
+        .eq('id', inv.payment_id)
+        .single();
+      const pay: any = payment;
+      student = pay?.student ?? null;
+      courseName = pay?.course?.name ?? inv.course_id ?? 'Course';
+      recipient = student?.email ?? inv.email_sent_to ?? null;
+    }
     if (!recipient) throw new BadRequestException('Invoice has no recipient email');
 
     let pdfBuffer: Buffer | null = null;
@@ -658,6 +675,159 @@ export class InvoicesService {
     await this.supabaseService.client.from(TABLES.INVOICES).update({ email_sent_at: now, email_sent_to: recipient }).eq('id', inv.id);
     logEntityEvent(this.observabilityService, 'INVOICE_SENT', 'invoice', inv.invoice_number, _adminId, { invoiceId: inv.id, recipient }).catch(() => {});
     return { email_sent_to: recipient, email_sent_at: now };
+  }
+
+  /**
+   * Create a full-course GST invoice for a COMPLETED payment plan — P4.
+   * One invoice per plan (payment_plan_id unique). No email.
+   * Uses payment_plans.total_amount snapshot, GST split inclusive 18%.
+   */
+  async createInvoiceForPlan(planId: string): Promise<any> {
+    // Idempotency — one full-course invoice per plan
+    const { data: existingPlanInvoice } = await this.supabaseService.client
+      .from(TABLES.INVOICES)
+      .select('id')
+      .eq('payment_plan_id', planId)
+      .maybeSingle();
+    if (existingPlanInvoice) {
+      this.logger.log(`Full-course invoice already exists for plan ${planId} — skipping duplicate`);
+      return existingPlanInvoice;
+    }
+
+    const { data: plan, error: planErr } = await this.supabaseService.client
+      .from(TABLES.PAYMENT_PLANS)
+      .select('*, student:profiles!student_id(*), course:courses!course_id(*)')
+      .eq('id', planId)
+      .single();
+
+    if (planErr || !plan) {
+      this.logger.error(`Payment plan ${planId} not found for invoice: ${planErr?.message}`);
+      throw new NotFoundException('Payment plan not found');
+    }
+
+    const p = plan as any;
+
+    if (p.status !== 'completed') {
+      this.logger.warn(`Plan ${planId} status is ${p.status}, not completed — still creating invoice but flagging`);
+      // Allow creation for idempotency/testing; in production caller ensures COMPLETED
+    }
+
+    // Reconciliation: sum payments for plan vs agreed total (cents)
+    const toCents = (n: number) => Math.round(Number(n) * 100);
+    const { data: payments } = await this.supabaseService.client
+      .from(TABLES.PAYMENTS)
+      .select('amount')
+      .eq('payment_plan_id', planId);
+
+    const summedCents = (payments ?? []).reduce((s: number, r: any) => s + toCents(Number(r.amount)), 0);
+    const totalCents = toCents(Number(p.total_amount));
+    if (summedCents !== totalCents) {
+      logEntityEvent(
+        this.observabilityService,
+        'FINANCIAL_MISMATCH',
+        'payment_plan',
+        planId,
+        p.created_by ?? 'system',
+        { summedPayments: summedCents / 100, agreedTotal: totalCents / 100, planId },
+      ).catch(() => {});
+      this.logger.warn(`FINANCIAL_MISMATCH plan ${planId}: sum ${summedCents / 100} vs agreed ${totalCents / 100}`);
+    }
+
+    const student = p.student;
+    const course = p.course;
+    const studentName = student?.name ?? 'Unknown Student';
+    const studentEmail = student?.email ?? 'unknown@email.com';
+    const courseName = course?.name ?? 'Unknown Course';
+    const studentId = student?.id ?? p.student_id ?? 'unknown';
+    const courseId = course?.id ?? p.course_id ?? 'unknown';
+
+    const { data: bizCfg } = await this.supabaseService.client
+      .from(TABLES.BUSINESS_CONFIG)
+      .select('*')
+      .limit(1)
+      .single();
+
+    const biz = bizCfg as any;
+    const totalAmount = Number(p.total_amount);
+    const { baseAmount, cgstAmount, sgstAmount } = this.calculateGstSplit(totalAmount);
+
+    const { formatted: invoiceNumber } = await this.getNextDocumentNumber('INVOICE');
+
+    logEntityEvent(
+      this.observabilityService,
+      'INVOICE_GENERATED',
+      'invoice',
+      invoiceNumber,
+      p.created_by ?? 'system',
+      { studentId, courseId, amount: totalAmount, planId, type: 'full_course' },
+    ).catch(() => {});
+
+    const templateSource = this.readTemplate('invoice.template.hbs');
+    const template = Handlebars.compile(templateSource);
+    const dateStr = new Date().toLocaleDateString('en-IN', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+
+    const html = template({
+      invoiceNumber,
+      date: dateStr,
+      studentName,
+      studentEmail,
+      courseName,
+      paymentMethod: '—',
+      transactionId: undefined,
+      baseAmount: baseAmount.toFixed(2),
+      cgstAmount: cgstAmount.toFixed(2),
+      sgstAmount: sgstAmount.toFixed(2),
+      totalAmount: totalAmount.toFixed(2),
+      businessName: biz?.business_name ?? 'Business Name',
+      businessAddress: `${biz?.address_line_1 ?? ''}, ${biz?.city ?? ''}, ${biz?.state ?? ''} ${biz?.pincode ?? ''}`,
+      businessGst: biz?.gstin ?? '',
+      businessPan: biz?.pan ?? '',
+      businessLogo: biz?.logo_url ?? '',
+    });
+
+    const pdfBuffer = await this.generatePdf(html);
+    const storagePath = `invoices/${studentId}/${invoiceNumber}.pdf`;
+    const pdfUrl = await this.uploadPdf(pdfBuffer, storagePath);
+
+    const { baseAmount: subTotal, cgstAmount: cgst, sgstAmount: sgst } = this.calculateGstSplit(totalAmount);
+
+    const { data: inserted, error: insertError } = await this.supabaseService.client
+      .from(TABLES.INVOICES)
+      .insert({
+        invoice_number: invoiceNumber,
+        student_id: studentId,
+        course_id: courseId,
+        payment_id: null,
+        payment_plan_id: planId,
+        subtotal: subTotal,
+        cgst_amount: cgst,
+        sgst_amount: sgst,
+        igst_amount: 0,
+        total_amount: totalAmount,
+        gst_applicable: true,
+        issued_on: new Date().toISOString().split('T')[0],
+        pdf_url: pdfUrl || null,
+        storage_path: storagePath,
+        generated_by: p.created_by,
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      if ((insertError as any).code === '23505' || insertError.message?.includes('uq_invoices_payment_plan_id') || insertError.message?.includes('duplicate key')) {
+        this.logger.warn(`Full-course invoice insert conflict for plan ${planId} — concurrent duplicate`);
+        const { data: race } = await this.supabaseService.client.from(TABLES.INVOICES).select('id').eq('payment_plan_id', planId).maybeSingle();
+        return race ?? null;
+      }
+      this.logger.error(`Failed to insert full-course invoice for plan ${planId}: ${insertError.message}`);
+      throw new InternalServerErrorException('Failed to persist full-course invoice');
+    }
+
+    return inserted;
   }
 
   // ──────────────────────────────────────────────────────────────

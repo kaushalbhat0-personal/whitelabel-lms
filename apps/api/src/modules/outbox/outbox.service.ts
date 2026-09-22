@@ -64,7 +64,13 @@ export class OutboxService {
           if (msg.message_type === 'receipt') {
             await this.invoicesService.createReceipt(msg.payload.paymentId);
           } else if (msg.message_type === 'invoice') {
-            await this.invoicesService.createInvoice(msg.payload.paymentId);
+            if ((msg.payload as any).paymentPlanId) {
+              await this.invoicesService.createInvoiceForPlan((msg.payload as any).paymentPlanId);
+            } else if (msg.payload.paymentId) {
+              await this.invoicesService.createInvoice(msg.payload.paymentId);
+            } else {
+              this.logger.warn(`Invoice message ${msg.id} missing paymentId/paymentPlanId — skipping`);
+            }
           }
 
           await this.markCompleted(msg.id);

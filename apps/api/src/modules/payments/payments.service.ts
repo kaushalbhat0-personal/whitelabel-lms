@@ -398,6 +398,32 @@ export class PaymentsService {
         .from(TABLES.PAYMENT_PLANS)
         .update({ status: PaymentPlanStatus.COMPLETED })
         .eq('id', plan.id);
+
+      // P4: full-course invoice — creation only, no email; verify sum vs total in cents, log mismatch but do not block
+      try {
+        const toCentsP4 = (n: number) => Math.round(Number(n) * 100);
+        const { data: planPayments } = await this.supabaseService.client
+          .from(TABLES.PAYMENTS)
+          .select('amount')
+          .eq('payment_plan_id', plan.id);
+        const sumCents = (planPayments ?? []).reduce((s: number, r: any) => s + toCentsP4(Number(r.amount)), 0);
+        const totalCents = toCentsP4(Number(plan.total_amount));
+        if (sumCents !== totalCents) {
+          this.logger.warn(`FINANCIAL_MISMATCH plan ${plan.id}: sum ${sumCents / 100} vs agreed ${totalCents / 100}`);
+          logEntityEvent(
+            this.observabilityService,
+            'FINANCIAL_MISMATCH',
+            'payment_plan',
+            plan.id,
+            adminId,
+            { summedPayments: sumCents / 100, agreedTotal: totalCents / 100, planId: plan.id },
+          ).catch(() => {});
+        }
+      } catch {}
+      // Reuse existing 'invoice' message type with paymentPlanId discriminator (avoids new migration)
+      await this.outboxService.enqueue('invoice', { paymentPlanId: plan.id } as any).catch((err) =>
+        this.logger.error(`Failed to enqueue full-course invoice for plan ${plan.id}: ${err.message}`),
+      );
     }
 
     // Enqueue receipt generation (outbox pattern) — never blocks payment commit

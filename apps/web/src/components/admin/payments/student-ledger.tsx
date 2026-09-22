@@ -5,7 +5,7 @@ import { Search, ChevronDown, ChevronUp, CheckCircle, Clock, Download, Mail, Loa
 import { Modal } from '@/components/ui/Modal';
 import { MarkPaidModal } from './mark-paid-modal';
 import { getStudentPlans, type PaymentPlan } from '@/lib/api/payments';
-import { getReceipts, sendReceipt, getDownloadUrl } from '@/lib/api/invoices';
+import { getReceipts, sendReceipt, getDownloadUrl, getInvoices, sendInvoice } from '@/lib/api/invoices';
 
 interface StudentLedgerProps {
   students: { id: string; name: string; email: string }[];
@@ -22,6 +22,7 @@ export function StudentLedger({ students }: StudentLedgerProps) {
     amount: number;
   } | null>(null);
   const [receipts, setReceipts] = useState<any[]>([]);
+  const [invoices, setInvoices] = useState<any[]>([]);
   const [sendingIds, setSendingIds] = useState<Set<string>>(new Set());
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
 
@@ -54,6 +55,19 @@ export function StudentLedger({ students }: StudentLedgerProps) {
     }
   }, [selectedStudentId]);
 
+  const fetchInvoices = useCallback(async () => {
+    if (!selectedStudentId) {
+      setInvoices([]);
+      return;
+    }
+    try {
+      const data = await getInvoices(selectedStudentId);
+      setInvoices(data ?? []);
+    } catch {
+      setInvoices([]);
+    }
+  }, [selectedStudentId]);
+
   useEffect(() => {
     fetchPlans();
   }, [fetchPlans]);
@@ -62,9 +76,17 @@ export function StudentLedger({ students }: StudentLedgerProps) {
     fetchReceipts();
   }, [fetchReceipts]);
 
+  useEffect(() => {
+    fetchInvoices();
+  }, [fetchInvoices]);
+
   const getReceiptForPayment = (paymentId?: string) => {
     if (!paymentId) return null;
     return receipts.find((r: any) => r.payment_id === paymentId) ?? null;
+  };
+
+  const getInvoiceForPlan = (planId: string) => {
+    return invoices.find((inv: any) => inv.payment_plan_id === planId) ?? null;
   };
 
   const handleSendReceipt = async (receiptId: string) => {
@@ -81,6 +103,26 @@ export function StudentLedger({ students }: StudentLedgerProps) {
       setSendingIds((s) => {
         const n = new Set(s);
         n.delete(receiptId);
+        return n;
+      });
+      setTimeout(() => setFeedback(null), 4000);
+    }
+  };
+
+  const handleSendInvoice = async (invoiceId: string) => {
+    if (sendingIds.has(invoiceId)) return;
+    setSendingIds((s) => new Set(s).add(invoiceId));
+    setFeedback(null);
+    try {
+      const res = await sendInvoice(invoiceId);
+      setFeedback({ type: 'success', msg: `Email sent to ${res.email_sent_to}` });
+      await fetchInvoices();
+    } catch (e: any) {
+      setFeedback({ type: 'error', msg: e.message || 'Failed to send email' });
+    } finally {
+      setSendingIds((s) => {
+        const n = new Set(s);
+        n.delete(invoiceId);
         return n;
       });
       setTimeout(() => setFeedback(null), 4000);
@@ -371,6 +413,57 @@ export function StudentLedger({ students }: StudentLedgerProps) {
                         ))}
                       </tbody>
                     </table>
+
+                    {/* Plan-level full-course GST invoice (P4) — creation automatic on COMPLETED, email explicit */}
+                    {plan.status === 'completed' &&
+                      (() => {
+                        const invoice: any = getInvoiceForPlan(plan.id);
+                        if (!invoice) {
+                          return (
+                            <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
+                              <p className="text-xs font-medium text-gray-500">Full-Course GST Invoice</p>
+                              <p className="text-xs text-gray-400">Invoice generating… (₹{Number(plan.total_amount).toFixed(2)} final agreed fee)</p>
+                            </div>
+                          );
+                        }
+                        const isSending = sendingIds.has(invoice.id);
+                        const isSent = !!invoice.email_sent_at;
+                        return (
+                          <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium text-gray-500">Full-Course GST Invoice</p>
+                              <p className="text-sm font-semibold text-gray-900">
+                                {invoice.invoice_number} — ₹{Number(invoice.total_amount).toFixed(2)}
+                              </p>
+                              {isSent && (
+                                <p className="mt-1 text-xs text-green-600">
+                                  Sent {new Date(invoice.email_sent_at).toLocaleDateString()} to {invoice.email_sent_to}
+                                </p>
+                              )}
+                              {!isSent && <p className="text-xs text-gray-400">Not yet sent</p>}
+                            </div>
+                            <div className="flex shrink-0 items-center gap-1.5">
+                              <button
+                                onClick={() => handleDownload(invoice.id, `${invoice.invoice_number}.pdf`)}
+                                className="inline-flex min-h-[36px] min-w-[44px] items-center justify-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                                title="Download invoice"
+                              >
+                                <Download className="h-3 w-3" />
+                                Download
+                              </button>
+                              <button
+                                onClick={() => handleSendInvoice(invoice.id)}
+                                disabled={isSending}
+                                className={`inline-flex min-h-[36px] min-w-[44px] items-center justify-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium text-white ${isSent ? 'bg-blue-600 hover:bg-blue-700' : 'bg-brand-600 hover:bg-brand-700'} disabled:opacity-50`}
+                                title={isSent ? `Sent ${new Date(invoice.email_sent_at).toLocaleDateString()} — click to resend` : 'Send invoice email'}
+                              >
+                                {isSending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Mail className="h-3 w-3" />}
+                                {isSending ? 'Sending…' : isSent ? 'Resend' : 'Send Email'}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })()}
                   </div>
                 )}
               </div>
@@ -394,7 +487,11 @@ export function StudentLedger({ students }: StudentLedgerProps) {
             onConfirm={() => {
               setMarkPaidTarget(null);
               fetchPlans();
-              setTimeout(() => fetchReceipts(), 800);
+              setTimeout(() => {
+                fetchReceipts();
+                fetchInvoices();
+              }, 800);
+              setTimeout(() => fetchInvoices(), 2000);
             }}
           />
         )}

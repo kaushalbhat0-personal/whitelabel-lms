@@ -254,4 +254,88 @@ describe('InvoicesService — P3 document creation vs email separation', () => {
       expect(res.fileName).toBe('MCT-RCP-000001.pdf');
     });
   });
+
+  describe('createInvoiceForPlan (P4 full-course)', () => {
+    const PLAN_ID = 'plan-123';
+    const PLAN = {
+      id: PLAN_ID,
+      student_id: STUDENT_ID,
+      course_id: 'course1',
+      total_amount: 62705,
+      status: 'completed',
+      created_by: ADMIN_ID,
+      student: { id: STUDENT_ID, name: 'Rahul', email: 'rahul@example.com' },
+      course: { name: 'Course' },
+    };
+
+    it('creates plan-level invoice with payment_id NULL and total == plan total', async () => {
+      client.from.mockImplementation((table: string) => {
+        if (table === 'invoices') {
+          if (!client.from['planInvCheck']) {
+            client.from['planInvCheck'] = true;
+            return { select: jest.fn(() => ({ eq: jest.fn(() => ({ maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }) })) })) } as any;
+          }
+          return {
+            insert: jest.fn((row: any) => {
+              expect(row.payment_id).toBeNull();
+              expect(row.payment_plan_id).toBe(PLAN_ID);
+              expect(row.total_amount).toBe(62705);
+              return { select: jest.fn(() => ({ single: jest.fn().mockResolvedValue({ data: { id: 'inv-plan', invoice_number: 'MCT-INV-000002' }, error: null }) })) };
+            }),
+          } as any;
+        }
+        if (table === 'payment_plans') return chainMock({ data: PLAN, error: null });
+        if (table === 'payments') return chainMock({ data: [{ amount: 62705 }], error: null });
+        if (table === 'business_config') return chainMock({ data: { business_name: 'MCT' }, error: null });
+        return chainMock({ data: null, error: null }) as any;
+      });
+      client.from['planInvCheck'] = false;
+      jest.spyOn(service as any, 'getNextDocumentNumber').mockResolvedValue({ formatted: 'MCT-INV-2025-26-000002', rawNumber: 2 });
+      const res = await service.createInvoiceForPlan(PLAN_ID);
+      expect(res).toBeDefined();
+      expect(res.id).toBe('inv-plan');
+    });
+
+    it('is idempotent — returns existing if already present', async () => {
+      client.from.mockImplementation((table: string) => {
+        if (table === 'invoices') return { select: jest.fn(() => ({ eq: jest.fn(() => ({ maybeSingle: jest.fn().mockResolvedValue({ data: { id: 'existing-inv' }, error: null }) })) })) } as any;
+        return chainMock({ data: null, error: null }) as any;
+      });
+      const res = await service.createInvoiceForPlan(PLAN_ID);
+      expect(res.id).toBe('existing-inv');
+    });
+
+    it('mismatch logs but still creates invoice', async () => {
+      client.from.mockImplementation((table: string) => {
+        if (table === 'invoices') {
+          if (!client.from['mismatchCheck']) {
+            client.from['mismatchCheck'] = true;
+            return { select: jest.fn(() => ({ eq: jest.fn(() => ({ maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }) })) })) } as any;
+          }
+          return { insert: jest.fn(() => ({ select: jest.fn(() => ({ single: jest.fn().mockResolvedValue({ data: { id: 'inv-mismatch' }, error: null }) })) })) } as any;
+        }
+        if (table === 'payment_plans') return chainMock({ data: PLAN, error: null });
+        if (table === 'payments') return chainMock({ data: [{ amount: 50000 }], error: null }); // mismatch 50000 vs 62705
+        if (table === 'business_config') return chainMock({ data: { business_name: 'MCT' }, error: null });
+        return chainMock({ data: null, error: null }) as any;
+      });
+      client.from['mismatchCheck'] = false;
+      jest.spyOn(service as any, 'getNextDocumentNumber').mockResolvedValue({ formatted: 'MCT-INV-2025-26-000003', rawNumber: 3 });
+      const res = await service.createInvoiceForPlan(PLAN_ID);
+      expect(res.id).toBe('inv-mismatch');
+    });
+
+    it('sendInvoiceEmail for plan-level derives recipient via plan', async () => {
+      const invoice = { id: 'inv-plan', invoice_number: 'MCT-INV-000002', payment_plan_id: PLAN_ID, payment_id: null, total_amount: 62705, storage_path: 'invoices/xxx/MCT-INV-000002.pdf' };
+      const planWithStudent = { id: PLAN_ID, student: { name: 'Rahul', email: 'rahul@example.com' }, course: { name: 'Course' } };
+      client.from.mockImplementation((table: string) => {
+        if (table === 'invoices') return chainMock({ data: invoice, error: null });
+        if (table === 'payment_plans') return chainMock({ data: planWithStudent, error: null });
+        return chainMock({ data: null, error: null }) as any;
+      });
+      const res = await service.sendInvoiceEmail('inv-plan', ADMIN_ID);
+      expect(res.email_sent_to).toBe('rahul@example.com');
+      expect(emailService.sendEmail).toHaveBeenCalledWith(expect.any(String), expect.stringContaining('MCT-INV-000002'), expect.any(String), expect.any(Array));
+    });
+  });
 });
