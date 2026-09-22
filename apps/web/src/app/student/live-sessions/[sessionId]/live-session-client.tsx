@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ExternalLink, Loader2 } from 'lucide-react';
+import { ExternalLink, Loader2, Users } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth.store';
 import { ZoomWebinarPlayer } from '@/components/student/zoom-webinar-player';
 import { WatermarkOverlay } from '@/components/shared/WatermarkOverlay';
@@ -116,9 +116,21 @@ function SessionJoinFallback({ session }: { session: LiveSessionWithDetails }) {
     >
       <div className="relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 py-16 text-gray-500">
         <p className="text-lg font-medium">{session.topic}</p>
-        <p className="mt-1 mb-6 text-sm">
+        <p className="mt-1 text-sm">
           {new Date(session.start_time).toLocaleString('en-IN')}
         </p>
+        {session.matchingBatches && session.matchingBatches.length > 0 && (
+          <p
+            className="mt-2 flex flex-wrap items-center justify-center gap-1.5 text-xs font-medium text-text-secondary"
+            aria-label={`${session.matchingBatches.length === 1 ? 'Batch' : 'Batches'}: ${session.matchingBatches.map((b) => b.name).join(', ')}`}
+          >
+            <Users className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <span>
+              {session.matchingBatches.length === 1 ? 'Batch' : 'Batches'}: {session.matchingBatches.map((b) => b.name).join(', ')}
+            </span>
+          </p>
+        )}
+        <div className="mb-6 mt-2" />
         <button
           onClick={handleJoin}
           disabled={joining}

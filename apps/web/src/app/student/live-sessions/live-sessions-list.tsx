@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Video, Calendar, Clock, ExternalLink, Loader2, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { Video, Calendar, Clock, ExternalLink, Loader2, CheckCircle, XCircle, AlertTriangle, Users } from 'lucide-react';
 import { type LiveSession, getSessionJoinUrl, requestJoinToken } from '@/lib/api/live-sessions';
 import { SessionStatusBadge } from '@/components/shared/SessionStatusBadge';
 import { deriveSessionState, getTimeLabel as sharedGetTimeLabel, getRelativeTime as sharedGetRelativeTime } from '@/lib/session-status';
@@ -95,6 +95,17 @@ function SessionCard({
             </span>
             <span>{session.duration_minutes} min</span>
           </div>
+          {session.matchingBatches && session.matchingBatches.length > 0 && (
+            <p
+              className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs font-medium text-text-secondary"
+              aria-label={`${session.matchingBatches.length === 1 ? 'Batch' : 'Batches'}: ${session.matchingBatches.map((b) => b.name).join(', ')}`}
+            >
+              <Users className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <span className="break-words">
+                {session.matchingBatches.length === 1 ? 'Batch' : 'Batches'}: {session.matchingBatches.map((b) => b.name).join(', ')}
+              </span>
+            </p>
+          )}
           <p className={`mt-1 flex items-center gap-1.5 text-xs font-semibold ${isLiveByTime ? 'text-red-600' : derivedStatus === 'ended' ? 'text-text-muted' : derivedStatus === 'cancelled' ? 'text-gray-500' : 'text-text-muted'}`}>
             {isLiveByTime && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-600" />}
             {sharedGetTimeLabel(session, now)}

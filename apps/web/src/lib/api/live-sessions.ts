@@ -1,6 +1,11 @@
 import { fetchApi } from '@/lib/api-client';
 import { API_ROUTES } from '@/lib/constants';
 
+export type MatchingBatch = {
+  id: string;
+  name: string;
+};
+
 export interface LiveSession {
   id: string;
   zoom_webinar_id?: string;
@@ -13,10 +18,12 @@ export interface LiveSession {
   host_user_id: string;
   status: string;
   created_at: string;
+  matchingBatches?: MatchingBatch[];
 }
 
 export interface LiveSessionWithDetails extends LiveSession {
   batchIds: string[];
+  matchingBatches?: MatchingBatch[];
   hostTeacher?: { id: string; name: string; email: string } | null;
 }
 

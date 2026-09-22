@@ -254,6 +254,7 @@ export class BatchesService {
     await this.redisCache.invalidateRecordingsCacheForUsers?.(dto.studentIds).catch(() => {});
     await this.redisCache.invalidateCoursesCacheForUsers?.(dto.studentIds).catch(() => {});
     await this.redisCache.invalidateTestsCacheForUser?.(dto.studentIds[0] ?? '').catch(()=>{}); // tests broad handled separately
+    await this.redisCache.invalidateSessionsCacheForUsers?.(dto.studentIds).catch(() => {});
 
     return { enrolledCount: dto.studentIds.length };
   }
@@ -274,6 +275,7 @@ export class BatchesService {
     // H1: targeted recording cache invalidation
     await this.redisCache.invalidateRecordingsCacheForUsers?.(studentIds).catch(() => {});
     await this.redisCache.invalidateCoursesCacheForUsers?.(studentIds).catch(() => {});
+    await this.redisCache.invalidateSessionsCacheForUsers?.(studentIds).catch(() => {});
 
     return { removedCount: (data ?? []).length };
   }
@@ -439,6 +441,7 @@ export class BatchesService {
     // H1: targeted invalidation for the single affected student
     await this.redisCache.invalidateRecordingsCacheForUser?.(userId).catch(() => {});
     await this.redisCache.invalidateCoursesCacheForUser?.(userId).catch(() => {});
+    await this.redisCache.invalidateSessionsCacheForUser?.(userId).catch(() => {});
 
     // Fire-and-forget welcome email — only for newly created users
     if (tempPassword) {
@@ -485,5 +488,6 @@ export class BatchesService {
     // H1: targeted invalidation — bulk upload also benefits via this helper
     await this.redisCache.invalidateRecordingsCacheForUser?.(studentId).catch(() => {});
     await this.redisCache.invalidateCoursesCacheForUser?.(studentId).catch(() => {});
+    await this.redisCache.invalidateSessionsCacheForUser?.(studentId).catch(() => {});
   }
 }

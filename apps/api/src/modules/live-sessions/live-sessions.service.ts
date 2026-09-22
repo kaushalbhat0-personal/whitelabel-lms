@@ -381,6 +381,7 @@ export class LiveSessionsService {
     const batchIds = (batchLinks ?? []).map((b: any) => b.batch_id);
 
     // Student isolation: verify enrollment via batch_students ∩ session_batches
+    // For students we return only the intersection (studentBatchIds ∩ sessionBatchIds) as batchIds/matchingBatches.
     if (requester?.role === 'student') {
       const { data: userBatches } = await this.supabaseService.client
         .from(TABLES.BATCH_STUDENTS)
@@ -391,9 +392,23 @@ export class LiveSessionsService {
       if (!hasAccess) {
         throw new NotFoundException('Session not found');
       }
+      const matchingBatchIds = batchIds.filter((bid: string) => userBatchIds.has(bid));
+      const matchingBatches = await this.fetchBatchInfos(matchingBatchIds);
+      const { data: teacher } = await this.supabaseService.client
+        .from(TABLES.PROFILES)
+        .select('id, name, email')
+        .eq('id', session.teacher_id)
+        .single();
+      return {
+        ...session,
+        batchIds: matchingBatchIds,
+        matchingBatches,
+        hostTeacher: teacher ?? null,
+      };
     }
 
-    // Fetch host teacher info
+    // Admin/teacher: return all batches (no filtering) + matchingBatches for convenience
+    const matchingBatches = await this.fetchBatchInfos(batchIds);
     const { data: teacher } = await this.supabaseService.client
       .from(TABLES.PROFILES)
       .select('id, name, email')
@@ -403,8 +418,21 @@ export class LiveSessionsService {
     return {
       ...session,
       batchIds,
+      matchingBatches,
       hostTeacher: teacher ?? null,
     };
+  }
+
+  private async fetchBatchInfos(batchIds: string[]): Promise<{ id: string; name: string }[]> {
+    if (batchIds.length === 0) return [];
+    const { data: batches } = await this.supabaseService.client
+      .from(TABLES.BATCHES)
+      .select('id, name')
+      .in('id', batchIds);
+    const map = new Map((batches ?? []).map((b: any) => [b.id, b.name]));
+    return batchIds
+      .map((id) => ({ id, name: map.get(id) ?? '' }))
+      .filter((b) => !!b.name);
   }
 
   // ──────────────────────────────────────────────────────────────
@@ -968,7 +996,9 @@ export class LiveSessionsService {
       .order('start_time', { ascending: true });
     const nowMs = Date.now();
     const isEndedByTime = (s: any) => new Date(s.start_time).getTime() + (s.duration_minutes ?? 60) * 60000 <= nowMs;
-    const upcoming = (sessions ?? []).filter((s: any) => (s.status === 'scheduled' || s.status === 'live') && !isEndedByTime(s)).slice(0, 5);
+    const upcomingRaw = (sessions ?? []).filter((s: any) => (s.status === 'scheduled' || s.status === 'live') && !isEndedByTime(s)).slice(0, 5);
+    // Enrich with matchingBatches (student ∩ session) — batched, no N+1
+    const upcoming = await this.attachMatchingBatches(upcomingRaw, new Set(batchIds));
     // Past intentionally empty for dashboard to avoid attendance cost
     return { upcoming, past: [] };
   }
@@ -1011,12 +1041,19 @@ export class LiveSessionsService {
     const nowMs = Date.now();
     const isEndedByTime = (s: any) =>
       new Date(s.start_time).getTime() + (s.duration_minutes ?? 60) * 60000 <= nowMs;
-    const upcoming = (sessions ?? []).filter(
+    const upcomingRaw = (sessions ?? []).filter(
       (s: any) => (s.status === 'scheduled' || s.status === 'live') && !isEndedByTime(s),
     );
-    const past = (sessions ?? []).filter(
+    const pastRaw = (sessions ?? []).filter(
       (s: any) => s.status === 'ended' || s.status === 'cancelled' || isEndedByTime(s),
     );
+
+    // Enrich with matchingBatches: student ∩ session (batched, no N+1)
+    const userBatchIdSet = new Set(batchIds);
+    const [upcoming, past] = await Promise.all([
+      this.attachMatchingBatches(upcomingRaw, userBatchIdSet),
+      this.attachMatchingBatches(pastRaw, userBatchIdSet),
+    ]);
 
     // Include attendance status for past sessions
     if (past.length > 0) {
@@ -1038,6 +1075,57 @@ export class LiveSessionsService {
     }
 
     return { upcoming, past };
+  }
+
+  /**
+   * Batch-enrich a list of sessions with student-specific matchingBatches.
+   * No N+1: 2 queries max (session_batches + batches).
+   */
+  private async attachMatchingBatches(
+    sessions: any[],
+    userBatchIdSet: Set<string>,
+  ): Promise<any[]> {
+    if (sessions.length === 0) return sessions;
+    const sessionIds = sessions.map((s: any) => s.id);
+    const { data: allLinks } = await this.supabaseService.client
+      .from(TABLES.SESSION_BATCHES)
+      .select('session_id, batch_id')
+      .in('session_id', sessionIds);
+
+    const sessionToBatchIds = new Map<string, string[]>();
+    for (const link of (allLinks ?? []) as any[]) {
+      const list = sessionToBatchIds.get(link.session_id) ?? [];
+      list.push(link.batch_id);
+      sessionToBatchIds.set(link.session_id, list);
+    }
+
+    // Collect distinct matching batch IDs for single batches fetch
+    const matchingIdsSet = new Set<string>();
+    const sessionToMatchingIds = new Map<string, string[]>();
+    for (const s of sessions) {
+      const allForSession = sessionToBatchIds.get(s.id) ?? [];
+      const matching = allForSession.filter((bid) => userBatchIdSet.has(bid));
+      sessionToMatchingIds.set(s.id, matching);
+      for (const m of matching) matchingIdsSet.add(m);
+    }
+
+    const matchingIds = [...matchingIdsSet];
+    let batchIdToName = new Map<string, string>();
+    if (matchingIds.length > 0) {
+      const { data: batches } = await this.supabaseService.client
+        .from(TABLES.BATCHES)
+        .select('id, name')
+        .in('id', matchingIds);
+      batchIdToName = new Map((batches ?? []).map((b: any) => [b.id, b.name]));
+    }
+
+    return sessions.map((s: any) => {
+      const ids = sessionToMatchingIds.get(s.id) ?? [];
+      const matchingBatches = ids
+        .map((id) => ({ id, name: batchIdToName.get(id) ?? '' }))
+        .filter((b) => !!b.name);
+      return { ...s, matchingBatches };
+    });
   }
 
   // ──────────────────────────────────────────────────────────────
