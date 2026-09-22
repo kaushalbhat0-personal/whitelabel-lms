@@ -286,25 +286,6 @@ export class InvoicesService {
     return signedUrl?.signedUrl ?? '';
   }
 
-  // ──────────────────────────────────────────────────────────────
-  //  createAndSendReceipt
-  // ──────────────────────────────────────────────────────────────
-
-  /**
-   * Generate, store, and email a Payment Receipt for an installment payment.
-   *
-   * Flow:
-   *   1. Fetch the payment record with student + course joins.
-   *   2. Read business_config for address, GSTIN, etc.
-   *   3. Get the next receipt number.
-   *   4. Calculate GST breakdown (inclusive 18% GST).
-   *   5. Compile the receipt Handlebars template.
-   *   6. Generate the PDF via Puppeteer.
-   *   7. Upload PDF to Supabase Storage.
-   *   8. Insert the receipt record into TABLES.RECEIPTS.
-   *   9. Email the PDF to the student.
-   *  10. Update the receipt record with email_sent_at and email_sent_to.
-   */
   /**
    * Create a receipt document for a payment — P3 split.
    * Generates PDF, uploads to Storage, persists receipt with storage_path.
@@ -495,27 +476,6 @@ export class InvoicesService {
 
     return { email_sent_to: recipient, email_sent_at: now };
   }
-
-  /** @deprecated — P3 split; use createReceipt (creation) + sendReceiptEmail (explicit admin send). Kept for no caller. */
-  async createAndSendReceipt(paymentId: string): Promise<void> {
-    this.logger.warn(`Deprecated createAndSendReceipt called for ${paymentId} — delegating to createReceipt only (no auto-email)`);
-    await this.createReceipt(paymentId);
-  }
-
-  // ──────────────────────────────────────────────────────────────
-  //  createAndSendInvoice
-  // ──────────────────────────────────────────────────────────────
-
-  /**
-   * Generate, store, and email a Tax Invoice for a full payment.
-   *
-   * Mirror of createAndSendReceipt, but uses:
-   *   - invoice template
-   *   - invoice numbering
-   *   - TABLES.INVOICES
-   *
-   * Flow is identical to createAndSendReceipt (see above).
-   */
   /**
    * Create an invoice document for a payment — P3 split (payment-level, P4 will be per-plan).
    * No email. Persists storage_path. Idempotent per payment.
@@ -698,12 +658,6 @@ export class InvoicesService {
     await this.supabaseService.client.from(TABLES.INVOICES).update({ email_sent_at: now, email_sent_to: recipient }).eq('id', inv.id);
     logEntityEvent(this.observabilityService, 'INVOICE_SENT', 'invoice', inv.invoice_number, _adminId, { invoiceId: inv.id, recipient }).catch(() => {});
     return { email_sent_to: recipient, email_sent_at: now };
-  }
-
-  /** @deprecated — P3 split; use createInvoice + sendInvoiceEmail */
-  async createAndSendInvoice(paymentId: string): Promise<void> {
-    this.logger.warn(`Deprecated createAndSendInvoice called for ${paymentId} — delegating to createInvoice only (no auto-email)`);
-    await this.createInvoice(paymentId);
   }
 
   // ──────────────────────────────────────────────────────────────

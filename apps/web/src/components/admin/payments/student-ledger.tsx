@@ -168,6 +168,14 @@ export function StudentLedger({ students }: StudentLedgerProps) {
             const remaining = hasBooking ? (plan.total_amount - booking) : plan.total_amount;
             const stdFee = (plan as any).standard_course_fee;
             const disc = (plan as any).discount_amount ?? 0;
+            const bookingReceipt: any = hasBooking
+              ? receipts.find(
+                  (r: any) =>
+                    r.installment_id === null &&
+                    Number(r.amount) === Number(booking) &&
+                    r.course_id === (plan as any).course_id,
+                ) ?? null
+              : null;
 
             return (
               <div key={plan.id}>
@@ -216,9 +224,9 @@ export function StudentLedger({ students }: StudentLedgerProps) {
                 {/* Expanded booking + EMI schedule (P2: booking independent) */}
                 {isExpanded && (
                   <div className="border-t border-gray-100 bg-gray-50 px-6 py-3 space-y-3">
-                    {/* Booking summary */}
-                    <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 flex items-center justify-between">
-                      <div>
+                    {/* Booking summary — now surfaces booking receipt */}
+                    <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
                         <p className="text-xs font-medium text-gray-500">Booking Amount</p>
                         <p className="text-sm font-semibold text-gray-900">
                           {hasBooking
@@ -228,10 +236,41 @@ export function StudentLedger({ students }: StudentLedgerProps) {
                         <p className="text-xs text-gray-400">
                           Independent payment — not EMI #1 · {hasBooking ? `Remaining for EMIs: ₹${remaining.toFixed(2)}` : `Full fee in EMIs: ₹${plan.total_amount.toFixed(2)}`}
                         </p>
+                        {hasBooking && bookingReceipt?.email_sent_at && (
+                          <p className="mt-1 text-xs text-green-600">
+                            Sent {new Date(bookingReceipt.email_sent_at).toLocaleDateString()} to {bookingReceipt.email_sent_to}
+                          </p>
+                        )}
                       </div>
-                      <span className="text-xs text-gray-400">
-                        {hasBooking ? 'Record via API: POST /payments/plans/:id/booking' : '—'}
-                      </span>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        {!hasBooking ? (
+                          <span className="text-xs text-gray-400">—</span>
+                        ) : bookingReceipt ? (
+                          <>
+                            <button
+                              onClick={() => handleDownload(bookingReceipt.id, `${bookingReceipt.receipt_number}.pdf`)}
+                              className="inline-flex min-h-[36px] min-w-[44px] items-center justify-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                              title="Download booking receipt"
+                            >
+                              <Download className="h-3 w-3" />
+                              Download
+                            </button>
+                            <button
+                              onClick={() => handleSendReceipt(bookingReceipt.id)}
+                              disabled={sendingIds.has(bookingReceipt.id)}
+                              className={`inline-flex min-h-[36px] min-w-[44px] items-center justify-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium text-white ${bookingReceipt.email_sent_at ? 'bg-blue-600 hover:bg-blue-700' : 'bg-brand-600 hover:bg-brand-700'} disabled:opacity-50`}
+                              title={bookingReceipt.email_sent_at ? `Sent ${new Date(bookingReceipt.email_sent_at).toLocaleDateString()} — click to resend` : 'Send booking receipt email'}
+                            >
+                              {sendingIds.has(bookingReceipt.id) ? <Loader2 className="h-3 w-3 animate-spin" /> : <Mail className="h-3 w-3" />}
+                              {sendingIds.has(bookingReceipt.id) ? 'Sending…' : bookingReceipt.email_sent_at ? 'Resend' : 'Send Email'}
+                            </button>
+                          </>
+                        ) : Number(booking) === 0 ? (
+                          <span className="text-xs text-gray-400">No payment required</span>
+                        ) : (
+                          <span className="text-xs text-gray-400">No receipt yet — record booking payment</span>
+                        )}
+                      </div>
                     </div>
 
                     {feedback && (
