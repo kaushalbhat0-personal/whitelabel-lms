@@ -341,7 +341,16 @@ CREATE TABLE attendance (
 CREATE INDEX IF NOT EXISTS idx_attendance_session ON attendance(session_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_user ON attendance(user_id);
 
--- 2.10 recordings + recording_batches (multi-batch flexibility, unified with old videos)
+-- 2.10 topics (must precede recordings FK topic_id)
+CREATE TABLE topics (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  description TEXT,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 2.11 recordings + recording_batches (multi-batch flexibility, unified with old videos)
 -- provider (Phase 7B): which video infrastructure owns the asset — 'mux' | 'bunny'.
 -- mux_* columns are the provider-identifier STORAGE SLOTS keyed by `provider`
 -- (historical names kept for backwards compatibility; rename deferred to Mux retirement).
@@ -378,15 +387,6 @@ CREATE TABLE recording_batches (
 
 CREATE INDEX IF NOT EXISTS idx_recording_batches_recording ON recording_batches(recording_id);
 CREATE INDEX IF NOT EXISTS idx_recording_batches_batch ON recording_batches(batch_id);
-
--- 2.11 topics, video_progress, video_views
-CREATE TABLE topics (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name TEXT NOT NULL,
-  description TEXT,
-  sort_order INTEGER NOT NULL DEFAULT 0,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
 
 -- video_progress and video_views reference recordings(id) after the 007 migration
 CREATE TABLE video_progress (
