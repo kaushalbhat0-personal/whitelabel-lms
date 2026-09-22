@@ -35,6 +35,8 @@ export function StudentBottomNav() {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const moreButtonRef = useRef<HTMLButtonElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -52,6 +54,20 @@ export function StudentBottomNav() {
       document.removeEventListener('keydown', handleEscape);
     };
   }, []);
+
+  // UX-1A: restore focus to trigger when More sheet closes (mirrors Modal pattern)
+  useEffect(() => {
+    if (moreOpen) {
+      previousFocusRef.current = document.activeElement as HTMLElement | null;
+    } else {
+      const prev = previousFocusRef.current;
+      if (prev && typeof prev.focus === 'function') {
+        // delay to ensure DOM settled after sheet unmount
+        setTimeout(() => prev.focus(), 0);
+      }
+      previousFocusRef.current = null;
+    }
+  }, [moreOpen]);
 
   const isActive = (href: string, exact?: boolean) =>
     exact ? pathname === href : pathname.startsWith(href);
@@ -89,6 +105,7 @@ export function StudentBottomNav() {
 
         <div className="relative" ref={menuRef}>
           <button
+            ref={moreButtonRef}
             onClick={() => setMoreOpen(!moreOpen)}
             aria-label="More navigation options"
             aria-expanded={moreOpen}

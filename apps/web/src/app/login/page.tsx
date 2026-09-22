@@ -198,7 +198,7 @@ export default function LoginPage() {
                 </div>
               ) : (
                 <form onSubmit={handleForgotPassword} className="mt-4 space-y-3">
-                  <label htmlFor="resetEmail" className="block text-xs font-medium text-gray-700">
+                  <label htmlFor="resetEmail" className="input-label">
                     Email
                   </label>
                   <input
@@ -209,7 +209,7 @@ export default function LoginPage() {
                     value={resetEmail}
                     onChange={(e) => setResetEmail(e.target.value)}
                     placeholder="you@example.com"
-                    className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                    className="input-field"
                   />
                   <Button
                     type="submit"

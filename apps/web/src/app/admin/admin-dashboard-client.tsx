@@ -113,7 +113,6 @@ export function AdminDashboardClient({
             sublabel="Lifetime earnings"
             icon={IndianRupee}
             iconColor="bg-emerald-50 text-emerald-600"
-            trend={totalRevenue > 0 ? { value: 12, positive: true } : undefined}
           />
           <AdminStatCard
             label="Upcoming Sessions"
@@ -136,13 +135,6 @@ export function AdminDashboardClient({
               icon={ClipboardCheck}
               iconColor={reviewCount > 0 ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}
               onClick={() => window.location.href = ROUTES.ADMIN.REVIEW_QUEUE}
-            />
-            <AdminStatCard
-              label="Active Courses"
-              value={activeCourses}
-              sublabel="With enrolled students"
-              icon={BookOpen}
-              iconColor="bg-indigo-50 text-indigo-600"
             />
           </div>
         </AdminSection>

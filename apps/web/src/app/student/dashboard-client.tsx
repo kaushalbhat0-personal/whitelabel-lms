@@ -287,11 +287,7 @@ export function DashboardClient({ name, nextClass, upcoming, courses, recordings
                   </Alert>
                 ) : (
                   <>
-                    <ContinueLearningCard item={continueCardItem} />
-
-                    {!isDuplicateContinue && continueCardItem && nextAction.type === 'continue_video' && (
-                      <p className="text-xs text-text-muted -mt-3 px-1">Also: <Link href={`/student/videos/${(nextAction as any).id}`} className="font-medium text-brand-600 hover:text-brand-700">View in Next Up</Link> — same lesson</p>
-                    )}
+                    {!isDuplicateContinue && <ContinueLearningCard item={continueCardItem} />}
 
                     <RecentLearning recordings={recordings} />
 

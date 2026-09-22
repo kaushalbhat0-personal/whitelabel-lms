@@ -191,6 +191,25 @@ export function VideoControls({
     [onVolumeChange],
   );
 
+  const handleVolumeKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        onVolumeChange(Math.max(0, (muted ? 0 : volume) - 0.1));
+      } else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        onVolumeChange(Math.min(1, (muted ? 0 : volume) + 0.1));
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        onVolumeChange(0);
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        onVolumeChange(1);
+      }
+    },
+    [onVolumeChange, volume, muted],
+  );
+
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
   const bufferProgress = duration > 0 ? (buffered / duration) * 100 : 0;
 
@@ -225,12 +244,19 @@ export function VideoControls({
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={Math.round(progress)}
+          aria-valuetext={`${formatTime(currentTime)} of ${formatTime(duration)}`}
           tabIndex={0}
           onKeyDown={(e) => {
             if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
               e.preventDefault();
               const step = e.key === 'ArrowLeft' ? -5 : 5;
               onSeek(Math.max(0, Math.min(duration, currentTime + step)));
+            } else if (e.key === 'Home') {
+              e.preventDefault();
+              onSeek(0);
+            } else if (e.key === 'End') {
+              e.preventDefault();
+              onSeek(duration);
             }
           }}
         >
@@ -304,6 +330,10 @@ export function VideoControls({
               className="relative flex items-center"
               onMouseEnter={() => setShowVolumeSlider(true)}
               onMouseLeave={() => setShowVolumeSlider(false)}
+              onFocusCapture={() => setShowVolumeSlider(true)}
+              onBlurCapture={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) setShowVolumeSlider(false);
+              }}
             >
               <button
                 type="button"
@@ -315,13 +345,16 @@ export function VideoControls({
               </button>
               {showVolumeSlider && (
                 <div
-                  className="flex h-8 w-20 items-center rounded bg-gray-900/90 backdrop-blur-sm px-2 mx-1"
+                  className="flex h-8 w-20 items-center rounded bg-gray-900/90 backdrop-blur-sm px-2 mx-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                   onClick={handleVolumeSlider}
                   role="slider"
                   aria-label="Volume"
                   aria-valuemin={0}
                   aria-valuemax={100}
                   aria-valuenow={Math.round(muted ? 0 : volume * 100)}
+                  aria-valuetext={`${Math.round(muted ? 0 : volume * 100)} percent`}
+                  tabIndex={0}
+                  onKeyDown={handleVolumeKeyDown}
                 >
                   <div className="relative h-1 w-full rounded-full bg-white/20">
                     <div

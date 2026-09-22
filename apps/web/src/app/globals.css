@@ -118,6 +118,11 @@
 }
 
 @layer utilities {
+  /* UX-1A: tabular-nums for currency / stats / counts where alignment benefits */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
   .pb-safe {
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
@@ -162,6 +167,25 @@
   .text-gradient {
     @apply bg-gradient-to-br from-brand-600 to-brand-800 bg-clip-text text-transparent;
   }
+
+  /* ── Typography foundation (UX-1A) ───────────────────────
+   * Inter remains the font (sans = display = Inter).
+   * text-2xs (10px) is metadata-only — never for primary labels.
+   * Hierarchy: Page title h1 (2xl/bold) → Section h2 (sm/semibold uppercase or lg) → Card title (sm/bold) → body sm → helper xs. No mass change in UX-1A.
+   */
+
+  /* ── Motion foundation (UX-1A) ───────────────────────────
+   * Keep existing animations. Any new animation MUST use motion-safe: prefix.
+   * Preferred subset: card/card-hover/modal/nav shadows, radius xl/2xl.
+   */
+
+  /* ── Design-system aliases (UX-1A) ───────────────────────
+   * surface.elevated → surface.card, surface.border-light → surface.muted/border, brand.navy → brand.deep.
+   * Badge source of truth: <Badge> component. .badge-* utilities are compatibility aliases — new code use Badge.
+   * EmptyState: EmptyState (student) + AdminEmptyState (wrapper preset) converge on icon→title→desc→action pattern.
+   * ErrorState: deferred to UX-4; meanwhile Alert is banner (role alert), per-section retry uses ErrorState concept (title/desc/retry) implemented as Alert+button until primitive exists.
+   * Form canonical: FormField + input-field (see components/ui/Form/*). Input.tsx / Select.tsx stubs are deprecated.
+   */
 }
 
 /* ── Tap target helper — opt-in via .touch-target ────── */

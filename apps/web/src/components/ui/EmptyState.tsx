@@ -2,6 +2,9 @@
 import { cn } from '@/lib/utils';
 import { Inbox } from 'lucide-react';
 
+// UX-1A: EmptyState + AdminEmptyState converge on icon → title → description → action pattern.
+// AdminEmptyState is a preset wrapper (ring container + actionLabel/href). No API break in UX-1A.
+
 interface EmptyStateProps {
   icon?: React.ReactNode;
   title: string;

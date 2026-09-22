@@ -24,6 +24,8 @@ interface AdminWorkspaceHeaderProps {
   actions?: React.ReactNode;
 }
 
+// UX-1A: badgeColors is a compatibility alias — canonical is <Badge variant>.
+// Keep mapping for AdminWorkspaceHeader-only variants (active/inactive/draft) that extend Badge.
 const badgeColors: Record<string, string> = {
   active: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   inactive: 'bg-gray-100 text-gray-500 border-gray-200',

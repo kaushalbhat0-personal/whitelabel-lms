@@ -1,6 +1,8 @@
 'use client';
 import { cn } from '@/lib/utils';
 
+// UX-1A: Badge is the source of truth for status pills.
+// .badge-* utilities in globals.css and badgeColors mappings elsewhere are compat aliases — new code MUST use <Badge variant>.
 interface BadgeProps {
   variant?: 'success' | 'warning' | 'error' | 'info' | 'neutral';
   size?: 'sm' | 'md';

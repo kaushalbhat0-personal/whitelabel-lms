@@ -2,6 +2,9 @@
 import { cn } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
 
+// UX-1A: Button is canonical. New UI MUST use <Button variant> instead of `bg-brand-navy` custom buttons.
+// Preserves: variants, sizes, loading aria-busy, disabled opacity, reduced-motion spinner.
+
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
   size?: 'sm' | 'md' | 'lg';
