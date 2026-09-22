@@ -21,7 +21,7 @@ export function ProfileClient({ email, batchNames }: Props) {
         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-brand-50">
           <User className="h-8 w-8 text-brand-600" />
         </div>
-        <p className="mt-3 text-sm font-medium text-text-primary">{displayEmail || 'Student'}</p>
+        <p className="mt-3 text-sm font-medium text-text-primary break-all">{displayEmail || 'Student'}</p>
         <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-surface-muted px-2.5 py-0.5 text-xs font-medium text-text-secondary">
           <Shield className="h-3 w-3" />
           Student
@@ -48,7 +48,7 @@ export function ProfileClient({ email, batchNames }: Props) {
 
       <Link
         href={ROUTES.CHANGE_PASSWORD}
-        className="flex items-center gap-3 rounded-card border border-surface-border bg-surface-card p-4 transition-colors hover:bg-surface-muted"
+        className="flex items-center gap-3 rounded-card border border-surface-border bg-surface-card p-4 transition-colors hover:bg-surface-muted min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
       >
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-surface-muted">
           <Lock className="h-4 w-4 text-text-secondary" />

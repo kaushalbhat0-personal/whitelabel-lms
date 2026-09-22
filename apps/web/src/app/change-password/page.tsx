@@ -110,9 +110,9 @@ export default function ChangePasswordPage() {
 
   if (success) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-100">
+      <div className="flex min-h-screen items-center justify-center bg-gray-100 p-4">
         <div
-          className="w-full max-w-md rounded-xl bg-white p-8 shadow-lg text-center"
+          className="w-full max-w-md rounded-xl bg-white p-6 sm:p-8 shadow-lg text-center"
           role="status"
           aria-live="polite"
         >
@@ -128,7 +128,7 @@ export default function ChangePasswordPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-100">
-      <div className="w-full max-w-md rounded-xl bg-white p-8 shadow-lg">
+      <div className="w-full max-w-md rounded-xl bg-white p-6 sm:p-8 shadow-lg mx-4">
         <h1 className="mb-2 text-2xl font-bold text-gray-900">MCT Learn</h1>
         <p className="mb-6 text-sm text-gray-500">Set Your Password</p>
 
@@ -156,7 +156,7 @@ export default function ChangePasswordPage() {
               onChange={(e) => setNewPassword(e.target.value)}
               aria-invalid={!!error}
               aria-describedby={error ? 'change-error' : undefined}
-              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 min-h-[44px]"
               placeholder="••••••••"
             />
           </div>
@@ -174,7 +174,7 @@ export default function ChangePasswordPage() {
               onChange={(e) => setConfirmPassword(e.target.value)}
               aria-invalid={!!error}
               aria-describedby={error ? 'change-error' : undefined}
-              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 min-h-[44px]"
               placeholder="••••••••"
             />
           </div>

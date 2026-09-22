@@ -80,7 +80,7 @@ export function CourseProgress({ courseId, batchIds, compact }: CourseProgressPr
         <span className="text-sm font-bold text-brand-navy">{progressPct}%</span>
       </div>
 
-      <div className="font-mono text-lg tracking-wider mb-4 text-text-primary">
+      <div className="font-mono text-xs sm:text-base tracking-tight sm:tracking-wider mb-4 text-text-primary overflow-hidden whitespace-nowrap leading-none" aria-hidden="true" style={{ letterSpacing: '0.02em' }}>
         {Array.from({ length: barSegments }).map((_, i) => (
           <span key={i} className={i < filledSegments ? 'text-brand-navy' : 'text-surface-border'}>
             █

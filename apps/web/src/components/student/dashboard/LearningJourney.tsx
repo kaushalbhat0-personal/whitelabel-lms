@@ -52,7 +52,8 @@ export function LearningJourney({ data }: { data: StudentBatchRecordings[] }) {
             <button
               onClick={() => setOpenBatch(isOpen ? null : batch.batchId)}
               aria-expanded={isOpen}
-              className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-surface-muted/50 transition-colors touch-target"
+              aria-controls={`batch-section-${batch.batchId}`}
+              className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-surface-muted/50 transition-colors min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-inset"
             >
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-text-primary">{batch.batchName}</p>
@@ -78,7 +79,7 @@ export function LearningJourney({ data }: { data: StudentBatchRecordings[] }) {
                         <button
                           onClick={() => setOpenSection(sOpen ? null : sKey)}
                           aria-expanded={sOpen}
-                          className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface-muted/30 focus-visible:bg-surface-muted/50 focus-visible:outline-none transition-colors touch-target"
+                          className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface-muted/30 focus-visible:bg-surface-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-inset transition-colors min-h-[44px]"
                         >
                           {sState === 'completed' ? (
                             <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 motion-safe:animate-[scaleIn_0.3s_ease-out]" />

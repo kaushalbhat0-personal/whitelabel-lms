@@ -159,7 +159,7 @@ function QuestionRenderer({
             onChange={(e) => onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))}
             placeholder="Enter your answer"
             aria-describedby={helpId}
-            className="w-full rounded-lg border border-surface-border bg-white p-3 text-sm text-text-primary placeholder:text-text-muted focus:border-brand-navy focus:outline-none"
+            className="w-full rounded-lg border border-surface-border bg-white px-3 py-2.5 text-sm min-h-[44px] text-text-primary placeholder:text-text-muted focus:border-brand-navy focus:outline-none"
           />
           <p id={helpId} className="mt-1 text-xs text-text-muted">
             Enter a numerical value
@@ -183,7 +183,7 @@ function QuestionRenderer({
             placeholder="Type your answer here..."
             rows={3}
             aria-describedby={helpId}
-            className="w-full resize-none rounded-lg border border-surface-border bg-white p-3 text-sm text-text-primary placeholder:text-text-muted focus:border-brand-navy focus:outline-none"
+            className="w-full resize-none rounded-lg border border-surface-border bg-white px-3 py-2.5 text-sm min-h-[44px] text-text-primary placeholder:text-text-muted focus:border-brand-navy focus:outline-none"
           />
           <p id={helpId} className="mt-1 text-xs text-text-muted">
             Your response will be reviewed by an instructor
@@ -207,7 +207,7 @@ function QuestionRenderer({
             placeholder="Write your detailed answer here..."
             rows={8}
             aria-describedby={helpId}
-            className="w-full resize-none rounded-lg border border-surface-border bg-white p-3 text-sm text-text-primary placeholder:text-text-muted focus:border-brand-navy focus:outline-none"
+            className="w-full resize-none rounded-lg border border-surface-border bg-white px-3 py-2.5 text-sm min-h-[44px] text-text-primary placeholder:text-text-muted focus:border-brand-navy focus:outline-none"
           />
           <p id={helpId} className="mt-1 text-xs text-text-muted">
             Provide a detailed answer; this will be reviewed by an instructor
@@ -222,7 +222,7 @@ function QuestionRenderer({
       const isPdf = hasValue && (value.fileName?.toLowerCase().endsWith('.pdf') || value.mimeType === 'application/pdf');
       const fileInputId = `answer-${question.id}-file`;
       return (
-        <div className="flex flex-col items-center gap-2 rounded-lg border-2 border-dashed border-surface-border p-8 text-center">
+        <div className="flex flex-col items-center gap-2 rounded-lg border-2 border-dashed border-surface-border p-6 sm:p-8 text-center">
           <label htmlFor={fileInputId} className="text-sm font-medium text-text-secondary">
             Upload your answer file
           </label>
@@ -694,7 +694,7 @@ export default function TestAttemptPage() {
               <button
                 onClick={handleSubmit}
                 disabled={submitting}
-                className="flex items-center gap-1.5 rounded-lg bg-brand-navy px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-brand-navyDark disabled:opacity-50"
+                className="flex items-center gap-1.5 rounded-lg bg-brand-navy px-4 py-2 text-xs font-semibold text-white hover:bg-brand-navyDark disabled:opacity-50 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
               >
                 {submitting ? (
                   <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
@@ -799,7 +799,7 @@ export default function TestAttemptPage() {
                 <button
                   onClick={() => goToQuestion(Math.max(0, currentIndex - 1))}
                   disabled={currentIndex === 0}
-                  className="flex items-center gap-1.5 rounded-lg border border-surface-border px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-muted disabled:opacity-30"
+                  className="flex items-center gap-1.5 rounded-lg border border-surface-border px-4 py-2.5 text-sm font-medium text-text-secondary hover:bg-surface-muted disabled:opacity-30 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
                 >
                   <ArrowLeft className="h-4 w-4" />
                   Previous
@@ -810,7 +810,7 @@ export default function TestAttemptPage() {
                 <button
                   onClick={() => goToQuestion(Math.min(totalQuestions - 1, currentIndex + 1))}
                   disabled={currentIndex === totalQuestions - 1}
-                  className="flex items-center gap-1.5 rounded-lg border border-surface-border px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-muted disabled:opacity-30"
+                  className="flex items-center gap-1.5 rounded-lg border border-surface-border px-4 py-2.5 text-sm font-medium text-text-secondary hover:bg-surface-muted disabled:opacity-30 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
                 >
                   Next
                   <ArrowRight className="h-4 w-4" />
@@ -922,7 +922,7 @@ function MobileQuestionPalette({
     <>
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-4 left-1/2 z-20 -translate-x-1/2 rounded-full bg-brand-navy px-5 py-2.5 text-xs font-semibold text-white shadow-lg md:hidden"
+        className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom,0px))] left-1/2 z-20 -translate-x-1/2 rounded-full bg-brand-navy px-5 py-2.5 text-xs font-semibold text-white shadow-lg md:hidden min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
       >
         <HelpCircle className="mr-1.5 inline h-4 w-4" />
         Questions ({questions.length})
@@ -934,7 +934,7 @@ function MobileQuestionPalette({
           onClick={() => setOpen(false)}
         >
           <div
-            className="w-full rounded-t-2xl bg-white p-4 pb-8"
+            className="w-full rounded-t-2xl bg-white p-4 pb-[calc(2rem+env(safe-area-inset-bottom,0px))]"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-3 flex items-center justify-between">

@@ -145,7 +145,7 @@ export function StudentBottomNav() {
                 aria-modal="true"
                 aria-labelledby={sheetTitleId}
                 tabIndex={-1}
-                className="absolute bottom-full right-0 z-50 mb-2 max-w-[calc(100vw-16px)] w-40 motion-safe:animate-fade-in rounded-card border border-surface-border bg-surface-card p-2 shadow-elevated outline-none"
+                className="absolute bottom-full right-0 z-50 mb-2 max-w-[calc(100vw-16px)] w-40 motion-safe:animate-fade-in rounded-card border border-surface-border bg-surface-card p-2 shadow-elevated outline-none max-h-[60vh] overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom,0px)]"
               >
                 <span id={sheetTitleId} className="sr-only">More navigation</span>
                 {moreItems.map((item) => {

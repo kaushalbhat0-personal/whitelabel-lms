@@ -272,16 +272,19 @@ export function VideoControls({
           <div
             className="h-1 w-full rounded-full bg-white/20 transition-all group-hover:h-1.5"
             onClick={handleProgressClick}
+            role="presentation"
           >
             <div
               className="absolute h-1 rounded-full bg-white/40 transition-all group-hover:h-1.5"
               style={{ width: `${bufferProgress}%` }}
+              aria-hidden="true"
             />
             <div
               className="absolute h-1 rounded-full bg-white transition-all group-hover:h-1.5"
               style={{ width: `${progress}%` }}
+              aria-hidden="true"
             >
-              <div className="absolute right-0 top-1/2 h-3 w-3 -translate-y-1/2 translate-x-1/2 rounded-full bg-white opacity-0 transition-opacity group-hover:opacity-100 shadow-md" />
+              <div className="absolute right-0 top-1/2 h-3 w-3 -translate-y-1/2 translate-x-1/2 rounded-full bg-white opacity-0 transition-opacity group-hover:opacity-100 shadow-md" aria-hidden="true" />
             </div>
           </div>
         </div>
@@ -292,32 +295,32 @@ export function VideoControls({
             <button
               type="button"
               onClick={handleSeekBack}
-              className="rounded p-1.5 text-white/80 hover:bg-white/10 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 min-w-[36px] min-h-[36px] flex items-center justify-center"
+              className="rounded p-1.5 text-white/80 hover:bg-white/10 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 min-w-[44px] min-h-[44px] flex items-center justify-center"
               aria-label="Rewind 10 seconds"
             >
-              <SkipBack className="h-5 w-5" fill="currentColor" />
+              <SkipBack className="h-5 w-5" fill="currentColor" aria-hidden="true" />
             </button>
 
             <button
               type="button"
               onClick={handlePlayPause}
-              className="rounded p-1.5 text-white hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 min-w-[40px] min-h-[40px] flex items-center justify-center"
+              className="rounded p-1.5 text-white hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 min-w-[44px] min-h-[44px] flex items-center justify-center"
               aria-label={playing ? 'Pause' : 'Play'}
             >
               {playing ? (
-                <Pause className="h-6 w-6" fill="currentColor" />
+                <Pause className="h-6 w-6" fill="currentColor" aria-hidden="true" />
               ) : (
-                <Play className="h-6 w-6" fill="currentColor" />
+                <Play className="h-6 w-6" fill="currentColor" aria-hidden="true" />
               )}
             </button>
 
             <button
               type="button"
               onClick={handleSeekForward}
-              className="rounded p-1.5 text-white/80 hover:bg-white/10 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 min-w-[36px] min-h-[36px] flex items-center justify-center"
+              className="rounded p-1.5 text-white/80 hover:bg-white/10 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 min-w-[44px] min-h-[44px] flex items-center justify-center"
               aria-label="Forward 10 seconds"
             >
-              <SkipForward className="h-5 w-5" fill="currentColor" />
+              <SkipForward className="h-5 w-5" fill="currentColor" aria-hidden="true" />
             </button>
 
             <span className="ml-1 text-xs text-white/70 font-medium tabular-nums select-none">
@@ -338,10 +341,10 @@ export function VideoControls({
               <button
                 type="button"
                 onClick={onMute}
-                className="rounded p-1.5 text-white/80 hover:bg-white/10 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 min-w-[32px] min-h-[32px] flex items-center justify-center"
+                className="rounded p-1.5 text-white/80 hover:bg-white/10 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 min-w-[44px] min-h-[44px] flex items-center justify-center"
                 aria-label={muted ? 'Unmute' : 'Mute'}
               >
-                <VolumeIcon className="h-4 w-4" />
+                <VolumeIcon className="h-4 w-4" aria-hidden="true" />
               </button>
               {showVolumeSlider && (
                 <div
@@ -378,23 +381,23 @@ export function VideoControls({
               <button
                 type="button"
                 onClick={onPictureInPicture}
-                className="rounded p-1.5 text-white/80 hover:bg-white/10 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 min-w-[32px] min-h-[32px] flex items-center justify-center"
+                className="rounded p-1.5 text-white/80 hover:bg-white/10 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 min-w-[44px] min-h-[44px] flex items-center justify-center"
                 aria-label="Picture in Picture"
               >
-                <PictureInPicture2 className="h-4 w-4" />
+                <PictureInPicture2 className="h-4 w-4" aria-hidden="true" />
               </button>
             )}
 
             <button
               type="button"
               onClick={onFullscreen}
-              className="rounded p-1.5 text-white/80 hover:bg-white/10 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 min-w-[32px] min-h-[32px] flex items-center justify-center"
+              className="rounded p-1.5 text-white/80 hover:bg-white/10 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 min-w-[44px] min-h-[44px] flex items-center justify-center"
               aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
             >
               {isFullscreen ? (
-                <Minimize className="h-4 w-4" />
+                <Minimize className="h-4 w-4" aria-hidden="true" />
               ) : (
-                <Maximize className="h-4 w-4" />
+                <Maximize className="h-4 w-4" aria-hidden="true" />
               )}
             </button>
           </div>

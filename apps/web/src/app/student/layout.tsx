@@ -35,8 +35,8 @@ export default function StudentLayout({ children }: { children: ReactNode }) {
                 </div>
               </header>
 
-              {/* Single content container */}
-              <div className="mx-auto max-w-5xl px-0 pb-20 pt-0 md:px-6 md:pb-8 md:pt-8">
+              {/* Single content container — pb accounts for bottom nav + safe area */}
+              <div className="mx-auto max-w-5xl px-0 pb-[calc(5rem+env(safe-area-inset-bottom,0px))] pt-0 md:px-6 md:pb-8 md:pt-8">
                 {children}
               </div>
             </main>
