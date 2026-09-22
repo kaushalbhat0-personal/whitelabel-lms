@@ -1,11 +1,11 @@
 import { getStudentCourse } from '@/lib/api/courses';
 import { getMySessions } from '@/lib/api/live-sessions';
-import { getMyVideosGrouped, type StudentBatchRecordings } from '@/lib/api/videos';
+import { getMyVideosGrouped } from '@/lib/api/videos';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { CourseDetailSessions } from './course-detail-sessions';
-import { CourseDetailRecordings } from './course-detail-recordings';
 import { CourseProgress } from '@/components/student/CourseProgress';
 import { ContinueWatching } from '@/components/student/ContinueWatching';
+import { CollapsibleBatchList } from './collapsible-batch-list';
 
 export const dynamic = 'force-dynamic';
 
@@ -92,43 +92,7 @@ export default async function StudentCourseDetailPage({ params }: Props) {
             past={pastSessions}
           />
 
-          {recordingsForCourse.length === 0 ? (
-            <div className="rounded-card border border-surface-border bg-surface-card p-8 text-center">
-              <p className="text-sm text-text-secondary">No recordings available yet for your batches.</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {recordingsForCourse.map((batch) => {
-                const totalInBatch = batch.sections.reduce((acc, s) => acc + s.recordings.length, 0);
-                return (
-                  <section
-                    key={batch.batchId}
-                    aria-labelledby={`batch-${batch.batchId}`}
-                    className="rounded-card border border-surface-border bg-surface-card p-4"
-                  >
-                    <h2 id={`batch-${batch.batchId}`} className="text-sm font-bold text-text-primary">
-                      {batch.batchName}
-                    </h2>
-                    <p className="mt-1 text-xs text-text-muted">
-                      {totalInBatch} recording{totalInBatch !== 1 ? 's' : ''} · {batch.sections.length} section{batch.sections.length !== 1 ? 's' : ''}
-                    </p>
-                    <div className="mt-4 space-y-4">
-                      {batch.sections.map((section) => (
-                        <div key={section.sectionName ?? '__uncategorized__'}>
-                          {section.sectionName && (
-                            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
-                              {section.sectionName}
-                            </h3>
-                          )}
-                          <CourseDetailRecordings videos={section.recordings as any} hideHeader />
-                        </div>
-                      ))}
-                    </div>
-                  </section>
-                );
-              })}
-            </div>
-          )}
+          <CollapsibleBatchList batches={recordingsForCourse} />
         </div>
       </div>
     );
