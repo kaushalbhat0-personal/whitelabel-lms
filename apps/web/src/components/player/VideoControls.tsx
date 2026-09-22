@@ -227,7 +227,7 @@ export function VideoControls({
 
       <div
         ref={controlsRef}
-        className={`absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/80 via-black/30 to-transparent pt-12 pb-3 px-3 transition-opacity duration-300 ${
+        className={`absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/80 via-black/30 to-transparent pt-12 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] px-3 transition-opacity duration-300 ${
           showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
         role="toolbar"

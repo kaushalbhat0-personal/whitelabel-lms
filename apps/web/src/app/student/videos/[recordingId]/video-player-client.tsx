@@ -554,7 +554,7 @@ export function VideoPlayerClient({
           ref={containerRef}
           className={`relative aspect-video w-full bg-black overflow-hidden group select-none transition-all duration-300 ${
             isMini
-              ? 'fixed bottom-4 right-4 z-50 w-72 rounded-xl shadow-2xl border border-white/10'
+              ? 'fixed bottom-[calc(1rem+56px+env(safe-area-inset-bottom,0px))] md:bottom-4 right-4 z-50 w-72 rounded-xl shadow-2xl border border-white/10'
               : ''
           }`}
           onDoubleClick={handleFullscreen}
