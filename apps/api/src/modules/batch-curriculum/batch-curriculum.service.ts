@@ -1,5 +1,6 @@
-import { Injectable, Logger, NotFoundException, BadRequestException, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, InternalServerErrorException, Optional } from '@nestjs/common';
 import { SupabaseService } from '../../common/services/supabase.service';
+import { RedisCacheService } from '../../common/services/redis-cache.service';
 import { TABLES } from '../../common/constants/tables.constant';
 import { AddCurriculumItemDto } from './dto/add-curriculum-item.dto';
 import { UpdateCurriculumItemDto } from './dto/update-curriculum-item.dto';
@@ -10,7 +11,31 @@ import { Transaction, TransactionStep } from '../../common/utils/transaction.uti
 export class BatchCurriculumService {
   private readonly logger = new Logger(BatchCurriculumService.name);
 
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    @Optional() private readonly redisCache?: RedisCacheService,
+  ) {}
+
+  private async invalidateForBatch(batchId: string): Promise<void> {
+    if (!this.redisCache) return;
+    try {
+      const { data: students } = await this.supabaseService.client
+        .from(TABLES.BATCH_STUDENTS)
+        .select('user_id')
+        .eq('batch_id', batchId);
+      const userIds = [...new Set((students ?? []).map((s: any) => s.user_id))];
+      if (userIds.length > 0) {
+        await this.redisCache.invalidateRecordingsCacheForUsers(userIds);
+      } else {
+        await this.redisCache.invalidateRecordingsCache();
+      }
+    } catch {
+      // best-effort fallback: global invalidation
+      try {
+        await this.redisCache.invalidateRecordingsCache();
+      } catch {}
+    }
+  }
 
   async findAll(batchId: string) {
     const raw = await this.fetchCurriculum(batchId, false);
@@ -236,6 +261,8 @@ export class BatchCurriculumService {
     const tx = new Transaction();
     await tx.run(steps);
 
+    await this.invalidateForBatch(batchId).catch(() => {});
+
     return insertedData;
   }
 
@@ -261,6 +288,9 @@ export class BatchCurriculumService {
     if (error) {
       this.logger.error(`Failed to update curriculum item ${id}: ${error.message}`);
       throw new InternalServerErrorException(`Could not update curriculum item: ${error.message}`);
+    }
+    if (data?.batch_id) {
+      await this.invalidateForBatch(data.batch_id).catch(() => {});
     }
     return data;
   }
@@ -347,6 +377,8 @@ export class BatchCurriculumService {
     const tx = new Transaction();
     await tx.run(steps);
 
+    await this.invalidateForBatch(item.batch_id).catch(() => {});
+
     return { deleted: true, cascadedPrerequisites: (prereqs ?? []).length };
   }
 
@@ -426,6 +458,7 @@ export class BatchCurriculumService {
         throw new InternalServerErrorException('Reorder failed.');
       }
     }
+    await this.invalidateForBatch(batchId).catch(() => {});
     return { reordered: true };
   }
 

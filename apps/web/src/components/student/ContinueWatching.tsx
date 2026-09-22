@@ -38,7 +38,14 @@ interface ContinueWatchingItem {
 }
 
 export function ContinueWatching({ recordings }: { recordings: Watchable[] }) {
-  const items: ContinueWatchingItem[] = recordings
+  const deduped = (() => {
+    const m = new Map<string, Watchable>();
+    for (const r of recordings) {
+      if (!m.has(r.id)) m.set(r.id, r);
+    }
+    return [...m.values()];
+  })();
+  const items: ContinueWatchingItem[] = deduped
     .map((v) => ({
       id: v.id,
       title: v.title,

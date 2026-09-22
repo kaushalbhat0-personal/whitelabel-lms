@@ -23,11 +23,12 @@ export function CourseProgress({ courseId, batchIds, compact }: CourseProgressPr
         if (batchIds && batchIds.length > 0) {
           const grouped = await getMyVideosGrouped();
           if (cancelled) return;
-          const relevant = grouped
+          const flat = grouped
             .filter((g) => batchIds.includes(g.batchId))
             .flatMap((g) => g.sections)
             .flatMap((s) => s.recordings);
-          setRecordings(relevant as any);
+          const dedup = [...new Map(flat.map((r: any) => [r.id, r] as const)).values()];
+          setRecordings(dedup as any);
         } else {
           const all = await getMyVideos();
           if (cancelled) return;

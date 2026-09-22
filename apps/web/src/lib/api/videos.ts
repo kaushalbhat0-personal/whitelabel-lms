@@ -137,7 +137,7 @@ export async function removeRecordingFromBatches(
 
 export async function updateRecordingBatchCurriculum(
   recordingId: string,
-  assignments: { batchId: string; assigned: boolean }[],
+  assignments: { batchId: string; assigned: boolean; sectionName?: string; sortOrder?: number; isVisible?: boolean }[],
 ) {
   return fetchApi<{ updated: boolean }>(
     `${API_ROUTES.ADMIN_RECORDINGS}/${recordingId}/batch-curriculum`,

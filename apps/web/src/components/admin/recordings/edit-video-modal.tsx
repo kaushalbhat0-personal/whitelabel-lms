@@ -35,6 +35,7 @@ export function EditVideoModal({
   const [allBatches, setAllBatches] = useState<Batch[]>([]);
   const [loadingBatches, setLoadingBatches] = useState(true);
   const [selectedBatchIds, setSelectedBatchIds] = useState<Set<string>>(new Set());
+  const [addedBatchCategories, setAddedBatchCategories] = useState<Record<string, string>>({});
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   // Reset form state whenever the modal opens for a (potentially different) video
@@ -49,6 +50,7 @@ export function EditVideoModal({
       setSelectedBatchIds(
         new Set((video.recording_batches ?? []).map((b) => b.batch_id)),
       );
+      setAddedBatchCategories({});
     }
   }, [isOpen, video]);
 
@@ -71,11 +73,30 @@ export function EditVideoModal({
   const toggleBatch = (id: string) => {
     setSelectedBatchIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      const wasSelected = prev.has(id);
+      if (wasSelected) {
+        next.delete(id);
+        setAddedBatchCategories((prevCat) => {
+          const copy = { ...prevCat };
+          delete copy[id];
+          return copy;
+        });
+      } else {
+        next.add(id);
+        const isNewlyAdded = !(video.recording_batches ?? []).some((b) => b.batch_id === id);
+        if (isNewlyAdded) {
+          setAddedBatchCategories((prevCat) => ({
+            ...prevCat,
+            [id]: prevCat[id] ?? 'General',
+          }));
+        }
+      }
       return next;
     });
   };
+
+  const originalBatchIds = new Set((video.recording_batches ?? []).map((b) => b.batch_id));
+  const addedBatchIds = [...selectedBatchIds].filter((id) => !originalBatchIds.has(id));
 
   const handleSave = async () => {
     if (!title.trim()) {
@@ -94,9 +115,14 @@ export function EditVideoModal({
       const removed = [...originalBatchIds].filter((id) => !selectedBatchIds.has(id));
 
       // Phase 9: use atomic batch-curriculum endpoint — single transaction for add+remove.
+      // For newly-added batches, include batch-specific sectionName (defaults to General).
       if (added.length > 0 || removed.length > 0) {
         const assignments = [
-          ...added.map((batchId) => ({ batchId, assigned: true as const })),
+          ...added.map((batchId) => ({
+            batchId,
+            assigned: true as const,
+            sectionName: (addedBatchCategories[batchId] ?? 'General').trim() || 'General',
+          })),
           ...removed.map((batchId) => ({ batchId, assigned: false as const })),
         ];
         await updateRecordingBatchCurriculum(video.id, assignments);
@@ -264,6 +290,40 @@ export function EditVideoModal({
             Assigning a batch makes this recording visible to that batch&apos;s students.
           </p>
         </div>
+
+        {addedBatchIds.length > 0 && (
+          <div className="space-y-3 rounded-lg border border-surface-border bg-surface-muted p-3">
+            <p className="text-xs font-semibold text-text-secondary">
+              Category for newly added batches
+            </p>
+            <p className="text-xs text-text-muted">
+              Choose where this recording appears in each new batch’s curriculum. Existing batches are untouched.
+            </p>
+            {addedBatchIds.map((batchId) => {
+              const batchName = allBatches.find((b) => b.id === batchId)?.name ?? batchId;
+              return (
+                <div key={batchId}>
+                  <label htmlFor={`category-${batchId}`} className="block text-xs font-medium text-text-secondary mb-1">
+                    {batchName}
+                  </label>
+                  <input
+                    id={`category-${batchId}`}
+                    type="text"
+                    value={addedBatchCategories[batchId] ?? 'General'}
+                    onChange={(e) =>
+                      setAddedBatchCategories((prev) => ({ ...prev, [batchId]: e.target.value }))
+                    }
+                    disabled={saving}
+                    placeholder="e.g. Week 1, Trading Psychology"
+                    list={`existing-categories-${batchId}`}
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-gray-100"
+                    aria-label={`Category for ${batchName}`}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         <div className="flex justify-end gap-3 pt-2">
           <button

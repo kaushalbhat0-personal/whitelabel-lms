@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, Trash2, GripVertical, ChevronDown, ChevronRight, FileText, Video, HelpCircle, Calendar } from 'lucide-react';
+import { Plus, Trash2, GripVertical, ChevronDown, ChevronRight, FileText, Video, HelpCircle, Calendar, Pencil, Check, X } from 'lucide-react';
 import {
   type CurriculumCategory,
   type CurriculumItem,
@@ -63,6 +63,9 @@ export function CurriculumTab({ batchId }: CurriculumTabProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editingItemCategory, setEditingItemCategory] = useState('');
+  const [savingItemId, setSavingItemId] = useState<string | null>(null);
 
   const dragItem = useRef<{ category: string; index: number } | null>(null);
 
@@ -185,6 +188,36 @@ export function CurriculumTab({ batchId }: CurriculumTabProps) {
       load();
     } catch {
       setError('Failed to rename category');
+    }
+  };
+
+  const handleStartEditItem = (item: CurriculumItem) => {
+    setEditingItemId(item.id);
+    setEditingItemCategory(item.category_name ?? 'General');
+  };
+
+  const handleCancelEditItem = () => {
+    setEditingItemId(null);
+    setEditingItemCategory('');
+  };
+
+  const handleSaveItemCategory = async (item: CurriculumItem) => {
+    const trimmed = editingItemCategory.trim() || 'General';
+    if (trimmed === item.category_name) {
+      handleCancelEditItem();
+      return;
+    }
+    setSavingItemId(item.id);
+    setError('');
+    try {
+      await updateCurriculumItem(item.id, { categoryName: trimmed });
+      setEditingItemId(null);
+      setEditingItemCategory('');
+      await load();
+    } catch {
+      setError('Failed to update category');
+    } finally {
+      setSavingItemId(null);
     }
   };
 
@@ -403,22 +436,73 @@ export function CurriculumTab({ batchId }: CurriculumTabProps) {
                         <GripVertical className="h-4 w-4 shrink-0 text-gray-300" />
                         <Icon className="h-4 w-4 shrink-0 text-gray-400" />
                         {contentTypeBadge(item.content_type)}
-                        <span className="flex-1 truncate">{itemTitle(item)}</span>
-                        {item.module_name && (
-                          <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
-                            {item.module_name}
-                          </span>
+                        {editingItemId === item.id ? (
+                          <>
+                            <span className="flex-1 truncate text-text-muted">{itemTitle(item)}</span>
+                            <label htmlFor={`edit-category-${item.id}`} className="sr-only">Category for {itemTitle(item)}</label>
+                            <input
+                              id={`edit-category-${item.id}`}
+                              type="text"
+                              value={editingItemCategory}
+                              onChange={(e) => setEditingItemCategory(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleSaveItemCategory(item);
+                                if (e.key === 'Escape') handleCancelEditItem();
+                              }}
+                              className="w-36 rounded border border-gray-300 px-2 py-1 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                              placeholder="Category"
+                              list="existing-categories"
+                              autoFocus
+                              aria-label={`Category for ${itemTitle(item)}`}
+                              disabled={savingItemId === item.id}
+                            />
+                            <button
+                              onClick={() => handleSaveItemCategory(item)}
+                              disabled={savingItemId === item.id}
+                              className="rounded p-1 text-green-600 hover:bg-green-50 disabled:opacity-50"
+                              title="Save category"
+                              aria-label={`Save category for ${itemTitle(item)}`}
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={handleCancelEditItem}
+                              disabled={savingItemId === item.id}
+                              className="rounded p-1 text-gray-400 hover:bg-gray-100 disabled:opacity-50"
+                              title="Cancel"
+                              aria-label="Cancel editing category"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="flex-1 truncate">{itemTitle(item)}</span>
+                            {item.module_name && (
+                              <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
+                                {item.module_name}
+                              </span>
+                            )}
+                            <span className={`hidden sm:inline rounded-full px-2 py-0.5 text-xs font-medium ${item.is_published ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                              {item.is_published ? 'Published' : 'Draft'}
+                            </span>
+                            <button
+                              onClick={() => handleStartEditItem(item)}
+                              className="rounded p-1 text-gray-400 hover:bg-brand-50 hover:text-brand-600"
+                              title={`Edit category (current: ${item.category_name})`}
+                              aria-label={`Edit category for ${itemTitle(item)}, current ${item.category_name}`}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleRemove(item.id)}
+                              className="rounded p-1 text-gray-400 hover:bg-red-100 hover:text-red-600"
+                              title="Remove"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </>
                         )}
-                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${item.is_published ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                          {item.is_published ? 'Published' : 'Draft'}
-                        </span>
-                        <button
-                          onClick={() => handleRemove(item.id)}
-                          className="rounded p-1 text-gray-400 hover:bg-red-100 hover:text-red-600"
-                          title="Remove"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
                       </li>
                     );
                   })}
