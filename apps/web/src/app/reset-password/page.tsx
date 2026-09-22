@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { ROUTES } from '@/lib/constants';
+import { Button } from '@/components/ui/Button';
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -13,37 +14,105 @@ export default function ResetPasswordPage() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [ready, setReady] = useState(false);
+  const [readyError, setReadyError] = useState<string | null>(null);
 
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
+
+  const submittingRef = useRef(false);
+  const readinessTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const redirectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
-    // Supabase automatically picks up the access_token from URL hash
-    // and creates a session. We just need to wait for it.
-    supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY') {
-        setReady(true);
-      }
-    });
+    mountedRef.current = true;
 
-    // If already signed in (token already processed), proceed
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) {
-        setReady(true);
+    // Bounded fallback: prevent indefinite "Processing reset link..."
+    readinessTimeoutRef.current = setTimeout(() => {
+      if (!mountedRef.current) return;
+      // Only show error if we are still not ready and not already in an error/success state
+      if (!ready && !readyError && !success) {
+        setReadyError('This password reset link is invalid or has expired. Please request a new reset link.');
       }
-    });
-  }, [supabase]);
+    }, 7000);
+
+    const clearReadinessTimeout = () => {
+      if (readinessTimeoutRef.current) {
+        clearTimeout(readinessTimeoutRef.current);
+        readinessTimeoutRef.current = null;
+      }
+    };
+
+    const markReady = () => {
+      if (!mountedRef.current) return;
+      clearReadinessTimeout();
+      setReady(true);
+      setReadyError(null);
+    };
+
+    // Subscribe to auth state changes — capture subscription for cleanup
+    let subscription: { unsubscribe: () => void } | null = null;
+    try {
+      const result = supabase.auth.onAuthStateChange((event) => {
+        if (event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY') {
+          markReady();
+        }
+      });
+      // Supabase v2 shape is { data: { subscription } }
+      const maybeSubscription =
+        (result as unknown as { data?: { subscription?: { unsubscribe: () => void } } })?.data?.subscription ??
+        (result as unknown as { subscription?: { unsubscribe: () => void } })?.subscription ??
+        null;
+      if (maybeSubscription && typeof maybeSubscription.unsubscribe === 'function') {
+        subscription = maybeSubscription;
+      }
+    } catch {
+      // Ignore subscription setup errors — getSession fallback will handle
+    }
+
+    // If already signed in (token already processed), proceed — handle failures explicitly
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        if (!mountedRef.current) return;
+        if (data.session) {
+          markReady();
+        }
+      })
+      .catch(() => {
+        if (!mountedRef.current) return;
+        clearReadinessTimeout();
+        setReadyError('This password reset link is invalid or has expired. Please request a new reset link.');
+      });
+
+    return () => {
+      mountedRef.current = false;
+      clearReadinessTimeout();
+      if (redirectTimeoutRef.current) {
+        clearTimeout(redirectTimeoutRef.current);
+        redirectTimeoutRef.current = null;
+      }
+      try {
+        subscription?.unsubscribe();
+      } catch {}
+    };
+    // supabase is memoized, so stable — effect runs once
+  }, [supabase, ready, readyError, success]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setError('');
 
     if (newPassword !== confirmPassword) {
       setError('Passwords do not match');
+      submittingRef.current = false;
       return;
     }
 
     if (newPassword.length < 8) {
       setError('Password must be at least 8 characters');
+      submittingRef.current = false;
       return;
     }
 
@@ -54,11 +123,11 @@ export default function ResetPasswordPage() {
         password: newPassword,
       });
 
+      if (!mountedRef.current) return;
+
       if (updateError) {
         if (updateError.message.toLowerCase().includes('expired')) {
-          setError(
-            'This reset link has expired. Please request a new one.',
-          );
+          setError('This reset link has expired. Please request a new one.');
         } else {
           setError(updateError.message);
         }
@@ -67,28 +136,40 @@ export default function ResetPasswordPage() {
 
       setSuccess(true);
 
-      setTimeout(() => {
-        supabase.auth.signOut();
+      if (redirectTimeoutRef.current) {
+        clearTimeout(redirectTimeoutRef.current);
+      }
+      redirectTimeoutRef.current = setTimeout(async () => {
+        try {
+          await supabase.auth.signOut();
+        } catch {}
+        if (!mountedRef.current) return;
         router.push(ROUTES.LOGIN);
       }, 2000);
     } catch {
+      if (!mountedRef.current) return;
       setError('An unexpected error occurred');
     } finally {
-      setLoading(false);
+      if (mountedRef.current) {
+        setLoading(false);
+      }
+      submittingRef.current = false;
     }
   };
 
   if (success) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-100">
-        <div className="w-full max-w-md rounded-xl bg-white p-8 shadow-lg text-center">
-          <div className="mb-4 text-4xl">&#9989;</div>
-          <h1 className="mb-2 text-xl font-bold text-gray-900">
-            Password Reset!
-          </h1>
-          <p className="text-sm text-gray-500">
-            Redirecting to login...
-          </p>
+        <div
+          className="w-full max-w-md rounded-xl bg-white p-8 shadow-lg text-center"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="mb-4 text-4xl" aria-hidden="true">
+            &#9989;
+          </div>
+          <h1 className="mb-2 text-xl font-bold text-gray-900">Password Reset!</h1>
+          <p className="text-sm text-gray-500">Redirecting to login...</p>
         </div>
       </div>
     );
@@ -100,21 +181,30 @@ export default function ResetPasswordPage() {
         <h1 className="mb-2 text-2xl font-bold text-gray-900">MCT Learn</h1>
         <p className="mb-6 text-sm text-gray-500">Reset Your Password</p>
 
-        {!ready ? (
-          <div className="text-center text-sm text-gray-500 py-8">
+        {readyError ? (
+          <div role="alert" className="rounded-lg bg-red-50 p-4 text-sm text-red-700">
+            <p>{readyError}</p>
+            <div className="mt-3">
+              <a
+                href={ROUTES.LOGIN}
+                className="inline-flex min-h-[44px] items-center text-brand-600 hover:text-brand-700 underline"
+              >
+                Go to login
+              </a>
+            </div>
+          </div>
+        ) : !ready ? (
+          <div role="status" aria-live="polite" aria-busy="true" className="py-8 text-center text-sm text-gray-500">
             Processing reset link...
           </div>
         ) : (
           <>
             {error && (
-              <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+              <div id="reset-error" role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
                 {error}
                 {error.includes('expired') && (
                   <div className="mt-2">
-                    <a
-                      href={ROUTES.LOGIN}
-                      className="text-brand-600 hover:text-brand-700 underline"
-                    >
+                    <a href={ROUTES.LOGIN} className="text-brand-600 hover:text-brand-700 underline">
                       Go to login
                     </a>
                   </div>
@@ -122,47 +212,55 @@ export default function ResetPasswordPage() {
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4" noValidate>
               <div>
-                <label className="block text-sm font-medium text-gray-700">
+                <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700">
                   New Password
                 </label>
                 <input
+                  id="newPassword"
                   type="password"
                   required
+                  autoComplete="new-password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
+                  aria-invalid={!!error}
+                  aria-describedby={error ? 'reset-error' : undefined}
                   className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                   placeholder="••••••••"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700">
+                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
                   Confirm Password
                 </label>
                 <input
+                  id="confirmPassword"
                   type="password"
                   required
+                  autoComplete="new-password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
+                  aria-invalid={!!error}
+                  aria-describedby={error ? 'reset-error' : undefined}
                   className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                   placeholder="••••••••"
                 />
               </div>
 
               <p className="text-xs text-gray-500">
-                Password must be 8+ characters, include uppercase, lowercase,
-                and a number.
+                Password must be 8+ characters, include uppercase, lowercase, and a number.
               </p>
 
-              <button
+              <Button
                 type="submit"
+                loading={loading}
                 disabled={loading}
-                className="w-full rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
+                className="w-full min-h-[44px]"
               >
                 {loading ? 'Resetting...' : 'Reset Password'}
-              </button>
+              </Button>
             </form>
           </>
         )}
