@@ -15,10 +15,12 @@ export default async function StudentVideosPage({
   const search = searchParams?.search?.trim() || undefined;
   let groupedData: StudentBatchRecordings[] = [];
   let flatRecordings: StudentVideo[] = [];
+  let groupedFailed = false;
 
   try {
     groupedData = await getMyVideosGrouped(search);
   } catch {
+    groupedFailed = true;
     // Fallback to flat list
     try {
       flatRecordings = await getMyVideos(undefined, search);
@@ -64,6 +66,7 @@ export default async function StudentVideosPage({
   }
 
   const total = flatRecordings.length;
+  const showFallbackNotice = groupedFailed && total > 0;
   return (
     <div>
       <PageHeader
@@ -72,6 +75,11 @@ export default async function StudentVideosPage({
       />
       <div className="px-4 md:px-0 space-y-4">
         <StudentVideoSearch />
+        {showFallbackNotice && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-relaxed text-amber-800" role="status">
+            Grouped view temporarily unavailable — showing all recordings. Browse and search still work.
+          </div>
+        )}
         {search && total === 0 ? (
           <EmptyState
             title={`No recordings match “${search}”`}

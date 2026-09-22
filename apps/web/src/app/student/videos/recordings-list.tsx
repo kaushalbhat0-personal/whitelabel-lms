@@ -54,8 +54,8 @@ export function RecordingsList({ recordings }: Props) {
                 href={`/student/videos/${rec.id}`}
                 className="flex items-center gap-3 rounded-card border border-surface-border bg-surface-card p-3 transition-colors hover:bg-surface-muted"
               >
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-brand-navy/10">
-                  <PlayCircle className="h-6 w-6 text-brand-navy" />
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-brand-50">
+                  <PlayCircle className="h-6 w-6 text-brand-600" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-text-primary truncate">

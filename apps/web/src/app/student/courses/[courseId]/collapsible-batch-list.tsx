@@ -50,7 +50,7 @@ export function CollapsibleBatchList({ batches }: Props) {
               aria-expanded={isExpanded}
               aria-controls={contentId}
               onClick={() => toggle(batch.batchId)}
-              className="flex w-full items-center gap-3 p-4 text-left min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-navy focus-visible:ring-offset-2 rounded-card"
+              className="flex w-full items-center gap-3 p-4 text-left min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 rounded-card"
             >
               {isExpanded ? (
                 <ChevronDown aria-hidden="true" className="h-5 w-5 shrink-0 text-text-muted" />

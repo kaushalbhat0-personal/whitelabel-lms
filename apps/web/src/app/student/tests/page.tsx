@@ -109,7 +109,7 @@ function TestCard({ test, attempts, onStart, onViewResult, now }: TestCardProps 
   const canStartAnother = !hasReachedMax && completedAttempts.length > 0 && (test as any).max_attempts > completedAttempts.length;
 
   return (
-    <div className="rounded-card border border-surface-border bg-surface-card p-4 transition-colors hover:border-brand-navy/20">
+    <div className="rounded-card border border-surface-border bg-surface-card p-4 transition-colors hover:border-brand-200">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -164,7 +164,7 @@ function TestCard({ test, attempts, onStart, onViewResult, now }: TestCardProps 
           {inProgressAttempt ? (
             <button
               onClick={() => onStart(test.id)}
-              className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-brand-navy px-4 py-2 text-sm font-semibold text-white hover:bg-brand-navyDark"
+              className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
             >
               <Play className="h-4 w-4" />
               Resume
@@ -172,7 +172,7 @@ function TestCard({ test, attempts, onStart, onViewResult, now }: TestCardProps 
           ) : hasReachedMax && completedAttempt ? (
             <button
               onClick={() => onViewResult(completedAttempt.id)}
-              className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-brand-navy px-4 py-2 text-sm font-semibold text-white hover:bg-brand-navyDark"
+              className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
             >
               <Eye className="h-4 w-4" />
               View Result
@@ -181,7 +181,7 @@ function TestCard({ test, attempts, onStart, onViewResult, now }: TestCardProps 
             <>
               <button
                 onClick={() => onViewResult(completedAttempt.id)}
-                className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-brand-navy px-4 py-2 text-sm font-semibold text-white hover:bg-brand-navyDark"
+                className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
               >
                 <Eye className="h-4 w-4" />
                 View Result
@@ -189,7 +189,7 @@ function TestCard({ test, attempts, onStart, onViewResult, now }: TestCardProps 
               {canStartAnother && (
                 <button
                   onClick={() => onStart(test.id)}
-                  className="flex min-h-[44px] items-center gap-1 rounded-lg border border-brand-navy px-3 py-2 text-xs font-medium text-brand-navy hover:bg-brand-navy/5"
+                  className="flex min-h-[44px] items-center gap-1 rounded-lg border border-brand-600 px-3 py-2 text-xs font-medium text-brand-600 hover:bg-brand-50"
                 >
                   <Play className="h-3.5 w-3.5" />
                   Retake ({completedAttempts.length}/{ (test as any).max_attempts})
@@ -199,7 +199,7 @@ function TestCard({ test, attempts, onStart, onViewResult, now }: TestCardProps 
           ) : display.cta === 'Start Test' ? (
             <button
               onClick={() => onStart(test.id)}
-              className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-brand-navy px-4 py-2 text-sm font-semibold text-white hover:bg-brand-navyDark"
+              className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
             >
               <Play className="h-4 w-4" />
               Start Test
@@ -207,7 +207,7 @@ function TestCard({ test, attempts, onStart, onViewResult, now }: TestCardProps 
           ) : display.cta ? (
             <button
               onClick={() => onStart(test.id)}
-              className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-brand-navy px-4 py-2 text-sm font-semibold text-white hover:bg-brand-navyDark"
+              className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
             >
               <Play className="h-4 w-4" />
               {display.cta}
@@ -215,6 +215,9 @@ function TestCard({ test, attempts, onStart, onViewResult, now }: TestCardProps 
           ) : null}
           {hasReachedMax && (
             <span className="text-xs text-text-muted">Max attempts reached</span>
+          )}
+          {(test as any).max_attempts === 0 && (
+            <span className="text-xs text-text-muted">Unlimited attempts</span>
           )}
         </div>
       </div>
@@ -282,7 +285,7 @@ export default function TestsPage() {
         <PageHeader title="Tests" />
         <div className="px-4 md:px-0">
           <div className="flex items-center justify-center py-16">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-brand-navy border-t-transparent" />
+            <div className="h-6 w-6 motion-safe:animate-spin rounded-full border-2 border-brand-600 border-t-transparent" aria-label="Loading" role="status" />
           </div>
         </div>
       </div>

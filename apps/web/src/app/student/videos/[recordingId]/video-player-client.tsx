@@ -538,7 +538,6 @@ export function VideoPlayerClient({
       className="h-full w-full"
       poster={thumbnailUrl || undefined}
       controlsList="nodownload noremoteplayback"
-      disablePictureInPicture
       onContextMenu={handleContextMenu}
       preload="metadata"
       playsInline
@@ -647,16 +646,21 @@ export function VideoPlayerClient({
 
       {isMini && <div className="aspect-video w-full" aria-hidden />}
 
-      <div className="space-y-1 px-4 py-4 md:px-0">
-        <h2 className="text-base font-bold text-text-primary">
-          {title || 'Recording'}
-        </h2>
-        {date && (
-          <p className="flex items-center gap-1.5 text-sm text-text-secondary">
-            <Calendar className="h-4 w-4" />
-            {date}
+      <div className="px-4 py-4 md:px-0">
+        <div className="rounded-card border border-surface-border bg-surface-card p-4 md:p-5">
+          <h2 className="text-base font-bold leading-tight text-text-primary line-clamp-2">
+            {title || 'Recording'}
+          </h2>
+          {date && (
+            <p className="mt-1.5 flex items-center gap-1.5 text-xs text-text-muted">
+              <Calendar className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              {date}
+            </p>
+          )}
+          <p className="mt-2 text-xs leading-relaxed text-text-secondary">
+            Part of your batch curriculum — continue where you left off. Progress saves automatically.
           </p>
-        )}
+        </div>
       </div>
     </div>
   );

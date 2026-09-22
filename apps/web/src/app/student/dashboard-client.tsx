@@ -17,6 +17,7 @@ import {
   CreditCard,
   IndianRupee,
   AlertCircle,
+  ChevronDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card } from '@/components/ui/Card';
@@ -107,6 +108,7 @@ function formatDueDate(iso: string | null) {
 export function DashboardClient({ name, nextClass, upcoming, courses, recordings, results, pastSessions, paymentPlans, grouped, myTestsTotal, myTests, errors }: DashboardClientProps) {
   const [greeting, setGreeting] = useState('');
   const [joining, setJoining] = useState(false);
+  const [paymentsOpen, setPaymentsOpen] = useState(false);
   useEffect(() => setGreeting(getGreeting()), []);
   const router = useRouter();
   const handleRetry = () => router.refresh();
@@ -231,13 +233,13 @@ export function DashboardClient({ name, nextClass, upcoming, courses, recordings
         <MobileHeader title="Dashboard" />
         <PageContainer>
           <div className="space-y-6">
-            {/* Welcome */}
+            {/* Welcome — calm premium: solid deep + subtle border, pills without blur */}
             <div className="animate-fade-in-up">
-              <div className="flex flex-col gap-3 rounded-card-lg bg-gradient-to-br from-brand-900 via-brand-800 to-brand-700 p-5 text-white md:p-6">
+              <div className="flex flex-col gap-3 rounded-card-lg bg-brand-900 p-5 text-white md:p-6 border border-white/10">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-lg" aria-hidden="true">{getGreetingEmoji()}</span>
+                      <span className="text-base leading-none" aria-hidden="true">{getGreetingEmoji()}</span>
                       <h1 className="text-lg font-bold md:text-xl">
                         {greeting}, <span className="text-white">{name}</span>
                       </h1>
@@ -245,17 +247,17 @@ export function DashboardClient({ name, nextClass, upcoming, courses, recordings
                     <p className="mt-1 text-sm text-brand-200">
                       {courseName ? `${courseName}${batchName ? ` · ${batchName}` : ''}` : 'Continue your learning journey'}
                     </p>
-                    <p className="text-xs text-brand-200/80">{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+                    <p className="text-xs text-brand-200/70">{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs backdrop-blur-sm">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.08] border border-white/10 px-3 py-1 text-xs text-brand-100">
                     <BookOpen className="h-3.5 w-3.5 text-brand-200" aria-hidden="true" /> {courses.length} Courses
                   </span>
-                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs backdrop-blur-sm">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.08] border border-white/10 px-3 py-1 text-xs text-brand-100">
                     <Video className="h-3.5 w-3.5 text-brand-200" aria-hidden="true" /> {total} Videos
                   </span>
-                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs backdrop-blur-sm">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.08] border border-white/10 px-3 py-1 text-xs text-brand-100">
                     <BarChart3 className="h-3.5 w-3.5 text-brand-200" aria-hidden="true" /> {completedTests} Tests done
                   </span>
                 </div>
@@ -435,7 +437,7 @@ export function DashboardClient({ name, nextClass, upcoming, courses, recordings
                   </Card>
                 )}
 
-                {/* Payments */}
+                {/* Payments — secondary disclosure: calmer, does not compete with learning */}
                 {errors.payments ? (
                   <Alert variant="error" title="Couldn't load payments" role="alert">
                     <p>Please try again.</p>
@@ -445,36 +447,52 @@ export function DashboardClient({ name, nextClass, upcoming, courses, recordings
                   </Alert>
                 ) : (
                   paymentPlans.length > 0 && (
-                    <div className="space-y-3">
-                      <h2 className="text-sm font-semibold text-text-primary">Payments</h2>
-                      <div className="grid grid-cols-1 gap-3">
-                        <Card padding="md">
-                          <div className="flex items-center gap-2">
-                            <IndianRupee className="h-4 w-4 text-emerald-500" aria-hidden="true" />
-                            <span className="text-xs text-text-secondary">Upcoming Dues</span>
+                    <div className="rounded-card border border-surface-border bg-surface-card">
+                      <button
+                        onClick={() => setPaymentsOpen(!paymentsOpen)}
+                        aria-expanded={paymentsOpen}
+                        aria-controls="dashboard-payments"
+                        className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-surface-muted/40 transition-colors rounded-card"
+                      >
+                        <div className="flex items-center gap-2">
+                          <CreditCard className="h-4 w-4 text-text-muted" aria-hidden="true" />
+                          <span className="text-sm font-semibold text-text-primary">Payments</span>
+                          {!paymentsOpen && <span className="text-xs text-text-muted">· {formatCurrency(upcomingDues)} due</span>}
+                        </div>
+                        <ChevronDown className={cn('h-4 w-4 text-text-muted motion-safe:transition-transform', paymentsOpen && 'rotate-180')} aria-hidden="true" />
+                      </button>
+                      <div className={cn('grid motion-safe:transition-all', paymentsOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0')}>
+                        <div className="overflow-hidden">
+                          <div id="dashboard-payments" className="px-4 pb-4 pt-1 grid grid-cols-1 gap-3">
+                            <Card padding="md">
+                              <div className="flex items-center gap-2">
+                                <IndianRupee className="h-4 w-4 text-emerald-500" aria-hidden="true" />
+                                <span className="text-xs text-text-secondary">Upcoming Dues</span>
+                              </div>
+                              <p className="mt-1 text-lg font-bold tabular-nums text-text-primary">{formatCurrency(upcomingDues)}</p>
+                            </Card>
+                            {overdueAmount > 0 && (
+                              <Card padding="md" className="border-status-error/30">
+                                <div className="flex items-center gap-2">
+                                  <AlertCircle className="h-4 w-4 text-status-error" aria-hidden="true" />
+                                  <span className="text-xs text-text-secondary">Overdue</span>
+                                </div>
+                                <p className="mt-1 text-lg font-bold tabular-nums text-status-error">{formatCurrency(overdueAmount)}</p>
+                              </Card>
+                            )}
+                            {nextDueDate && (
+                              <Card padding="md">
+                                <div className="flex items-center gap-2">
+                                  <CreditCard className="h-4 w-4 text-brand-500" aria-hidden="true" />
+                                  <span className="text-xs text-text-secondary">Next Due</span>
+                                </div>
+                                <p className="mt-1 text-sm font-bold text-text-primary">
+                                  {new Date(nextDueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                </p>
+                              </Card>
+                            )}
                           </div>
-                          <p className="mt-1 text-lg font-bold text-text-primary">{formatCurrency(upcomingDues)}</p>
-                        </Card>
-                        {overdueAmount > 0 && (
-                          <Card padding="md" className="border-status-error/30">
-                            <div className="flex items-center gap-2">
-                              <AlertCircle className="h-4 w-4 text-status-error" aria-hidden="true" />
-                              <span className="text-xs text-text-secondary">Overdue</span>
-                            </div>
-                            <p className="mt-1 text-lg font-bold text-status-error">{formatCurrency(overdueAmount)}</p>
-                          </Card>
-                        )}
-                        {nextDueDate && (
-                          <Card padding="md">
-                            <div className="flex items-center gap-2">
-                              <CreditCard className="h-4 w-4 text-brand-500" aria-hidden="true" />
-                              <span className="text-xs text-text-secondary">Next Due</span>
-                            </div>
-                            <p className="mt-1 text-sm font-bold text-text-primary">
-                              {new Date(nextDueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                            </p>
-                          </Card>
-                        )}
+                        </div>
                       </div>
                     </div>
                   )

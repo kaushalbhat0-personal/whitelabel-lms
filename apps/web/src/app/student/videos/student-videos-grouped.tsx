@@ -22,7 +22,7 @@ function ProgressBar({ watchedSeconds, completed }: { watchedSeconds: number; co
   return (
     <div className="mt-1 h-1.5 w-full rounded-full bg-surface-muted overflow-hidden">
       <div
-        className="h-full rounded-full bg-brand-navy transition-all"
+        className="h-full rounded-full bg-brand-600 transition-all"
         style={{ width: `${Math.min(100, pct)}%` }}
       />
     </div>
@@ -35,8 +35,8 @@ function RecordingCard({ rec }: { rec: GroupedRecording }) {
       href={`/student/videos/${rec.id}`}
       className="flex items-center gap-3 rounded-card border border-surface-border bg-surface-card p-3 transition-colors hover:bg-surface-muted"
     >
-      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-brand-navy/10">
-        <PlayCircle className="h-6 w-6 text-brand-navy" />
+      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-brand-50">
+        <PlayCircle className="h-6 w-6 text-brand-600" />
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-text-primary truncate">

@@ -32,8 +32,8 @@ export function CoursesListClient({ courses }: Props) {
           className="block rounded-card border border-surface-border bg-surface-card p-4 transition-shadow hover:shadow-sm"
         >
           <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-navy/10">
-              <BookOpen className="h-5 w-5 text-brand-navy" />
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-50">
+              <BookOpen className="h-5 w-5 text-brand-600" />
             </div>
             <div className="min-w-0 flex-1">
               <h3 className="text-sm font-bold text-text-primary truncate">

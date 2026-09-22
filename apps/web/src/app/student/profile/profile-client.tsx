@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { User, Shield, Lock, LogOut, Users } from 'lucide-react';
+import { User, Shield, Lock, LogOut, Users, ChevronRight } from 'lucide-react';
 import { ROUTES } from '@/lib/constants';
 import { useSession } from '@/hooks/useSession';
 import { Button } from '@/components/ui/Button';
@@ -18,8 +18,8 @@ export function ProfileClient({ email, batchNames }: Props) {
   return (
     <div className="space-y-4">
       <div className="rounded-card border border-surface-border bg-surface-card p-5 text-center">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-brand-navy/10">
-          <User className="h-8 w-8 text-brand-navy" />
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-brand-50">
+          <User className="h-8 w-8 text-brand-600" />
         </div>
         <p className="mt-3 text-sm font-medium text-text-primary">{displayEmail || 'Student'}</p>
         <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-surface-muted px-2.5 py-0.5 text-xs font-medium text-text-secondary">
@@ -34,10 +34,10 @@ export function ProfileClient({ email, batchNames }: Props) {
             My Batches
           </h3>
           <div className="mt-2 flex flex-wrap gap-1.5">
-            {batchNames.map((name, i) => (
+            {batchNames.map((name) => (
               <span
-                key={i}
-                className="rounded-full bg-brand-navy/10 px-2.5 py-0.5 text-xs font-medium text-brand-navy"
+                key={name}
+                className="rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-medium text-brand-700"
               >
                 {name}
               </span>
@@ -56,7 +56,7 @@ export function ProfileClient({ email, batchNames }: Props) {
         <span className="flex-1 text-sm font-medium text-text-primary">
           Change Password
         </span>
-        <span className="text-sm text-text-muted">&rarr;</span>
+        <ChevronRight className="h-4 w-4 text-text-muted" aria-hidden="true" />
       </Link>
 
       <Button

@@ -74,7 +74,7 @@ export default async function StudentCourseDetailPage({ params }: Props) {
                 {enrolledBatches.map((b: any) => (
                   <span
                     key={b.id}
-                    className="rounded-full bg-brand-navy/10 px-2.5 py-0.5 text-xs font-medium text-brand-navy"
+                    className="rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-medium text-brand-700"
                   >
                     {b.name}
                   </span>
