@@ -66,6 +66,7 @@ export function CurriculumTab({ batchId }: CurriculumTabProps) {
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editingItemCategory, setEditingItemCategory] = useState('');
   const [savingItemId, setSavingItemId] = useState<string | null>(null);
+  const [liveMessage, setLiveMessage] = useState('');
 
   const dragItem = useRef<{ category: string; index: number } | null>(null);
 
@@ -164,8 +165,10 @@ export function CurriculumTab({ batchId }: CurriculumTabProps) {
     try {
       await reorderCurriculum(batchId, items.map((item, i) => ({ id: item.id, sortOrder: i })));
       setError('');
+      setLiveMessage(`Reordered ${targetCategory}: item moved to position ${targetIndex + 1}`);
     } catch {
       setError('Reorder failed');
+      setLiveMessage('Reorder failed');
       load();
     }
   };
@@ -244,6 +247,7 @@ export function CurriculumTab({ batchId }: CurriculumTabProps) {
 
   return (
     <div className="space-y-6">
+      <div aria-live="polite" aria-atomic="true" className="sr-only">{liveMessage}</div>
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-gray-900">Curriculum</h3>
         <button

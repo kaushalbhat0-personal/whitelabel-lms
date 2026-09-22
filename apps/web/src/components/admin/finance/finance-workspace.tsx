@@ -25,6 +25,7 @@ import { AdminStatCard } from '@/components/shared/AdminStatCard';
 import { AdminDataTable, type AdminDataTableColumn } from '@/components/shared/AdminDataTable';
 import { AdminEmptyState } from '@/components/shared/AdminEmptyState';
 import { AdminTableSkeleton } from '@/components/shared/AdminSkeletons';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import {
   type User,
   getStudents,
@@ -79,6 +80,8 @@ export function FinanceWorkspace({
   const [studentsLoading, setStudentsLoading] = useState(false);
   const [studentPlans, setStudentPlans] = useState<Map<string, PaymentPlan[]>>(new Map());
   const [plansLoading, setPlansLoading] = useState(false);
+  const [confirmPay, setConfirmPay] = useState<{ id: string; label: string; amount: number } | null>(null);
+  const [paying, setPaying] = useState(false);
 
   // Email state
   const [emailRetrying, setEmailRetrying] = useState<Set<string>>(new Set());
@@ -148,11 +151,15 @@ export function FinanceWorkspace({
     .filter((s) => s.risk !== 'low')
     .sort((a, b) => b.totalDue - a.totalDue);
 
-  const handleMarkPaid = async (installmentId: string) => {
+  const handleMarkPaid = async () => {
+    if (!confirmPay) return;
+    setPaying(true);
     try {
-      await markInstallmentPaid(installmentId, { paymentMethod: 'manual' });
+      await markInstallmentPaid(confirmPay.id, { paymentMethod: 'manual' });
+      setConfirmPay(null);
       loadAllPlans();
     } catch { /* silent */ }
+    finally { setPaying(false); }
   };
 
   const handleRetryEmail = async (id: string) => {
@@ -186,7 +193,7 @@ export function FinanceWorkspace({
     { key: 'actions', header: 'Actions', render: (item: any) => (
       <div className="flex items-center gap-1.5">
         {item.status !== 'paid' && item.installmentId && (
-          <button onClick={() => handleMarkPaid(item.installmentId)} className="rounded-lg px-2 py-1 text-xs font-medium text-emerald-600 hover:bg-emerald-50 transition-colors">Pay</button>
+          <button onClick={() => setConfirmPay({ id: item.installmentId, label: item.name || item.email || 'student', amount: item.amount || 0 })} className="rounded-lg px-2 py-1 text-xs font-medium text-emerald-600 hover:bg-emerald-50 transition-colors">Mark Paid</button>
         )}
         <Link href={`/admin/students/${item.studentId || item.id}`} className="rounded-lg px-2 py-1 text-xs text-text-muted hover:text-text-secondary transition-colors">
           <ChevronRight className="h-4 w-4" />
@@ -251,9 +258,9 @@ export function FinanceWorkspace({
         }
       />
 
-      {/* Tabs */}
+      {/* Tabs — scrollable on mobile, no new routes */}
       <div className="border-b border-surface-border">
-        <nav className="-mb-px flex gap-0 overflow-x-auto" role="tablist">
+        <nav className="-mb-px flex gap-0 overflow-x-auto scrollbar-thin" role="tablist">
           {TABS.map((tab) => (
             <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={cn('flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium whitespace-nowrap transition-colors', activeTab === tab.key ? 'border-brand-600 text-brand-600' : 'border-transparent text-text-muted hover:text-text-secondary hover:border-surface-border')} role="tab" aria-selected={activeTab === tab.key}>
               {tab.icon}{tab.label}
@@ -268,7 +275,7 @@ export function FinanceWorkspace({
           <div className="space-y-8">
             <AdminSection title="Revenue KPIs">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <AdminStatCard label="Total Revenue" value={formatCurrency(totalRevenue)} icon={IndianRupee} iconColor="bg-brand-50 text-brand-600" trend={totalRevenue > 0 ? { value: 12, positive: true } : undefined} />
+                <AdminStatCard label="Total Revenue" value={formatCurrency(totalRevenue)} icon={IndianRupee} iconColor="bg-brand-50 text-brand-600" />
                 <AdminStatCard label="Collected This Month" value={plansLoading ? '...' : formatCurrency(totalCollectedMonth)} icon={TrendingUp} iconColor="bg-emerald-50 text-emerald-600" />
                 <AdminStatCard label="Pending Amount" value={plansLoading ? '...' : formatCurrency(totalPending)} icon={Clock} iconColor="bg-amber-50 text-amber-600" />
                 <AdminStatCard label="Overdue Amount" value={plansLoading ? '...' : formatCurrency(totalOverdue)} icon={AlertTriangle} iconColor={totalOverdue > 0 ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'} />
@@ -317,10 +324,11 @@ export function FinanceWorkspace({
         {/* Collections */}
         {activeTab === 'collections' && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-text-muted">All pending and overdue installments across students</p>
-              {plansLoading && <div className="h-4 w-4 animate-spin rounded-full border-2 border-surface-border border-t-brand-500" />}
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-text-muted">Sample of pending/overdue installments — first 20 students, up to 50 rows</p>
+              {plansLoading && <div className="h-4 w-4 animate-spin rounded-full border-2 border-surface-border border-t-brand-500 motion-safe:animate-spin" aria-label="Loading" />}
             </div>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">Sample view (20 students). Use student ledger for complete history. Totals below reflect loaded sample only.</div>
             {plansLoading ? (
               <AdminTableSkeleton rows={5} cols={7} />
             ) : collectionData.length === 0 ? (
@@ -331,10 +339,11 @@ export function FinanceWorkspace({
           </div>
         )}
 
-        {/* Payments */}
+        {/* Payments — explicit placeholder (no invented functionality) */}
         {activeTab === 'payments' && (
           <AdminSection title="Recent Payments">
-            <AdminEmptyState icon={CreditCard} title="Payment Activity" description="Access individual student payment history from the Student Workspace." actionLabel="View Students" actionHref="/admin/students" />
+            <AdminEmptyState icon={CreditCard} title="Payment history is per-student" description="This overview does not list every payment. Open a student workspace to see receipts (payment received) and installment status." actionLabel="View Students" actionHref="/admin/students" />
+            <p className="mt-3 text-center text-xs text-text-muted">Receipt = payment received · Invoice = full-course billing document</p>
           </AdminSection>
         )}
 
@@ -390,6 +399,17 @@ export function FinanceWorkspace({
           </div>
         )}
       </div>
+      <ConfirmDialog
+        isOpen={!!confirmPay}
+        onClose={() => setConfirmPay(null)}
+        onConfirm={handleMarkPaid}
+        loading={paying}
+        variant="warning"
+        title="Mark installment as paid?"
+        message={confirmPay ? `Mark ${formatCurrency(confirmPay.amount)} for ${confirmPay.label} as paid? This records a manual payment and will update collections totals. Installment ${confirmPay.id.slice(0, 8)}…` : ''}
+        confirmLabel={paying ? 'Marking…' : 'Mark Paid'}
+        cancelLabel="Cancel"
+      />
     </div>
   );
 }

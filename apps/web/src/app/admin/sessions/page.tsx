@@ -151,7 +151,7 @@ export default function AdminSessionsPage() {
         onConfirm={confirmDelete}
         loading={deleting}
         title="Delete live session"
-        message="Are you sure you want to delete this live session from the LMS and Zoom?"
+        message="This will permanently delete the session from the LMS and attempt to delete the linked Zoom webinar (Zoom 404 is ignored). Attendance mappings for this session will also be removed. This cannot be undone."
         confirmLabel="Delete Session"
       />
     </div>

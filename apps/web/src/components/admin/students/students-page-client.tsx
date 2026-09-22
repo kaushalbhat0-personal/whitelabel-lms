@@ -235,6 +235,7 @@ export function StudentsPageClient({ initialStudents, initialTotal }: StudentsPa
           onSearchChange={setSearch}
           searchPlaceholder="Search by name or email..."
           searchKeys={['name', 'email', 'phone']}
+          emptyState={<AdminEmptyState icon={Users} title="No matching students" description={search ? `No students match “${search}”. Try a different name or email.` : 'No students match the current filter.'} />}
           bulkActions={[{ label: 'Assign to Batch', onClick: () => openAssignBulk() }]}
           exportCsv csvFilename="students.csv"
           csvHeaders={['Name', 'Email', 'Phone', 'Batches', 'Status']}

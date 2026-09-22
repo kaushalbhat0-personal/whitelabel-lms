@@ -172,7 +172,7 @@ export function AdminDashboardClient({
             {upcomingSessions.map((session) => (
               <div
                 key={session.id}
-                className="flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-surface-muted/50 group cursor-pointer"
+                className="flex items-center gap-4 px-5 py-3.5"
               >
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-50">
                   <Calendar className="h-5 w-5 text-brand-600" />
@@ -200,7 +200,6 @@ export function AdminDashboardClient({
                 >
                   {session.status === 'live' ? 'LIVE' : session.status === 'scheduled' ? 'Scheduled' : 'Upcoming'}
                 </Badge>
-                <ChevronRight className="h-4 w-4 shrink-0 text-text-muted opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
             ))}
           </div>
