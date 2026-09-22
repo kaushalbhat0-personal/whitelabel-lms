@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { fetchApi, ApiError } from '@/lib/api-client';
 import { API_ROUTES, ROUTES } from '@/lib/constants';
 import { getAccessTokenSync } from '@/lib/auth-token';
 import { clearMustChangePassword, getSessionCache } from '@/lib/auth';
 import { useAuthStore } from '@/stores/auth.store';
+import { Button } from '@/components/ui/Button';
 
 export default function ChangePasswordPage() {
   const router = useRouter();
@@ -17,6 +18,10 @@ export default function ChangePasswordPage() {
   const [success, setSuccess] = useState(false);
   const [initialCheckDone, setInitialCheckDone] = useState(false);
 
+  const submittingRef = useRef(false);
+  const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
+
   useEffect(() => {
     const token = getAccessTokenSync();
     if (!token) {
@@ -26,17 +31,31 @@ export default function ChangePasswordPage() {
     setInitialCheckDone(true);
   }, [router]);
 
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+      if (redirectTimerRef.current) {
+        clearTimeout(redirectTimerRef.current);
+        redirectTimerRef.current = null;
+      }
+    };
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setError('');
 
     if (newPassword !== confirmPassword) {
       setError('Passwords do not match');
+      submittingRef.current = false;
       return;
     }
 
     if (newPassword.length < 8) {
       setError('Password must be at least 8 characters');
+      submittingRef.current = false;
       return;
     }
 
@@ -63,19 +82,27 @@ export default function ChangePasswordPage() {
       try {
         useAuthStore.setState({ mustChangePassword: false });
       } catch {}
+      if (!mountedRef.current) return;
       setSuccess(true);
 
-      setTimeout(() => {
+      if (redirectTimerRef.current) {
+        clearTimeout(redirectTimerRef.current);
+      }
+      redirectTimerRef.current = setTimeout(() => {
         router.push(ROUTES.STUDENT.HOME);
       }, 2000);
     } catch (err) {
+      if (!mountedRef.current) return;
       if (err instanceof ApiError) {
         setError(err.message);
       } else {
         setError('An unexpected error occurred');
       }
     } finally {
-      setLoading(false);
+      if (mountedRef.current) {
+        setLoading(false);
+      }
+      submittingRef.current = false;
     }
   };
 
@@ -84,12 +111,16 @@ export default function ChangePasswordPage() {
   if (success) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-100">
-        <div className="w-full max-w-md rounded-xl bg-white p-8 shadow-lg text-center">
-          <div className="mb-4 text-4xl">&#9989;</div>
+        <div
+          className="w-full max-w-md rounded-xl bg-white p-8 shadow-lg text-center"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="mb-4 text-4xl" aria-hidden="true">
+            &#9989;
+          </div>
           <h1 className="mb-2 text-xl font-bold text-gray-900">Password Set!</h1>
-          <p className="text-sm text-gray-500">
-            Redirecting to login...
-          </p>
+          <p className="text-sm text-gray-500">Password updated successfully. Redirecting to your dashboard...</p>
         </div>
       </div>
     );
@@ -106,35 +137,43 @@ export default function ChangePasswordPage() {
         </div>
 
         {error && (
-          <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+          <div id="change-error" role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           <div>
-            <label className="block text-sm font-medium text-gray-700">
+            <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700">
               New Password
             </label>
             <input
+              id="newPassword"
               type="password"
               required
+              autoComplete="new-password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
+              aria-invalid={!!error}
+              aria-describedby={error ? 'change-error' : undefined}
               className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
               placeholder="••••••••"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">
+            <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
               Confirm Password
             </label>
             <input
+              id="confirmPassword"
               type="password"
               required
+              autoComplete="new-password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
+              aria-invalid={!!error}
+              aria-describedby={error ? 'change-error' : undefined}
               className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
               placeholder="••••••••"
             />
@@ -144,13 +183,14 @@ export default function ChangePasswordPage() {
             Password must be 8+ characters, include uppercase, lowercase, and a number.
           </p>
 
-          <button
+          <Button
             type="submit"
+            loading={loading}
             disabled={loading}
-            className="w-full rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
+            className="w-full min-h-[44px]"
           >
             {loading ? 'Setting...' : 'Set Password'}
-          </button>
+          </Button>
         </form>
       </div>
     </div>
