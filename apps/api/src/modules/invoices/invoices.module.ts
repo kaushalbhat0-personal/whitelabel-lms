@@ -1,6 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { MulterModule } from '@nestjs/platform-express';
 import { InvoicesController } from './invoices.controller';
+import { ReceiptsController } from './receipts.controller';
 import { InvoicesService } from './invoices.service';
 import { EmailModule } from '../email/email.module';
 import { OutboxModule } from '../outbox/outbox.module';
@@ -15,7 +16,7 @@ import { ObservabilityModule } from '../observability/observability.module';
     PdfGenerationModule,
     ObservabilityModule,
   ],
-  controllers: [InvoicesController],
+  controllers: [InvoicesController, ReceiptsController],
   providers: [InvoicesService],
   exports: [InvoicesService],
 })

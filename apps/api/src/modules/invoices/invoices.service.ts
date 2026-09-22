@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
@@ -304,9 +305,13 @@ export class InvoicesService {
    *   9. Email the PDF to the student.
    *  10. Update the receipt record with email_sent_at and email_sent_to.
    */
-  async createAndSendReceipt(paymentId: string): Promise<void> {
+  /**
+   * Create a receipt document for a payment — P3 split.
+   * Generates PDF, uploads to Storage, persists receipt with storage_path.
+   * Does NOT send email. Idempotent: returns existing if already present.
+   */
+  async createReceipt(paymentId: string): Promise<any> {
     // 0. Idempotency — one receipt per payment (uq_receipts_payment_id)
-    // Outbox retry or duplicate enqueue must not create a second receipt.
     const { data: existingReceipt } = await this.supabaseService.client
       .from(TABLES.RECEIPTS)
       .select('id')
@@ -314,7 +319,7 @@ export class InvoicesService {
       .maybeSingle();
     if (existingReceipt) {
       this.logger.log(`Receipt already exists for payment ${paymentId} — skipping duplicate generation`);
-      return;
+      return existingReceipt;
     }
 
     // 1. Fetch payment
@@ -333,14 +338,12 @@ export class InvoicesService {
     const student = pay.student;
     const course = pay.course;
 
-    // Null-safe labels for missing relations
     const studentName = student?.name ?? 'Unknown Student';
     const studentEmail = student?.email ?? 'unknown@email.com';
     const courseName = course?.name ?? 'Unknown Course';
     const studentId = student?.id ?? pay.student_id ?? 'unknown';
     const courseId = course?.id ?? pay.course_id ?? 'unknown';
 
-    // 2. Fetch business config
     const { data: bizCfg } = await this.supabaseService.client
       .from(TABLES.BUSINESS_CONFIG)
       .select('*')
@@ -350,8 +353,8 @@ export class InvoicesService {
     const biz = bizCfg as any;
     const { baseAmount, cgstAmount, sgstAmount } = this.calculateGstSplit(pay.amount);
 
-    // 3. Get receipt number
-    const { formatted: receiptNumber, rawNumber } = await this.getNextDocumentNumber('RECEIPT');
+    // 3. Get receipt number AFTER guard (no leak on duplicate)
+    const { formatted: receiptNumber } = await this.getNextDocumentNumber('RECEIPT');
 
     logEntityEvent(
       this.observabilityService,
@@ -362,7 +365,6 @@ export class InvoicesService {
       { studentId, courseId, amount: pay.amount, paymentId },
     ).catch(() => {});
 
-    // 4. Compile template
     const templateSource = this.readTemplate('receipt.template.hbs');
     const template = Handlebars.compile(templateSource);
     const dateStr = new Date().toLocaleDateString('en-IN', {
@@ -391,15 +393,11 @@ export class InvoicesService {
       businessLogo: biz?.logo_url ?? '',
     });
 
-    // 5. Generate PDF
     const pdfBuffer = await this.generatePdf(html);
-
-    // 6. Upload to storage
     const storagePath = `receipts/${studentId}/${receiptNumber}.pdf`;
     const pdfUrl = await this.uploadPdf(pdfBuffer, storagePath);
 
-    // 7. Insert receipt record
-    const { error: insertError } = await this.supabaseService.client
+    const { data: inserted, error: insertError } = await this.supabaseService.client
       .from(TABLES.RECEIPTS)
       .insert({
         receipt_number: receiptNumber,
@@ -410,45 +408,98 @@ export class InvoicesService {
         amount: pay.amount,
         issued_on: new Date().toISOString().split('T')[0],
         pdf_url: pdfUrl || null,
+        storage_path: storagePath,
         generated_by: pay.recorded_by,
-      });
+      })
+      .select()
+      .single();
 
     if (insertError) {
-      // Unique violation (23505) means concurrent retry already inserted receipt — treat as idempotent success
       if ((insertError as any).code === '23505' || insertError.message?.includes('uq_receipts_payment_id') || insertError.message?.includes('duplicate key')) {
         this.logger.warn(`Receipt insert conflict for payment ${paymentId} — concurrent duplicate, treating as success`);
-        return;
+        const { data: race } = await this.supabaseService.client.from(TABLES.RECEIPTS).select('id').eq('payment_id', paymentId).maybeSingle();
+        return race ?? null;
       }
       this.logger.error(`Failed to insert receipt record: ${insertError.message}`);
+      throw new InternalServerErrorException('Failed to persist receipt');
     }
 
-    // 8. Email (P2 keeps automatic email; P3 will separate)
-    const emailSent = await this.emailService.sendEmail(
-      student.email,
-      `Payment Receipt — ${receiptNumber}`,
-      `<p>Dear ${student.name},</p>
-<p>Please find attached your payment receipt for <strong>${course.name}</strong>.</p>
-<p>Receipt No: <strong>${receiptNumber}</strong></p>
-<p>Amount Paid: <strong>&#x20B9; ${pay.amount.toFixed(2)}</strong></p>`,
-      [
-        {
-          filename: `${receiptNumber}.pdf`,
-          content: pdfBuffer.toString('base64'),
-          contentType: 'application/pdf',
-        },
-      ],
-    );
+    return inserted;
+  }
 
-    // 9. Update email_sent fields
-    if (emailSent) {
-      await this.supabaseService.client
-        .from(TABLES.RECEIPTS)
-        .update({
-          email_sent_at: new Date().toISOString(),
-          email_sent_to: student.email,
-        })
-        .eq('receipt_number', receiptNumber);
+  /**
+   * Explicit admin action: send existing receipt PDF via email.
+   * Prefers storage_path download; legacy pdf_url fallback is controlled error.
+   */
+  async sendReceiptEmail(receiptId: string, _adminId: string): Promise<{ email_sent_to: string; email_sent_at: string }> {
+    const { data: receipt, error } = await this.supabaseService.client
+      .from(TABLES.RECEIPTS)
+      .select('*')
+      .eq('id', receiptId)
+      .single();
+    if (error || !receipt) throw new NotFoundException('Receipt not found');
+    const r = receipt as any;
+
+    if (!r.storage_path && !r.pdf_url) {
+      throw new BadRequestException('Receipt has no stored document — cannot send');
     }
+
+    const { data: payment } = await this.supabaseService.client
+      .from(TABLES.PAYMENTS)
+      .select('*, student:profiles!student_id(*), course:courses!course_id(*)')
+      .eq('id', r.payment_id)
+      .single();
+    const pay: any = payment;
+    const student = pay?.student ?? null;
+    const courseName = pay?.course?.name ?? r.course_id ?? 'Course';
+    const recipient = student?.email ?? r.email_sent_to ?? null;
+    if (!recipient) throw new BadRequestException('Receipt has no recipient email');
+
+    let pdfBuffer: Buffer | null = null;
+    let filename = `${r.receipt_number}.pdf`;
+
+    if (r.storage_path) {
+      const { data: blob, error: dlErr } = await this.supabaseService.client.storage.from('invoices').download(r.storage_path);
+      if (dlErr || !blob) {
+        this.logger.error(`Failed to download receipt PDF from storage_path ${r.storage_path}: ${dlErr?.message}`);
+        throw new BadRequestException('Stored receipt PDF not available for sending');
+      }
+      const ab = await (blob as any).arrayBuffer();
+      pdfBuffer = Buffer.from(ab);
+    } else {
+      // Legacy fallback: try pdf_url fetch if still usable
+      try {
+        const res = await fetch(r.pdf_url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const ab = await res.arrayBuffer();
+        pdfBuffer = Buffer.from(ab);
+      } catch (e: any) {
+        throw new BadRequestException(`Legacy receipt has no storage_path and signed URL is expired/unreachable: ${e.message}`);
+      }
+    }
+
+    const studentName = student?.name ?? 'Student';
+    const html = `<p>Dear ${studentName},</p><p>Please find attached your payment receipt for <strong>${courseName}</strong>.</p><p>Receipt No: <strong>${r.receipt_number}</strong></p><p>Amount Paid: <strong>&#x20B9; ${Number(r.amount).toFixed(2)}</strong></p>`;
+
+    const sent = await this.emailService.sendEmail(recipient, `Payment Receipt — ${r.receipt_number}`, html, [{ filename, content: pdfBuffer.toString('base64'), contentType: 'application/pdf' }]);
+
+    if (!sent) {
+      // Suppressed or provider failure — do not mark sent
+      throw new ConflictException('Email not sent — recipient suppressed or email provider rejected the request');
+    }
+
+    const now = new Date().toISOString();
+    await this.supabaseService.client.from(TABLES.RECEIPTS).update({ email_sent_at: now, email_sent_to: recipient }).eq('id', r.id);
+
+    logEntityEvent(this.observabilityService, 'INVOICE_SENT', 'receipt', r.receipt_number, _adminId, { receiptId: r.id, recipient }).catch(() => {});
+
+    return { email_sent_to: recipient, email_sent_at: now };
+  }
+
+  /** @deprecated — P3 split; use createReceipt (creation) + sendReceiptEmail (explicit admin send). Kept for no caller. */
+  async createAndSendReceipt(paymentId: string): Promise<void> {
+    this.logger.warn(`Deprecated createAndSendReceipt called for ${paymentId} — delegating to createReceipt only (no auto-email)`);
+    await this.createReceipt(paymentId);
   }
 
   // ──────────────────────────────────────────────────────────────
@@ -465,8 +516,21 @@ export class InvoicesService {
    *
    * Flow is identical to createAndSendReceipt (see above).
    */
-  async createAndSendInvoice(paymentId: string): Promise<void> {
-    // 1. Fetch payment
+  /**
+   * Create an invoice document for a payment — P3 split (payment-level, P4 will be per-plan).
+   * No email. Persists storage_path. Idempotent per payment.
+   */
+  async createInvoice(paymentId: string): Promise<any> {
+    const { data: existing } = await this.supabaseService.client
+      .from(TABLES.INVOICES)
+      .select('id')
+      .eq('payment_id', paymentId)
+      .maybeSingle();
+    if (existing) {
+      this.logger.log(`Invoice already exists for payment ${paymentId} — skipping duplicate`);
+      return existing;
+    }
+
     const { data: payment, error: payError } = await this.supabaseService.client
       .from(TABLES.PAYMENTS)
       .select('*, student:profiles!student_id(*), course:courses!course_id(*)')
@@ -482,14 +546,12 @@ export class InvoicesService {
     const student = pay.student;
     const course = pay.course;
 
-    // Null-safe labels for missing relations
     const studentName = student?.name ?? 'Unknown Student';
     const studentEmail = student?.email ?? 'unknown@email.com';
     const courseName = course?.name ?? 'Unknown Course';
     const studentId = student?.id ?? pay.student_id ?? 'unknown';
     const courseId = course?.id ?? pay.course_id ?? 'unknown';
 
-    // 2. Fetch business config
     const { data: bizCfg } = await this.supabaseService.client
       .from(TABLES.BUSINESS_CONFIG)
       .select('*')
@@ -499,7 +561,6 @@ export class InvoicesService {
     const biz = bizCfg as any;
     const { baseAmount, cgstAmount, sgstAmount } = this.calculateGstSplit(pay.amount);
 
-    // 3. Get invoice number
     const { formatted: invoiceNumber } = await this.getNextDocumentNumber('INVOICE');
 
     logEntityEvent(
@@ -511,7 +572,6 @@ export class InvoicesService {
       { studentId, courseId, amount: pay.amount, paymentId },
     ).catch(() => {});
 
-    // 4. Compile template
     const templateSource = this.readTemplate('invoice.template.hbs');
     const template = Handlebars.compile(templateSource);
     const dateStr = new Date().toLocaleDateString('en-IN', {
@@ -539,18 +599,13 @@ export class InvoicesService {
       businessLogo: biz?.logo_url ?? '',
     });
 
-    // 5. Generate PDF
     const pdfBuffer = await this.generatePdf(html);
-
-    // 6. Upload to storage
     const storagePath = `invoices/${studentId}/${invoiceNumber}.pdf`;
     const pdfUrl = await this.uploadPdf(pdfBuffer, storagePath);
 
-    // 7. Insert invoice record
-    const { baseAmount: subTotal, cgstAmount: cgst, sgstAmount: sgst } =
-      this.calculateGstSplit(pay.amount);
+    const { baseAmount: subTotal, cgstAmount: cgst, sgstAmount: sgst } = this.calculateGstSplit(pay.amount);
 
-    const { error: insertError } = await this.supabaseService.client
+    const { data: inserted, error: insertError } = await this.supabaseService.client
       .from(TABLES.INVOICES)
       .insert({
         invoice_number: invoiceNumber,
@@ -565,49 +620,90 @@ export class InvoicesService {
         gst_applicable: true,
         issued_on: new Date().toISOString().split('T')[0],
         pdf_url: pdfUrl || null,
+        storage_path: storagePath,
         generated_by: pay.recorded_by,
-      });
+      })
+      .select()
+      .single();
 
     if (insertError) {
+      if ((insertError as any).code === '23505' || insertError.message?.includes('duplicate key')) {
+        this.logger.warn(`Invoice insert conflict for payment ${paymentId} — concurrent duplicate`);
+        const { data: race } = await this.supabaseService.client.from(TABLES.INVOICES).select('id').eq('payment_id', paymentId).maybeSingle();
+        return race ?? null;
+      }
       this.logger.error(`Failed to insert invoice record: ${insertError.message}`);
+      throw new InternalServerErrorException('Failed to persist invoice');
     }
 
-    // 8. Email
-    const emailSent = await this.emailService.sendEmail(
-      student.email,
-      `Tax Invoice — ${invoiceNumber}`,
-      `<p>Dear ${student.name},</p>
-<p>Please find attached your tax invoice for <strong>${course.name}</strong>.</p>
-<p>Invoice No: <strong>${invoiceNumber}</strong></p>
-<p>Total Amount: <strong>&#x20B9; ${pay.amount.toFixed(2)}</strong></p>`,
-      [
-        {
-          filename: `${invoiceNumber}.pdf`,
-          content: pdfBuffer.toString('base64'),
-          contentType: 'application/pdf',
-        },
-      ],
-    );
+    return inserted;
+  }
 
-    // 9. Update email_sent fields
-    if (emailSent) {
-      await this.supabaseService.client
-        .from(TABLES.INVOICES)
-        .update({
-          email_sent_at: new Date().toISOString(),
-          email_sent_to: student.email,
-        })
-        .eq('invoice_number', invoiceNumber);
+  async sendInvoiceEmail(invoiceId: string, _adminId: string): Promise<{ email_sent_to: string; email_sent_at: string }> {
+    const { data: invoice, error } = await this.supabaseService.client
+      .from(TABLES.INVOICES)
+      .select('*')
+      .eq('id', invoiceId)
+      .single();
+    if (error || !invoice) throw new NotFoundException('Invoice not found');
+    const inv = invoice as any;
 
-      logEntityEvent(
-        this.observabilityService,
-        'INVOICE_SENT',
-        'invoice',
-        invoiceNumber,
-        pay.recorded_by ?? 'system',
-        { studentId, studentEmail: student.email, paymentId },
-      ).catch(() => {});
+    if (!inv.storage_path && !inv.pdf_url) {
+      throw new BadRequestException('Invoice has no stored document — cannot send');
     }
+
+    const { data: payment } = await this.supabaseService.client
+      .from(TABLES.PAYMENTS)
+      .select('*, student:profiles!student_id(*), course:courses!course_id(*)')
+      .eq('id', inv.payment_id)
+      .single();
+    const pay: any = payment;
+    const student = pay?.student ?? null;
+    const courseName = pay?.course?.name ?? inv.course_id ?? 'Course';
+    const recipient = student?.email ?? inv.email_sent_to ?? null;
+    if (!recipient) throw new BadRequestException('Invoice has no recipient email');
+
+    let pdfBuffer: Buffer | null = null;
+    let filename = `${inv.invoice_number}.pdf`;
+
+    if (inv.storage_path) {
+      const { data: blob, error: dlErr } = await this.supabaseService.client.storage.from('invoices').download(inv.storage_path);
+      if (dlErr || !blob) {
+        this.logger.error(`Failed to download invoice PDF from storage_path ${inv.storage_path}: ${dlErr?.message}`);
+        throw new BadRequestException('Stored invoice PDF not available for sending');
+      }
+      const ab = await (blob as any).arrayBuffer();
+      pdfBuffer = Buffer.from(ab);
+    } else {
+      try {
+        const res = await fetch(inv.pdf_url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const ab = await res.arrayBuffer();
+        pdfBuffer = Buffer.from(ab);
+      } catch (e: any) {
+        throw new BadRequestException(`Legacy invoice has no storage_path and signed URL is expired/unreachable: ${e.message}`);
+      }
+    }
+
+    const studentName = student?.name ?? 'Student';
+    const html = `<p>Dear ${studentName},</p><p>Please find attached your tax invoice for <strong>${courseName}</strong>.</p><p>Invoice No: <strong>${inv.invoice_number}</strong></p><p>Total Amount: <strong>&#x20B9; ${Number(inv.total_amount).toFixed(2)}</strong></p>`;
+
+    const sent = await this.emailService.sendEmail(recipient, `Tax Invoice — ${inv.invoice_number}`, html, [{ filename, content: pdfBuffer.toString('base64'), contentType: 'application/pdf' }]);
+
+    if (!sent) {
+      throw new ConflictException('Email not sent — recipient suppressed or email provider rejected the request');
+    }
+
+    const now = new Date().toISOString();
+    await this.supabaseService.client.from(TABLES.INVOICES).update({ email_sent_at: now, email_sent_to: recipient }).eq('id', inv.id);
+    logEntityEvent(this.observabilityService, 'INVOICE_SENT', 'invoice', inv.invoice_number, _adminId, { invoiceId: inv.id, recipient }).catch(() => {});
+    return { email_sent_to: recipient, email_sent_at: now };
+  }
+
+  /** @deprecated — P3 split; use createInvoice + sendInvoiceEmail */
+  async createAndSendInvoice(paymentId: string): Promise<void> {
+    this.logger.warn(`Deprecated createAndSendInvoice called for ${paymentId} — delegating to createInvoice only (no auto-email)`);
+    await this.createInvoice(paymentId);
   }
 
   // ──────────────────────────────────────────────────────────────
@@ -630,10 +726,14 @@ export class InvoicesService {
 
     if (invoice) {
       const inv = invoice as any;
-      if (!inv.pdf_url) {
-        throw new BadRequestException('Invoice PDF has not been generated yet');
+      if (inv.storage_path) {
+        const { data: signed } = await this.supabaseService.client.storage.from('invoices').createSignedUrl(inv.storage_path, 60 * 60 * 24 * 7);
+        if (signed?.signedUrl) return { url: signed.signedUrl, fileName: `${inv.invoice_number}.pdf` };
       }
-      return { url: inv.pdf_url, fileName: `${inv.invoice_number}.pdf` };
+      if (inv.pdf_url) {
+        return { url: inv.pdf_url, fileName: `${inv.invoice_number}.pdf` };
+      }
+      throw new BadRequestException('Invoice PDF has not been generated yet');
     }
 
     // Try receipts
@@ -645,13 +745,43 @@ export class InvoicesService {
 
     if (receipt) {
       const rcp = receipt as any;
-      if (!rcp.pdf_url) {
-        throw new BadRequestException('Receipt PDF has not been generated yet');
+      if (rcp.storage_path) {
+        const { data: signed } = await this.supabaseService.client.storage.from('invoices').createSignedUrl(rcp.storage_path, 60 * 60 * 24 * 7);
+        if (signed?.signedUrl) return { url: signed.signedUrl, fileName: `${rcp.receipt_number}.pdf` };
       }
-      return { url: rcp.pdf_url, fileName: `${rcp.receipt_number}.pdf` };
+      if (rcp.pdf_url) {
+        return { url: rcp.pdf_url, fileName: `${rcp.receipt_number}.pdf` };
+      }
+      throw new BadRequestException('Receipt PDF has not been generated yet');
     }
 
     throw new NotFoundException('Invoice or Receipt not found');
+  }
+
+  async listReceipts(studentId?: string): Promise<any[]> {
+    let q = this.supabaseService.client.from(TABLES.RECEIPTS).select('*').order('created_at', { ascending: false });
+    if (studentId) q = q.eq('student_id', studentId);
+    const { data, error } = await q;
+    if (error) throw new BadRequestException('Failed to list receipts');
+    return data ?? [];
+  }
+
+  async listInvoices(studentId?: string): Promise<any[]> {
+    let q = this.supabaseService.client.from(TABLES.INVOICES).select('*').order('created_at', { ascending: false });
+    if (studentId) q = q.eq('student_id', studentId);
+    const { data, error } = await q;
+    if (error) throw new BadRequestException('Failed to list invoices');
+    return data ?? [];
+  }
+
+  async getReceiptByPaymentId(paymentId: string): Promise<any | null> {
+    const { data } = await this.supabaseService.client.from(TABLES.RECEIPTS).select('*').eq('payment_id', paymentId).maybeSingle();
+    return data ?? null;
+  }
+
+  async getInvoiceByPaymentId(paymentId: string): Promise<any | null> {
+    const { data } = await this.supabaseService.client.from(TABLES.INVOICES).select('*').eq('payment_id', paymentId).maybeSingle();
+    return data ?? null;
   }
 
   // ──────────────────────────────────────────────────────────────
@@ -808,11 +938,11 @@ export class InvoicesService {
           continue;
         }
 
-        // Generate the document
+        // Generate the document (P3: creation only, no email)
         if (docType === 'INVOICE') {
-          await this.createAndSendInvoice((payment as any).id);
+          await this.createInvoice((payment as any).id);
         } else {
-          await this.createAndSendReceipt((payment as any).id);
+          await this.createReceipt((payment as any).id);
         }
 
         successCount++;

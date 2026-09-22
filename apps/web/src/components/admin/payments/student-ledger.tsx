@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Search, ChevronDown, ChevronUp, CheckCircle, Clock } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, CheckCircle, Clock, Download, Mail, Loader2 } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { MarkPaidModal } from './mark-paid-modal';
 import { getStudentPlans, type PaymentPlan } from '@/lib/api/payments';
+import { getReceipts, sendReceipt, getDownloadUrl } from '@/lib/api/invoices';
 
 interface StudentLedgerProps {
   students: { id: string; name: string; email: string }[];
@@ -20,6 +21,9 @@ export function StudentLedger({ students }: StudentLedgerProps) {
     number: number;
     amount: number;
   } | null>(null);
+  const [receipts, setReceipts] = useState<any[]>([]);
+  const [sendingIds, setSendingIds] = useState<Set<string>>(new Set());
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
 
   const fetchPlans = useCallback(async () => {
     if (!selectedStudentId) {
@@ -37,9 +41,68 @@ export function StudentLedger({ students }: StudentLedgerProps) {
     }
   }, [selectedStudentId]);
 
+  const fetchReceipts = useCallback(async () => {
+    if (!selectedStudentId) {
+      setReceipts([]);
+      return;
+    }
+    try {
+      const data = await getReceipts(selectedStudentId);
+      setReceipts(data ?? []);
+    } catch {
+      setReceipts([]);
+    }
+  }, [selectedStudentId]);
+
   useEffect(() => {
     fetchPlans();
   }, [fetchPlans]);
+
+  useEffect(() => {
+    fetchReceipts();
+  }, [fetchReceipts]);
+
+  const getReceiptForPayment = (paymentId?: string) => {
+    if (!paymentId) return null;
+    return receipts.find((r: any) => r.payment_id === paymentId) ?? null;
+  };
+
+  const handleSendReceipt = async (receiptId: string) => {
+    if (sendingIds.has(receiptId)) return;
+    setSendingIds((s) => new Set(s).add(receiptId));
+    setFeedback(null);
+    try {
+      const res = await sendReceipt(receiptId);
+      setFeedback({ type: 'success', msg: `Email sent to ${res.email_sent_to}` });
+      await fetchReceipts();
+    } catch (e: any) {
+      setFeedback({ type: 'error', msg: e.message || 'Failed to send email' });
+    } finally {
+      setSendingIds((s) => {
+        const n = new Set(s);
+        n.delete(receiptId);
+        return n;
+      });
+      setTimeout(() => setFeedback(null), 4000);
+    }
+  };
+
+  const handleDownload = async (receiptId: string, fallbackName: string) => {
+    try {
+      const { url, fileName } = await getDownloadUrl(receiptId);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName || fallbackName;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (e: any) {
+      setFeedback({ type: 'error', msg: e.message || 'Download failed' });
+      setTimeout(() => setFeedback(null), 4000);
+    }
+  };
 
   const selectedStudent = students.find((s) => s.id === selectedStudentId);
 
@@ -171,6 +234,12 @@ export function StudentLedger({ students }: StudentLedgerProps) {
                       </span>
                     </div>
 
+                    {feedback && (
+                      <div className={`rounded-lg px-3 py-2 text-xs ${feedback.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                        {feedback.msg}
+                      </div>
+                    )}
+
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="text-left text-xs font-medium uppercase text-gray-500">
@@ -214,7 +283,7 @@ export function StudentLedger({ students }: StudentLedgerProps) {
                               )}
                             </td>
                             <td className="py-2 text-right">
-                              {inst.status === 'pending' && (
+                              {inst.status === 'pending' ? (
                                 <button
                                   onClick={() =>
                                     setMarkPaidTarget({
@@ -227,6 +296,36 @@ export function StudentLedger({ students }: StudentLedgerProps) {
                                 >
                                   Mark Paid
                                 </button>
+                              ) : (
+                                (() => {
+                                  const receipt: any = getReceiptForPayment((inst as any).payment_id);
+                                  if (!receipt) {
+                                    return <span className="text-xs text-gray-400">Generating receipt…</span>;
+                                  }
+                                  const isSending = sendingIds.has(receipt.id);
+                                  const isSent = !!receipt.email_sent_at;
+                                  return (
+                                    <div className="flex items-center justify-end gap-1.5">
+                                      <button
+                                        onClick={() => handleDownload(receipt.id, `${receipt.receipt_number}.pdf`)}
+                                        className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                                        title="Download receipt"
+                                      >
+                                        <Download className="h-3 w-3" />
+                                        Download
+                                      </button>
+                                      <button
+                                        onClick={() => handleSendReceipt(receipt.id)}
+                                        disabled={isSending}
+                                        className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-white ${isSent ? 'bg-blue-600 hover:bg-blue-700' : 'bg-brand-600 hover:bg-brand-700'} disabled:opacity-50`}
+                                        title={isSent ? `Sent ${new Date(receipt.email_sent_at).toLocaleDateString()} — click to resend` : 'Send receipt email'}
+                                      >
+                                        {isSending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Mail className="h-3 w-3" />}
+                                        {isSending ? 'Sending…' : isSent ? 'Resend' : 'Send Email'}
+                                      </button>
+                                    </div>
+                                  );
+                                })()
                               )}
                             </td>
                           </tr>
@@ -256,6 +355,7 @@ export function StudentLedger({ students }: StudentLedgerProps) {
             onConfirm={() => {
               setMarkPaidTarget(null);
               fetchPlans();
+              setTimeout(() => fetchReceipts(), 800);
             }}
           />
         )}

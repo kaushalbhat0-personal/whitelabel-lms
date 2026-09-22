@@ -62,9 +62,9 @@ export class OutboxService {
 
         try {
           if (msg.message_type === 'receipt') {
-            await this.invoicesService.createAndSendReceipt(msg.payload.paymentId);
+            await this.invoicesService.createReceipt(msg.payload.paymentId);
           } else if (msg.message_type === 'invoice') {
-            await this.invoicesService.createAndSendInvoice(msg.payload.paymentId);
+            await this.invoicesService.createInvoice(msg.payload.paymentId);
           }
 
           await this.markCompleted(msg.id);
