@@ -968,4 +968,211 @@ describe('RecordingsService', () => {
       expect(result).toHaveLength(0);
     });
   });
+
+  describe('fetchMyRecordingsGrouped - curriculum ordering (Phase A)', () => {
+    const batchId = '550e8400-e29b-41d4-a716-446655440001';
+    const recA = '550e8400-e29b-41d4-a716-4466554400a1';
+    const recB = '550e8400-e29b-41d4-a716-4466554400b2';
+    const recC = '550e8400-e29b-41d4-a716-4466554400c3';
+
+    function mockGroupedCalls(curriculumRows: any[], recordingsRows: any[]) {
+      let idx = 0;
+      chain.from.mockImplementation((table: string) => {
+        const call = idx++;
+        // Use a fresh mock chain per call
+        const q: any = {
+          select: jest.fn().mockReturnThis(),
+          eq: jest.fn().mockReturnThis(),
+          in: jest.fn().mockReturnThis(),
+          order: jest.fn().mockReturnThis(),
+          single: jest.fn(),
+          maybeSingle: jest.fn(),
+        };
+        // Helpers to make chain awaitable
+        const makeAwaitable = (data: any) => {
+          const p: any = Promise.resolve({ data, error: null });
+          q.then = (fn: any) => p.then(fn);
+          // also make order/in/eq resolve directly when awaited via order()
+          q.order = jest.fn().mockReturnValue({
+            then: (fn: any) => Promise.resolve({ data, error: null }).then(fn),
+          });
+          // For curriculum query which ends with .order(), we need order() to resolve
+          // For recordings query which ends with .order(), same
+          // But to keep simple, make the chain itself thenable
+          q.then = (fn: any) => Promise.resolve({ data, error: null }).then(fn);
+          return q;
+        };
+
+        if (call === 0) {
+          // batch_students
+          const data = [{ batch_id: batchId }];
+          q.select.mockReturnThis();
+          q.eq.mockImplementation(() => ({
+            then: (fn: any) => Promise.resolve({ data, error: null }).then(fn),
+          } as any));
+          return q;
+        }
+        if (call === 1) {
+          // batches
+          const data = [{ id: batchId, name: '12 PM - 2 PM - B1' }];
+          q.select.mockReturnThis();
+          q.in.mockImplementation(() => ({
+            then: (fn: any) => Promise.resolve({ data, error: null }).then(fn),
+          } as any));
+          return q;
+        }
+        if (call === 2) {
+          // recording_batches
+          const data = [
+            { recording_id: recA, batch_id: batchId },
+            { recording_id: recB, batch_id: batchId },
+            { recording_id: recC, batch_id: batchId },
+          ];
+          q.select.mockReturnThis();
+          q.in.mockImplementation(() => ({
+            then: (fn: any) => Promise.resolve({ data, error: null }).then(fn),
+          } as any));
+          return q;
+        }
+        if (call === 3) {
+          // recordings
+          const data = recordingsRows;
+          // chain: .select().in().eq().order() -> order resolves
+          q.select.mockReturnThis();
+          q.in.mockReturnThis();
+          q.eq.mockReturnThis();
+          q.order.mockImplementation(() => ({
+            then: (fn: any) => Promise.resolve({ data, error: null }).then(fn),
+          } as any));
+          // also make the chain itself thenable for safety
+          q.then = (fn: any) => Promise.resolve({ data, error: null }).then(fn);
+          return q;
+        }
+        if (call === 4) {
+          // curriculum
+          const data = curriculumRows;
+          q.select.mockReturnThis();
+          q.eq.mockReturnThis();
+          q.in.mockReturnThis();
+          q.order.mockImplementation(() => ({
+            then: (fn: any) => Promise.resolve({ data, error: null }).then(fn),
+          } as any));
+          q.then = (fn: any) => Promise.resolve({ data, error: null }).then(fn);
+          return q;
+        }
+        if (call === 5) {
+          // video_progress
+          const data: any[] = [];
+          q.select.mockReturnThis();
+          q.in.mockReturnThis();
+          q.eq.mockImplementation(() => ({
+            then: (fn: any) => Promise.resolve({ data, error: null }).then(fn),
+          } as any));
+          return q;
+        }
+        // fallback
+        q.then = (fn: any) => Promise.resolve({ data: [], error: null }).then(fn);
+        return q;
+      });
+    }
+
+    it('should return recordings ordered by curriculum sort_order ASC', async () => {
+      const curriculumRows = [
+        { batch_id: batchId, content_id: recB, category_name: 'Stock Market Basic To Advance', sort_order: 0, is_published: true, title_override: null },
+        { batch_id: batchId, content_id: recA, category_name: 'Stock Market Basic To Advance', sort_order: 1, is_published: true, title_override: null },
+        { batch_id: batchId, content_id: recC, category_name: 'Stock Market Basic To Advance', sort_order: 2, is_published: true, title_override: null },
+      ];
+      const recordingsRows = [
+        { id: recA, title: 'Introduction And Syllabus Discussion', description: null, mux_playback_id: 'pb-a', duration_seconds: 100, sort_order: 5, status: 'ready', created_at: '2026-09-01T00:00:00Z' },
+        { id: recB, title: 'Learning Tradingview', description: null, mux_playback_id: 'pb-b', duration_seconds: 100, sort_order: 2, status: 'ready', created_at: '2026-09-02T00:00:00Z' },
+        { id: recC, title: 'Tradingview Tools and Trendline', description: null, mux_playback_id: 'pb-c', duration_seconds: 100, sort_order: 9, status: 'ready', created_at: '2026-09-03T00:00:00Z' },
+      ];
+      mockGroupedCalls(curriculumRows, recordingsRows);
+
+      const result = await (service as any).fetchMyRecordingsGrouped('student-1');
+      expect(result).toHaveLength(1);
+      const section = result[0].sections[0];
+      expect(section.recordings.map((r: any) => r.id)).toEqual([recB, recA, recC]);
+      expect(section.recordings.map((r: any) => r.title)).toEqual(['Learning Tradingview', 'Introduction And Syllabus Discussion', 'Tradingview Tools and Trendline']);
+    });
+
+    it('should merge case/whitespace category variants while preserving sort_order', async () => {
+      const curriculumRows = [
+        { batch_id: batchId, content_id: recA, category_name: 'Stock Market Basic to Advance', sort_order: 0, is_published: true, title_override: null },
+        { batch_id: batchId, content_id: recB, category_name: 'Stock Market Basic To Advance', sort_order: 1, is_published: true, title_override: null },
+        { batch_id: batchId, content_id: recC, category_name: '  Stock Market Basic   To   Advance  ', sort_order: 2, is_published: true, title_override: null },
+      ];
+      const recordingsRows = [
+        { id: recA, title: 'Introduction And Syllabus Discussion', description: null, mux_playback_id: 'pb-a', duration_seconds: 100, sort_order: 0, status: 'ready', created_at: '2026-09-01T00:00:00Z' },
+        { id: recB, title: 'Learning Tradingview', description: null, mux_playback_id: 'pb-b', duration_seconds: 100, sort_order: 0, status: 'ready', created_at: '2026-09-01T00:00:00Z' },
+        { id: recC, title: 'Tradingview Tools and Trendline', description: null, mux_playback_id: 'pb-c', duration_seconds: 100, sort_order: 0, status: 'ready', created_at: '2026-09-01T00:00:00Z' },
+      ];
+      mockGroupedCalls(curriculumRows, recordingsRows);
+
+      const result = await (service as any).fetchMyRecordingsGrouped('student-1');
+      expect(result).toHaveLength(1);
+      expect(result[0].sections).toHaveLength(1); // merged to one logical category
+      const ids = result[0].sections[0].recordings.map((r: any) => r.id);
+      expect(ids).toEqual([recA, recB, recC]); // sorted by sort_order, not by variant
+    });
+
+    it('should keep two logical categories separate and each ordered by sort_order', async () => {
+      const recD = '550e8400-e29b-41d4-a716-4466554400d4';
+      const curriculumRows = [
+        { batch_id: batchId, content_id: recA, category_name: 'Stock Market Basic To Advance', sort_order: 0, is_published: true, title_override: null },
+        { batch_id: batchId, content_id: recB, category_name: 'Stock Market Basic To Advance', sort_order: 1, is_published: true, title_override: null },
+        { batch_id: batchId, content_id: recC, category_name: 'Advanced', sort_order: 0, is_published: true, title_override: null },
+        { batch_id: batchId, content_id: recD, category_name: 'Advanced', sort_order: 1, is_published: true, title_override: null },
+      ];
+      const recordingsRows = [
+        { id: recA, title: 'A', description: null, mux_playback_id: 'pb-a', duration_seconds: 100, sort_order: 0, status: 'ready', created_at: '2026-09-01T00:00:00Z' },
+        { id: recB, title: 'B', description: null, mux_playback_id: 'pb-b', duration_seconds: 100, sort_order: 0, status: 'ready', created_at: '2026-09-01T00:00:00Z' },
+        { id: recC, title: 'C', description: null, mux_playback_id: 'pb-c', duration_seconds: 100, sort_order: 0, status: 'ready', created_at: '2026-09-01T00:00:00Z' },
+        { id: recD, title: 'D', description: null, mux_playback_id: 'pb-d', duration_seconds: 100, sort_order: 0, status: 'ready', created_at: '2026-09-01T00:00:00Z' },
+      ];
+      // Need to extend mock to handle 4 recordings
+      let idx = 0;
+      chain.from.mockImplementation((table: string) => {
+        const call = idx++;
+        const q: any = { select: jest.fn().mockReturnThis(), eq: jest.fn().mockReturnThis(), in: jest.fn().mockReturnThis(), order: jest.fn().mockReturnThis() };
+        if (call === 0) {
+          q.eq.mockImplementation(() => ({ then: (fn:any)=>Promise.resolve({data:[{batch_id:batchId}],error:null}).then(fn)} as any));
+          return q;
+        }
+        if (call === 1) {
+          q.in.mockImplementation(() => ({ then: (fn:any)=>Promise.resolve({data:[{id:batchId,name:'B1'}],error:null}).then(fn)} as any));
+          return q;
+        }
+        if (call === 2) {
+          const data = [{recording_id:recA,batch_id:batchId},{recording_id:recB,batch_id:batchId},{recording_id:recC,batch_id:batchId},{recording_id:recD,batch_id:batchId}];
+          q.in.mockImplementation(() => ({ then: (fn:any)=>Promise.resolve({data,error:null}).then(fn)} as any));
+          return q;
+        }
+        if (call === 3) {
+          const data = recordingsRows;
+          q.order.mockImplementation(() => ({ then: (fn:any)=>Promise.resolve({data,error:null}).then(fn)} as any));
+          q.then = (fn:any)=>Promise.resolve({data,error:null}).then(fn);
+          return q;
+        }
+        if (call === 4) {
+          const data = curriculumRows;
+          q.order.mockImplementation(() => ({ then: (fn:any)=>Promise.resolve({data,error:null}).then(fn)} as any));
+          q.then = (fn:any)=>Promise.resolve({data,error:null}).then(fn);
+          return q;
+        }
+        if (call === 5) {
+          q.eq.mockImplementation(() => ({ then: (fn:any)=>Promise.resolve({data:[],error:null}).then(fn)} as any));
+          return q;
+        }
+        q.then = (fn:any)=>Promise.resolve({data:[],error:null}).then(fn);
+        return q;
+      });
+
+      const result = await (service as any).fetchMyRecordingsGrouped('student-1');
+      expect(result[0].sections).toHaveLength(2);
+      const byCat = new Map(result[0].sections.map((s:any)=>[s.sectionName, s.recordings.map((r:any)=>r.id)]));
+      expect(byCat.get('Stock Market Basic To Advance')).toEqual([recA, recB]);
+      expect(byCat.get('Advanced')).toEqual([recC, recD]);
+    });
+  });
 });

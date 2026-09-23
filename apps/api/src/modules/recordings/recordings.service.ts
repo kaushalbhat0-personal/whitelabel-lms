@@ -1383,8 +1383,8 @@ export class RecordingsService {
     const { data: accessRecords } = await this.supabaseService.client.from(TABLES.RECORDING_BATCHES).select('recording_id, batch_id').in('batch_id', batchIds);
     const recordingIds = [...new Set((accessRecords ?? []).map((r:any)=>r.recording_id))];
     if (recordingIds.length===0) return { flat: [], grouped: [] };
-    // publish gate
-    const { data: publishedCurriculumAll } = await this.supabaseService.client.from(TABLES.BATCH_RECORDING_CURRICULUM).select('content_id, batch_id, category_name, sort_order, is_published, title_override').eq('content_type','recording').in('batch_id', batchIds).eq('is_published', true).in('content_id', recordingIds);
+    // publish gate — order by curriculum sort_order (authoritative)
+    const { data: publishedCurriculumAll } = await this.supabaseService.client.from(TABLES.BATCH_RECORDING_CURRICULUM).select('content_id, batch_id, category_name, sort_order, is_published, title_override').eq('content_type','recording').in('batch_id', batchIds).eq('is_published', true).in('content_id', recordingIds).order('sort_order', { ascending: true });
     let publishedIds = [...new Set((publishedCurriculumAll ?? []).map((r:any)=>r.content_id))];
     if (publishedIds.length===0){
       const { data: anyCur } = await this.supabaseService.client.from(TABLES.BATCH_RECORDING_CURRICULUM).select('content_id').eq('content_type','recording').in('batch_id', batchIds).in('content_id', recordingIds);
@@ -1421,6 +1421,12 @@ export class RecordingsService {
         g.counts.set(display, (g.counts.get(display) ?? 0)+1);
         const bestDisp=g.display;
         if ((g.counts.get(display) ?? 0) > (g.counts.get(bestDisp) ?? 0)) g.display=display;
+      }
+    }
+    // Within each logical category, sort by curriculum sort_order (authoritative)
+    for (const [, catMap] of curriculumByBatch) {
+      for (const [, group] of catMap) {
+        group.items.sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
       }
     }
     const grouped=[];
@@ -1513,7 +1519,8 @@ export class RecordingsService {
       .eq('content_type', 'recording')
       .in('content_id', recordingIdList)
       .in('batch_id', userBatchIds)
-      .eq('is_published', true);
+      .eq('is_published', true)
+      .order('sort_order', { ascending: true });
 
     this.logger.debug(`[DEBUG] fetchMyRecordingsGrouped | curriculum query returned count=${curriculum?.length ?? 0} | filters: content_type=recording, is_published=true | rows=${JSON.stringify(curriculum ?? [])}`);
 
@@ -1542,6 +1549,12 @@ export class RecordingsService {
         g.counts.set(display, (g.counts.get(display) ?? 0) + 1);
         const best = g.display;
         if ((g.counts.get(display) ?? 0) > (g.counts.get(best) ?? 0)) g.display = display;
+      }
+    }
+    // Within each logical category, enforce curriculum sort_order (authoritative)
+    for (const [, catMap] of curriculumByBatch) {
+      for (const [, group] of catMap) {
+        group.items.sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
       }
     }
 
@@ -1894,16 +1907,29 @@ export class RecordingsService {
       return [];
     }
 
-    // Phase 9: enforce publish gate — filter to is_published=true curriculum for this batch.
-    const { data: publishedLinks } = await this.supabaseService.client
+    // Phase 9: enforce publish gate — filter to is_published=true curriculum for this batch, ordered by curriculum sort_order (authoritative)
+    const { data: publishedCurriculum } = await this.supabaseService.client
       .from(TABLES.BATCH_RECORDING_CURRICULUM)
-      .select('content_id')
+      .select('content_id, sort_order')
       .eq('content_type', 'recording')
       .eq('batch_id', batchId)
       .eq('is_published', true)
-      .in('content_id', recordingIds);
+      .in('content_id', recordingIds)
+      .order('sort_order', { ascending: true });
 
-    let publishedIds = [...new Set((publishedLinks ?? []).map((l: any) => l.content_id))];
+    // Preserve curriculum order (dedup while keeping first occurrence)
+    const orderedPublishedIds: string[] = [];
+    const seenPub = new Set<string>();
+    for (const row of publishedCurriculum ?? []) {
+      const cid = (row as any).content_id;
+      if (cid && !seenPub.has(cid)) { seenPub.add(cid); orderedPublishedIds.push(cid); }
+    }
+    let publishedIds = orderedPublishedIds;
+    // Map for sorting recordings by curriculum order
+    const curriculumOrderMap = new Map<string, number>();
+    (publishedCurriculum ?? []).forEach((row: any, idx: number) => {
+      if (!curriculumOrderMap.has(row.content_id)) curriculumOrderMap.set(row.content_id, row.sort_order ?? idx);
+    });
     if (publishedIds.length === 0) {
       // Legacy fallback: if no published rows but also zero curriculum rows at all, use recording_batches.
       const { data: anyCurriculum } = await this.supabaseService.client
@@ -1919,12 +1945,18 @@ export class RecordingsService {
       }
     }
 
-    const { data: recordings } = await this.supabaseService.client
+    const { data: recordingsRaw } = await this.supabaseService.client
       .from(TABLES.RECORDINGS)
       .select('id, title, description, duration_seconds, status, created_at, sort_order')
       .in('id', publishedIds)
-      .eq('status', 'ready')
-      .order('sort_order', { ascending: true });
+      .eq('status', 'ready');
+
+    // Order by curriculum sort_order when available, fallback to recordings.sort_order
+    const recordings = (recordingsRaw ?? []).sort((a: any, b: any) => {
+      const ao = curriculumOrderMap.has(a.id) ? curriculumOrderMap.get(a.id)! : (a.sort_order ?? 0);
+      const bo = curriculumOrderMap.has(b.id) ? curriculumOrderMap.get(b.id)! : (b.sort_order ?? 0);
+      return ao - bo;
+    });
 
     return (recordings ?? []).map((v: any) => ({
       id: v.id,

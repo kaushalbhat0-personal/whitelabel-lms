@@ -28,8 +28,8 @@ interface Props {
 }
 
 export function CourseProgressHero({ total, completed, inProgress, courseName, batchName, grouped }: Props) {
-  const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
-  const remaining = Math.max(0, total - completed - inProgress);
+  const pctCourse = total > 0 ? Math.round((completed / total) * 100) : 0;
+  const remainingCourse = Math.max(0, total - completed - inProgress);
 
   if (total === 0) {
     return (
@@ -46,35 +46,86 @@ export function CourseProgressHero({ total, completed, inProgress, courseName, b
     );
   }
 
-  const circumference = 2 * Math.PI * 28;
-  const offset = circumference - (pct / 100) * circumference;
-
-  // Sections derived from grouped batches
-  const sections = grouped?.flatMap((b) => b.sections) ?? [];
+  // Primary batch — Phase C: Hero must represent ONE coherent batch
+  const primaryBatch = (() => {
+    if (!grouped || grouped.length === 0) return null;
+    const byName = batchName ? grouped.find((b) => b.batchName === batchName) : null;
+    return byName ?? grouped[0];
+  })();
+  const sections = primaryBatch?.sections ?? [];
   const hasSections = sections.length > 0;
   const n = sections.length;
   const perSection = n > 0 ? 100 / n : 25;
 
-  // Current / next derived from actual progress — authoritative, not visual sampling
-  // currentIdx: first with watchedSeconds>0 incomplete, else first incomplete
-  const currentIdx = hasSections
+  // Ordered recordings in curriculum order (Phase A guarantees sort_order)
+  const orderedRecordings = hasSections ? sections.flatMap((s) => s.recordings) : [];
+
+  // Scoped progress — Phase C: totals must reflect primary batch only (fix 8/0% leakage)
+  const scoped = (() => {
+    if (!hasSections) return { total, completed, inProgress, remaining: remainingCourse, pct: pctCourse };
+    const t = orderedRecordings.length;
+    const c = orderedRecordings.filter((r) => r.progress.completed).length;
+    const ip = orderedRecordings.filter((r) => !r.progress.completed && r.progress.watchedSeconds > 0).length;
+    const rem = Math.max(0, t - c - ip);
+    const p = t > 0 ? Math.round((c / t) * 100) : 0;
+    return { total: t, completed: c, inProgress: ip, remaining: rem, pct: p };
+  })();
+  const pct = hasSections ? scoped.pct : pctCourse;
+  const remaining = hasSections ? scoped.remaining : remainingCourse;
+  // Display totals scoped when we have sections
+  const displayTotal = hasSections ? scoped.total : total;
+  const displayCompleted = hasSections ? scoped.completed : completed;
+  const displayInProgress = hasSections ? scoped.inProgress : inProgress;
+
+  const circumference = 2 * Math.PI * 28;
+  const offset = circumference - (pct / 100) * circumference;
+
+  // Section-level indices (for markers/trend) — keep for visualization
+  const currentIdxSection = hasSections
     ? (() => {
         let idx = sections.findIndex((s) => s.recordings.some((r) => !r.progress.completed && r.progress.watchedSeconds > 0));
         if (idx === -1) idx = sections.findIndex((s) => s.recordings.some((r) => !r.progress.completed));
         return idx;
       })()
     : -1;
-  const currentSection = currentIdx !== -1 ? sections[currentIdx] : null;
-  const currentLabel = currentSection?.sectionName ?? (inProgress > 0 ? 'In progress' : remaining > 0 ? 'Not started' : 'Completed');
+  const currentSection = currentIdxSection !== -1 ? sections[currentIdxSection] : null;
 
-  const nextIdx = hasSections
+  const nextIdxSection = hasSections
     ? sections.findIndex((s, idx) => {
         const prevDone = sections.slice(0, idx).every((ps) => ps.recordings.every((r) => r.progress.completed));
         return !s.recordings.every((r) => r.progress.completed) && prevDone && s !== currentSection;
       })
     : -1;
-  const nextSection = nextIdx !== -1 ? sections[nextIdx] : null;
-  const nextLabel = nextSection?.sectionName ?? (remaining > 1 ? `${remaining} remaining` : remaining === 1 ? '1 remaining' : null);
+  const nextSection = nextIdxSection !== -1 ? sections[nextIdxSection] : null;
+
+  // Recording-aware Current/Next (Phase B) — overrides section labels when single category has many recordings
+  const currentRecording =
+    orderedRecordings.find((r) => !r.progress.completed && r.progress.watchedSeconds > 0) ??
+    orderedRecordings.find((r) => !r.progress.completed) ??
+    null;
+  const currentLabel =
+    currentRecording?.title ??
+    currentSection?.sectionName ??
+    (inProgress > 0 ? 'In progress' : remaining > 0 ? 'Not started' : 'Completed');
+
+  const nextRecording = (() => {
+    if (!currentRecording) return null;
+    const curIdx = orderedRecordings.findIndex((r) => r.id === currentRecording.id);
+    if (curIdx === -1) return null;
+    return orderedRecordings.slice(curIdx + 1).find((r) => !r.progress.completed) ?? null;
+  })();
+  const nextLabel =
+    nextRecording?.title ??
+    nextSection?.sectionName ??
+    (remaining > 1 ? `${remaining} remaining` : remaining === 1 ? '1 remaining' : null);
+
+  // Keep section indices for marker state (currentIdx for markers)
+  const currentIdx = currentIdxSection;
+  const nextIdx = nextIdxSection;
+
+  // Phase C: when single category holds many recordings, checkpoints must be recordings (not one section name)
+  const useRecordingMarkers = n === 1 && orderedRecordings.length > 1;
+  const effectiveCount = useRecordingMarkers ? orderedRecordings.length : n;
 
   // Fallback when no sections: 4 equal quartile steps (generic % labels, not module identities)
   const fallbackCheckpoints = !hasSections
@@ -87,17 +138,24 @@ export function CourseProgressHero({ total, completed, inProgress, courseName, b
       }))
     : null;
 
-  // ── True continuous trend: x based on actual section index; y rises with overall pct + gentle undulation ──
-  // Line spans full course 0..n-1 regardless of how many markers are labeled.
+  // ── True continuous trend: x based on actual curriculum index; y rises with overall pct + gentle undulation ──
+  // Line spans full course 0..effectiveCount-1 regardless of how many markers are labeled.
   const fullCoursePoints: { x: number; y: number }[] = hasSections
-    ? n === 1
-      ? [{ x: 100, y: Math.max(10, Math.min(34, 32 - (pct / 100) * 14 + Math.sin(0) * 1.5)) }]
-      : sections.map((_, idx) => {
-          const x = (idx / (n - 1)) * 180 + 10;
-          const baseY = 32 - (pct / 100) * 14 - (idx / n) * 4;
+    ? useRecordingMarkers
+      ? orderedRecordings.map((_, idx) => {
+          const x = effectiveCount > 1 ? (idx / (effectiveCount - 1)) * 180 + 10 : 100;
+          const baseY = 32 - (pct / 100) * 14 - (idx / effectiveCount) * 4;
           const y = Math.max(10, Math.min(34, baseY + Math.sin(idx * 0.9) * 1.5));
           return { x, y };
         })
+      : n === 1
+        ? [{ x: 100, y: Math.max(10, Math.min(34, 32 - (pct / 100) * 14 + Math.sin(0) * 1.5)) }]
+        : sections.map((_, idx) => {
+            const x = (idx / (n - 1)) * 180 + 10;
+            const baseY = 32 - (pct / 100) * 14 - (idx / n) * 4;
+            const y = Math.max(10, Math.min(34, baseY + Math.sin(idx * 0.9) * 1.5));
+            return { x, y };
+          })
     : fallbackCheckpoints
       ? fallbackCheckpoints.map((c) => ({ x: c.x, y: c.y }))
       : [];
@@ -121,6 +179,51 @@ export function CourseProgressHero({ total, completed, inProgress, courseName, b
       );
     }
     if (n === 1) {
+      if (useRecordingMarkers) {
+        const rCount = orderedRecordings.length;
+        // Helper to derive marker state per recording
+        const recState = (r: any, idx: number): MarkerState => {
+          if (r.progress.completed) return 'completed';
+          if (!r.progress.completed && r.progress.watchedSeconds > 0) return 'current';
+          if (currentRecording && r.id === currentRecording.id) return 'current';
+          // If pct indicates progress beyond this recording, mark completed for visual continuity
+          if (pct >= 100) return 'completed';
+          return 'upcoming';
+        };
+        if (rCount <= 5) {
+          return orderedRecordings.map((r, idx) => {
+            const raw = r.title ?? `R${idx + 1}`;
+            const pt = fullCoursePoints[idx];
+            return { sectionIndex: idx, label: raw.length > 14 ? raw.slice(0, 14) + '…' : raw, state: recState(r, idx), x: pt.x, y: pt.y };
+          });
+        }
+        // >5 recordings in single category: adaptive sampling (first, current, next, last + gap)
+        const curIdxRec = currentRecording ? orderedRecordings.findIndex((r) => r.id === currentRecording.id) : -1;
+        const nextIdxRec = nextRecording ? orderedRecordings.findIndex((r) => r.id === nextRecording.id) : -1;
+        const idxSet = new Set<number>();
+        idxSet.add(0);
+        idxSet.add(rCount - 1);
+        if (curIdxRec !== -1) idxSet.add(curIdxRec);
+        if (nextIdxRec !== -1) idxSet.add(nextIdxRec);
+        if (idxSet.size < 5) {
+          const sorted = [...idxSet].sort((a, b) => a - b);
+          let bestGap = -1;
+          let bestMid = -1;
+          for (let i = 0; i < sorted.length - 1; i++) {
+            const gap = sorted[i + 1] - sorted[i];
+            if (gap > bestGap) { bestGap = gap; bestMid = Math.floor((sorted[i] + sorted[i + 1]) / 2); }
+          }
+          if (bestGap > 2 && bestMid !== -1 && !idxSet.has(bestMid) && idxSet.size < 5) idxSet.add(bestMid);
+        }
+        let selected = [...idxSet].sort((a, b) => a - b);
+        if (selected.length > 5) selected = selected.slice(0, 5);
+        return selected.map((idx) => {
+          const r = orderedRecordings[idx];
+          const raw = r.title ?? `R${idx + 1}`;
+          const pt = fullCoursePoints[idx];
+          return { sectionIndex: idx, label: raw.length > 14 ? raw.slice(0, 14) + '…' : raw, state: recState(r, idx), x: pt.x, y: pt.y };
+        });
+      }
       const s = sections[0];
       const sCompleted = s.recordings.filter((r) => r.progress.completed).length;
       const sInProgress = s.recordings.filter((r) => !r.progress.completed && r.progress.watchedSeconds > 0).length;
@@ -203,9 +306,9 @@ export function CourseProgressHero({ total, completed, inProgress, courseName, b
     return gaps;
   })();
 
-  const showDisclosure = hasSections && n > 5;
+  const showDisclosure = hasSections && effectiveCount > 5;
   const ariaLabel = hasSections
-    ? `${pct}% complete. ${completed} completed, ${inProgress} in progress, ${remaining} not started. ${n} modules total. Current position ${currentLabel}${nextLabel ? `, next up ${nextLabel}` : ''}.`
+    ? `${pct}% complete. ${displayCompleted} completed, ${displayInProgress} in progress, ${remaining} not started. ${effectiveCount} steps total. Current position ${currentLabel}${nextLabel ? `, next up ${nextLabel}` : ''}.`
     : `${pct}% complete. ${completed} completed, ${inProgress} in progress, ${remaining} not started. Current position ${currentLabel}${nextLabel ? `, next up ${nextLabel}` : ''}.`;
 
   return (
@@ -376,7 +479,7 @@ export function CourseProgressHero({ total, completed, inProgress, courseName, b
 
           {/* Screen-reader truthful description — covers full course, not just displayed markers */}
           <p className="sr-only">
-            {completed} of {total} completed, {inProgress} in progress, {remaining} not started. {hasSections ? `${n} modules total.` : ''} Current position {currentLabel}
+            {displayCompleted} of {displayTotal} completed, {displayInProgress} in progress, {remaining} not started. {hasSections ? `${effectiveCount} steps total.` : ''} Current position {currentLabel}
             {nextLabel ? `, next up ${nextLabel}` : ''}.
           </p>
         </div>
@@ -388,6 +491,10 @@ export function CourseProgressHero({ total, completed, inProgress, courseName, b
             <div className="min-w-0">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-text-muted leading-none">Current position</p>
               <p className="mt-1 truncate text-xs font-medium text-text-primary">{currentLabel}</p>
+              {currentRecording && (() => {
+                const secName = sections.find((s) => s.recordings.some((r) => r.id === currentRecording.id))?.sectionName;
+                return secName ? <p className="mt-0.5 truncate text-[10px] leading-none text-text-muted">{secName}</p> : null;
+              })()}
             </div>
           </div>
           <div className="flex items-start gap-2 rounded-lg bg-white px-3 py-2 border border-surface-border">
@@ -401,7 +508,7 @@ export function CourseProgressHero({ total, completed, inProgress, courseName, b
       </div>
 
       <p className="mt-2 text-xs text-text-muted">
-        <span className="font-medium text-text-primary">{completed} / {total}</span> completed · {inProgress} in progress · {remaining} remaining
+        <span className="font-medium text-text-primary">{displayCompleted} / {displayTotal}</span> completed · {displayInProgress} in progress · {remaining} remaining
         <span className="ml-1.5 hidden sm:inline text-brand-600">• {pct}% complete</span>
       </p>
 
@@ -409,14 +516,14 @@ export function CourseProgressHero({ total, completed, inProgress, courseName, b
         <div className="rounded-lg bg-emerald-50 py-2">
           <div className="flex items-center justify-center gap-1 text-emerald-700">
             <CheckCircle2 className="h-3.5 w-3.5" />
-            <span className="text-xs font-semibold">{completed}</span>
+            <span className="text-xs font-semibold">{displayCompleted}</span>
           </div>
           <p className="text-2xs text-emerald-600">Completed</p>
         </div>
         <div className="rounded-lg bg-brand-50 py-2">
           <div className="flex items-center justify-center gap-1 text-brand-700">
             <Play className="h-3.5 w-3.5" />
-            <span className="text-xs font-semibold">{inProgress}</span>
+            <span className="text-xs font-semibold">{displayInProgress}</span>
           </div>
           <p className="text-2xs text-brand-600">In Progress</p>
         </div>
