@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException, Logger, Optional } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException, InternalServerErrorException, Logger, Optional } from '@nestjs/common';
 import { SupabaseService } from '../../common/services/supabase.service';
 import { ObservabilityService } from '../observability/observability.service';
 import { RedisCacheService } from '../../common/services/redis-cache.service';
@@ -65,7 +65,7 @@ export class TestsService {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) throw this.toCreateError(error);
     // Validate marks arithmetic: sum of question marks should equal total_marks
     if (questions?.length) {
       const sumMarks = questions.reduce((s: number, q: any) => s + (q.marks ?? 1), 0);
@@ -73,17 +73,23 @@ export class TestsService {
         this.logger.warn(`create test "${testData.title}" total_marks ${testData.totalMarks} != sum_marks ${sumMarks} (${questions.length} questions) — arithmetic mismatch will show as 11q/12m`);
       }
     }
-    const result = await this.insertRelations(test.id, sections, questions, batches);
-    if (this.redisCache) await this.redisCache.invalidateAllTestsCache().catch(()=>{}).catch(()=>{});
-    logEntityEvent(
-      this.observabilityService,
-      'TEST_CREATED',
-      'test',
-      test.id,
-      createdBy,
-      { title: testData.title },
-    ).catch(() => {});
-    return result;
+    try {
+      const result = await this.insertRelations(test.id, sections, questions, batches);
+      // Cache is best-effort — database is authoritative
+      if (this.redisCache) await this.redisCache.invalidateAllTestsCache().catch(()=>{});
+      logEntityEvent(
+        this.observabilityService,
+        'TEST_CREATED',
+        'test',
+        test.id,
+        createdBy,
+        { title: testData.title },
+      ).catch(() => {});
+      return result;
+    } catch (e) {
+      await this.cleanupFailedCreate(test.id, e);
+      throw e;
+    }
   }
 
   async duplicate(id: string, createdBy: string) {
@@ -146,7 +152,7 @@ export class TestsService {
     // Insert sections — build oldSectionId → newSectionId map
     const sectionIdMap = new Map<string, string>();
     if (sections?.length) {
-      const { data: inserted } = await this.supabaseService.client
+      const { data: inserted, error } = await this.supabaseService.client
         .from(TABLES.TEST_SECTIONS)
         .insert(sections.map((s, i) => ({
           test_id: testId,
@@ -157,6 +163,7 @@ export class TestsService {
         })))
         .select();
 
+      if (error) throw this.toRelationError(error, 'sections');
       if (inserted) {
         for (let i = 0; i < inserted.length; i++) {
           sectionIdMap.set(sections[i].id, inserted[i].id);
@@ -166,7 +173,7 @@ export class TestsService {
 
     // Insert question bank links — reattach using sectionIdMap
     if (questions?.length) {
-      await this.supabaseService.client
+      const { error } = await this.supabaseService.client
         .from(TABLES.TEST_QUESTION_BANK)
         .insert(questions.map((q, i) => {
           const newSectionId = q.sectionId ? sectionIdMap.get(q.sectionId) : undefined;
@@ -180,19 +187,71 @@ export class TestsService {
             is_compulsory: q.isCompulsory ?? false,
           };
         }));
+      if (error) throw this.toRelationError(error, 'questions');
     }
 
     // Insert batch assignments
     if (batches?.length) {
-      await this.supabaseService.client
+      const { error } = await this.supabaseService.client
         .from(TABLES.TEST_BATCHES)
         .insert(batches.map((b) => ({
           test_id: testId,
           batch_id: b.batchId,
         })));
+      if (error) throw this.toRelationError(error, 'batches');
     }
 
     return this.findOne(testId);
+  }
+
+  private toRelationError(error: any, relation: string): Error {
+    const code = (error as any)?.code;
+    const msg = (error as any)?.message ?? String(error);
+    // FK / unique violations are client errors (invalid batch/question id, duplicate)
+    if (code === '23503') {
+      const safe = relation === 'batches' ? 'Invalid batch selected' : relation === 'questions' ? 'Invalid question selected' : `Invalid ${relation} data`;
+      this.logger.warn(`insertRelations ${relation} FK violation for test: ${msg}`);
+      return new BadRequestException(safe);
+    }
+    if (code === '23505') {
+      return new BadRequestException(`Duplicate ${relation} entry`);
+    }
+    if (code && String(code).startsWith('23')) {
+      return new BadRequestException(`Invalid ${relation} data`);
+    }
+    this.logger.error(`insertRelations ${relation} failed: ${msg}`);
+    return new InternalServerErrorException('Failed to create test relations');
+  }
+
+  private toCreateError(error: any): Error {
+    const code = (error as any)?.code;
+    const msg = (error as any)?.message ?? String(error);
+    if (code && String(code).startsWith('23')) {
+      return new BadRequestException(msg || 'Invalid test data');
+    }
+    this.logger.error(`create test failed: ${msg}`);
+    return new InternalServerErrorException('Failed to create test');
+  }
+
+  private async cleanupFailedCreate(testId: string, originalError: unknown): Promise<void> {
+    this.logger.warn(`Cleaning up failed test creation ${testId} after error: ${(originalError as any)?.message ?? String(originalError)}`);
+    const steps: Array<{ table: string; label: string }> = [
+      { table: TABLES.TEST_QUESTION_BANK, label: 'test_question_bank' },
+      { table: TABLES.TEST_SECTIONS, label: 'test_sections' },
+      { table: TABLES.TEST_BATCHES, label: 'test_batches' },
+      { table: TABLES.TESTS, label: 'tests' },
+    ];
+    for (const step of steps) {
+      try {
+        const col = step.table === TABLES.TESTS ? 'id' : 'test_id';
+        const { error } = await this.supabaseService.client.from(step.table).delete().eq(col, testId);
+        if (error) {
+          this.logger.error(`Rollback failed for ${step.label} (test ${testId}): ${error.message}`);
+        }
+      } catch (e) {
+        this.logger.error(`Rollback exception for ${step.label} (test ${testId}): ${(e as any)?.message ?? String(e)}`);
+      }
+    }
   }
 
   async findAll(options?: { status?: string; batchId?: string; search?: string; page?: number; limit?: number }) {

@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, ConflictException } from '@nestjs/common';
+import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { TestsService } from './tests.service';
 import { SupabaseService } from '../../common/services/supabase.service';
 import { ObservabilityService } from '../observability/observability.service';
@@ -95,7 +95,99 @@ describe('TestsService', () => {
 
     it('throws on insert error', async () => {
       setupFrom(client, [{ data: null, error: new Error('db') }]);
-      await expect(service.create(createDto as any, 'u')).rejects.toThrow('db');
+      await expect(service.create(createDto as any, 'u')).rejects.toThrow('Failed to create test');
+    });
+
+    it('rolls back when section insert fails', async () => {
+      const testRow = { id: 't1', title: 'Test 1', status: 'draft', total_marks: 10 };
+      setupFrom(client, [
+        { data: testRow, error: null }, // insert tests
+        { data: null, error: { code: '23503', message: 'FK violation' } }, // sections insert error
+        { data: null, error: null }, // delete test_question_bank
+        { data: null, error: null }, // delete test_sections
+        { data: null, error: null }, // delete test_batches
+        { data: null, error: null }, // delete tests
+      ]);
+      await expect(service.create(createDto as any, 'u')).rejects.toThrow();
+      // verify cleanup deletes were attempted (at least 4 deletes after failure)
+      expect(client.from).toHaveBeenCalledWith('test_question_bank');
+      expect(client.from).toHaveBeenCalledWith('test_sections');
+      expect(client.from).toHaveBeenCalledWith('test_batches');
+      expect(client.from).toHaveBeenCalledWith('tests');
+    });
+
+    it('rolls back when question relation fails', async () => {
+      const testRow = { id: 't2', title: 'Test 1', status: 'draft', total_marks: 10 };
+      setupFrom(client, [
+        { data: testRow, error: null }, // insert tests
+        { data: [{ id: 'sec1' }], error: null }, // sections ok
+        { data: null, error: { code: '23503', message: 'Invalid question' } }, // tqb error
+        { data: null, error: null }, // delete tqb
+        { data: null, error: null }, // delete sections
+        { data: null, error: null }, // delete batches
+        { data: null, error: null }, // delete tests
+      ]);
+      await expect(service.create(createDto as any, 'u')).rejects.toThrow();
+      expect(client.from).toHaveBeenCalledWith('test_question_bank');
+    });
+
+    it('rolls back when batch relation fails', async () => {
+      const testRow = { id: 't3', title: 'Test 1', status: 'draft', total_marks: 10 };
+      setupFrom(client, [
+        { data: testRow, error: null },
+        { data: [{ id: 'sec1' }], error: null },
+        { data: null, error: null }, // tqb ok
+        { data: null, error: { code: '23503', message: 'Invalid batch' } }, // batches error
+        { data: null, error: null },
+        { data: null, error: null },
+        { data: null, error: null },
+        { data: null, error: null },
+      ]);
+      await expect(service.create(createDto as any, 'u')).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('rolls back when final findOne fails', async () => {
+      const testRow = { id: 't4', title: 'Test 1', status: 'draft', total_marks: 10 };
+      setupFrom(client, [
+        { data: testRow, error: null },
+        { data: [{ id: 'sec1' }], error: null },
+        { data: null, error: null },
+        { data: null, error: null },
+        { data: null, error: new Error('findOne failed') }, // findOne -> NotFound
+        { data: null, error: null },
+        { data: null, error: null },
+        { data: null, error: null },
+        { data: null, error: null },
+      ]);
+      await expect(service.create(createDto as any, 'u')).rejects.toThrow();
+    });
+
+    it('logs rollback failure but still throws original error', async () => {
+      const testRow = { id: 't5', title: 'Test 1', status: 'draft', total_marks: 10 };
+      setupFrom(client, [
+        { data: testRow, error: null },
+        { data: null, error: { code: '23503', message: 'FK fail' } },
+        { data: null, error: { message: 'cleanup fail' } }, // delete tqb fails
+        { data: null, error: null },
+        { data: null, error: null },
+        { data: null, error: null },
+      ]);
+      await expect(service.create(createDto as any, 'u')).rejects.toThrow();
+    });
+
+    it('classifies FK violation as BadRequest', async () => {
+      const testRow = { id: 't6', title: 'Test 1', status: 'draft', total_marks: 10 };
+      setupFrom(client, [
+        { data: testRow, error: null },
+        { data: [{ id: 'sec1' }], error: null },
+        { data: null, error: null },
+        { data: null, error: { code: '23503', message: 'FK batch' } },
+        { data: null, error: null },
+        { data: null, error: null },
+        { data: null, error: null },
+        { data: null, error: null },
+      ]);
+      await expect(service.create(createDto as any, 'u')).rejects.toBeInstanceOf(BadRequestException);
     });
   });
 
