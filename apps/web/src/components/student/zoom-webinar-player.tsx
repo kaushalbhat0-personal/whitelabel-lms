@@ -20,15 +20,38 @@ type PlayerState =
   | { phase: 'not_live' }
   | { phase: 'error'; message: string };
 
+let zoomSdkLoadPromise: Promise<void> | null = null;
+
 async function loadZoomSDK(): Promise<void> {
-  return new Promise((resolve, reject) => {
+  if (typeof window !== 'undefined' && (window as any).ZoomMeetingSDK?.ZoomClient) {
+    return;
+  }
+  if (zoomSdkLoadPromise) return zoomSdkLoadPromise;
+  const existing = typeof document !== 'undefined' ? document.querySelector<HTMLScriptElement>('script[src*="zoom-meeting-2.18"]') : null;
+  if (existing) {
+    if ((existing as any)._zoomSdkLoaded) return;
+    zoomSdkLoadPromise = new Promise<void>((resolve, reject) => {
+      existing.addEventListener('load', () => resolve(), { once: true });
+      existing.addEventListener('error', () => reject(new Error('Failed to load Zoom SDK')), { once: true });
+    });
+    return zoomSdkLoadPromise;
+  }
+  zoomSdkLoadPromise = new Promise<void>((resolve, reject) => {
     const script = document.createElement('script');
     script.src = 'https://source.zoom.us/2.18.2/lib/zoom-meeting-2.18.2.min.js';
     script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Failed to load Zoom SDK'));
+    (script as any)._zoomSdkLoaded = false;
+    script.onload = () => {
+      (script as any)._zoomSdkLoaded = true;
+      resolve();
+    };
+    script.onerror = () => {
+      zoomSdkLoadPromise = null;
+      reject(new Error('Failed to load Zoom SDK'));
+    };
     document.head.appendChild(script);
   });
+  return zoomSdkLoadPromise;
 }
 
 export function ZoomWebinarPlayer({
@@ -55,21 +78,19 @@ export function ZoomWebinarPlayer({
   useEffect(() => {
     mountedRef.current = true;
 
-    let signatureData: ZoomSignatureResponse;
-
     const initZoom = async () => {
       try {
         setState({ phase: 'loading' });
 
-        signatureData = await getZoomSignature(meetingNumber, 0);
+        // Parallelize independent work: signature fetch and SDK download
+        const [signatureData] = await Promise.all([
+          getZoomSignature(meetingNumber, 0),
+          loadZoomSDK(),
+        ]);
 
         if (!mountedRef.current) return;
 
         setState({ phase: 'initializing' });
-
-        await loadZoomSDK();
-
-        if (!mountedRef.current) return;
 
         const { ZoomClient } = (window as any).ZoomMeetingSDK;
         const client = ZoomClient.createClient();

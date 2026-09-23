@@ -41,8 +41,16 @@ function SessionCard({
     if (joining) return;
     setJoining(true);
     setJoinError(null);
-    // Open blank tab synchronously to avoid popup-blocker (async window.open is blocked)
+    // Open blank tab synchronously to avoid popup-blocker, immediately render loading to avoid white flash
     const win = window.open('about:blank', '_blank');
+    if (win) {
+      try {
+        win.document.write(
+          '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Opening Zoom…</title><style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f9fafb;color:#111827} .card{padding:24px;border-radius:16px;background:white;border:1px solid #e5e7eb;box-shadow:0 1px 3px rgba(0,0,0,.08);text-align:center;max-width:320px} .spinner{width:28px;height:28px;border:3px solid #e5e7eb;border-top-color:#059669;border-radius:9999px;animation:spin 0.8s linear infinite;margin:0 auto 12px}@keyframes spin{to{transform:rotate(360deg)}} p{margin:4px 0;font-size:14px} .muted{color:#6b7280;font-size:12px}</style></head><body><div class="card" role="status" aria-live="polite"><div class="spinner" aria-hidden="true"></div><p><strong>Opening Zoom…</strong></p><p class="muted">Preparing your session. This tab will redirect automatically.</p></div></body></html>',
+        );
+        win.document.close();
+      } catch {}
+    }
     try {
       const { token } = await requestJoinToken(session.id);
       const { joinUrl } = await getSessionJoinUrl(session.id, token);
@@ -51,13 +59,18 @@ function SessionCard({
       }
       if (win && !win.closed) {
         win.location.href = joinUrl;
-        win.focus();
+        try {
+          win.focus();
+        } catch {}
       } else {
-        // Popup was blocked — fallback to same-tab navigation; also surface link
         window.location.href = joinUrl;
       }
     } catch (err: any) {
-      if (win && !win.closed) win.close();
+      if (win && !win.closed) {
+        try {
+          win.close();
+        } catch {}
+      }
       const msg = err?.message || 'Unable to join. Please try again.';
       setJoinError(msg);
     } finally {
@@ -136,11 +149,11 @@ function SessionCard({
               className="flex min-h-[44px] min-w-[92px] shrink-0 items-center justify-center gap-1.5 rounded-xl bg-brand-600 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-brand-700 active:bg-brand-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:opacity-60 disabled:pointer-events-none transition-colors"
             >
               {joining ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-4 w-4 motion-safe:animate-spin" aria-hidden="true" />
               ) : (
-                <ExternalLink className="h-4 w-4" />
+                <ExternalLink className="h-4 w-4" aria-hidden="true" />
               )}
-              {joining ? 'Joining...' : 'Join Now'}
+              {joining ? 'Preparing Zoom…' : 'Join Now'}
             </button>
             {joinError && (
               <div className="max-w-[180px] text-right">
