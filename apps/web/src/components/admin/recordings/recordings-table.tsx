@@ -215,9 +215,9 @@ export function RecordingsTable({
               };
 
               const pending = isProcessing(video);
-              const batchNames = (video.recording_batches ?? [])
-                .map((b) => b.batches?.name)
-                .filter(Boolean);
+              const batchEntries = (video.recording_batches ?? [])
+                .map((b: any) => ({ name: b.batches?.name, category: (b as any).category_name }))
+                .filter((b) => b.name);
 
               return (
                 <tr key={video.id} className={`hover:bg-gray-50 transition-colors ${pending ? 'opacity-70' : ''} ${selectedIds.has(video.id) ? 'bg-amber-50/40' : ''}`}>
@@ -270,21 +270,22 @@ export function RecordingsTable({
                     {video.topics?.name ?? '—'}
                   </td>
                   <td className="px-4 py-3">
-                    {batchNames.length === 0 ? (
+                    {batchEntries.length === 0 ? (
                       <span className="text-xs text-gray-400">Unassigned</span>
                     ) : (
-                      <div className="flex max-w-[220px] flex-wrap gap-1">
-                        {batchNames.slice(0, 3).map((name) => (
+                      <div className="flex max-w-[260px] flex-col gap-1">
+                        {batchEntries.slice(0, 3).map((b) => (
                           <span
-                            key={name}
-                            className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700"
+                            key={b.name}
+                            className="inline-flex flex-col rounded-lg bg-brand-50 px-2 py-1 text-xs"
                           >
-                            {name}
+                            <span className="font-medium text-brand-700 leading-none">{b.name}</span>
+                            {b.category && <span className="text-[11px] text-brand-600/80 leading-none mt-0.5">{b.category}</span>}
                           </span>
                         ))}
-                        {batchNames.length > 3 && (
-                          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
-                            +{batchNames.length - 3}
+                        {batchEntries.length > 3 && (
+                          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500 self-start">
+                            +{batchEntries.length - 3}
                           </span>
                         )}
                       </div>

@@ -1151,8 +1151,34 @@ export class RecordingsService {
       throw new BadRequestException('Could not retrieve recordings');
     }
 
+    // Enrich with per-batch category_name from batch_recording_curriculum (read-only)
+    const recordingIdsForCurriculum = (data ?? []).map((r: any) => r.id);
+    const curriculumByRecording = new Map<string, Map<string, string>>();
+    if (recordingIdsForCurriculum.length > 0) {
+      const { data: curriculumRows } = await this.supabaseService.client
+        .from(TABLES.BATCH_RECORDING_CURRICULUM)
+        .select('batch_id, content_id, category_name')
+        .eq('content_type', 'recording')
+        .in('content_id', recordingIdsForCurriculum);
+      for (const row of curriculumRows ?? []) {
+        const recId = (row as any).content_id;
+        const batchId = (row as any).batch_id;
+        const cat = (row as any).category_name ?? null;
+        if (!curriculumByRecording.has(recId)) curriculumByRecording.set(recId, new Map());
+        curriculumByRecording.get(recId)!.set(batchId, cat);
+      }
+    }
+
+    const enriched = (data ?? []).map((rec: any) => {
+      const batches = (rec.recording_batches ?? []).map((rb: any) => ({
+        ...rb,
+        category_name: curriculumByRecording.get(rec.id)?.get(rb.batch_id) ?? null,
+      }));
+      return { ...rec, recording_batches: batches };
+    });
+
     return {
-      items: data ?? [],
+      items: enriched,
       total: count ?? 0,
       page,
       limit,

@@ -31,6 +31,7 @@ export interface AdminVideo {
   topics?: { name: string } | null;
   recording_batches?: {
     batch_id: string;
+    category_name?: string | null;
     batches?: { name: string } | null;
   }[];
 }
