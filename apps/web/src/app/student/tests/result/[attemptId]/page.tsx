@@ -370,6 +370,21 @@ export default function TestResultPage() {
                             <span className="flex items-center gap-1 text-amber-600">
                               <Clock className="h-3 w-3" /> Pending Review
                             </span>
+                          ) : q.teacher_feedback != null && ['short_answer','long_answer','image_upload','image_based'].includes(q.question_type) ? (
+                            // Manual reviewed: derive badge from marks to avoid Incorrect·full marks confusion
+                            q.marks_awarded === q.marks ? (
+                              <span className="flex items-center gap-1 text-status-success">
+                                <CheckCircle className="h-3 w-3" /> Reviewed
+                              </span>
+                            ) : q.marks_awarded === 0 ? (
+                              <span className="flex items-center gap-1 text-status-live">
+                                <XCircle className="h-3 w-3" /> Reviewed
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 text-amber-600">
+                                <Clock className="h-3 w-3" /> Reviewed
+                              </span>
+                            )
                           ) : q.is_correct ? (
                             <span className="flex items-center gap-1 text-status-success">
                               <CheckCircle className="h-3 w-3" /> Correct

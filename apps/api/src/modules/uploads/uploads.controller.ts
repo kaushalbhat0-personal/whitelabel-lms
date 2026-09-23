@@ -40,8 +40,12 @@ export class UploadsController {
     const rawExt = (file.originalname.split('.').pop() ?? 'png').toLowerCase();
     const ext = ALLOWED_EXTENSIONS.has(rawExt) ? rawExt : 'png';
 
-    const fileName = `q-${user.id}-${Date.now()}.${ext}`;
-    const storagePath = `question-answers/${fileName}`;
+    // Scoped path: question-answers/{userId}/{timestamp}-{random}.{ext}
+    // Keeps first folder as question-answers for existing RLS policy (foldername(name)[1]='question-answers')
+    // but adds user isolation. Attempt/question scoping can be added later if caller provides those IDs.
+    const safeRandom = Math.random().toString(36).slice(2, 6);
+    const fileName = `q-${Date.now()}-${safeRandom}.${ext}`;
+    const storagePath = `question-answers/${user.id}/${fileName}`;
 
     const { error: uploadError } = await this.supabaseService.client
       .storage

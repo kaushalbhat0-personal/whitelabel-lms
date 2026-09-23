@@ -372,8 +372,12 @@ export class EvaluationService {
     const answerBefore = reviewItem.test_answers;
     const oldStatus = reviewItem.status;
     const attemptId = reviewItem.attempt_id;
+
+    // Derive is_correct for manual review: full marks => true, zero => false, partial => false but UI will show Reviewed
+    // Keeps accuracy correct for full-mark reviews, avoids contradictory Incorrect·full marks
     const marksPossibleForReview = answerBefore.marks_possible ?? 1;
-    const derivedIsCorrect = dto.marksAwarded >= marksPossibleForReview;
+    const derivedIsCorrect = dto.marksAwarded >= marksPossibleForReview ? true : dto.marksAwarded === 0 ? false : false;
+    // For partial we keep false (not fully correct) — UI will present as Reviewed Partial, not Correct
 
     const tx = new Transaction();
     await tx.run([
