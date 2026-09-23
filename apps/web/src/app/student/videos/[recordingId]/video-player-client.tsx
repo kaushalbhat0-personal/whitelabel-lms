@@ -554,7 +554,7 @@ export function VideoPlayerClient({
           ref={containerRef}
           className={`relative aspect-video w-full bg-black overflow-hidden group select-none transition-all duration-300 ${
             isMini
-              ? 'fixed bottom-[calc(1rem+56px+env(safe-area-inset-bottom,0px))] md:bottom-4 right-4 z-50 w-72 rounded-xl shadow-2xl border border-white/10'
+              ? 'fixed bottom-[calc(1rem+56px+env(safe-area-inset-bottom,0px))] md:bottom-4 right-4 z-50 w-[calc(100vw-2rem)] sm:w-72 max-w-[288px] rounded-xl shadow-2xl border border-white/10'
               : ''
           }`}
           onDoubleClick={handleFullscreen}
@@ -567,11 +567,11 @@ export function VideoPlayerClient({
           {isMini && (
             <button
               type="button"
-              onClick={() => setIsMini(false)}
-              className="absolute top-2 right-2 z-10 rounded-full bg-black/60 p-1 text-white/80 hover:bg-black/80 hover:text-white transition-colors"
+              onClick={(e) => { e.stopPropagation(); setIsMini(false); }}
+              className="absolute top-2 right-2 z-10 flex items-center justify-center rounded-full bg-black/60 p-1 text-white/80 hover:bg-black/80 hover:text-white transition-colors min-h-[44px] min-w-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
               aria-label="Close mini player"
             >
-              <X className="h-3.5 w-3.5" />
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           )}
 
@@ -646,9 +646,9 @@ export function VideoPlayerClient({
 
       {isMini && <div className="aspect-video w-full" aria-hidden />}
 
-      <div className="px-4 py-4 md:px-0">
-        <div className="rounded-card border border-surface-border bg-surface-card p-4 md:p-5">
-          <h2 className="text-base font-bold leading-tight text-text-primary line-clamp-2">
+        <div className="px-4 py-4 md:px-0 overflow-hidden">
+        <div className="rounded-card border border-surface-border bg-surface-card p-4 md:p-5 overflow-hidden">
+          <h2 className="text-base font-bold leading-tight text-text-primary line-clamp-2 break-words">
             {title || 'Recording'}
           </h2>
           {date && (

@@ -37,8 +37,8 @@ export function SpeedMenu({ speed, onSpeedChange }: SpeedMenuProps) {
     <div ref={menuRef} className="relative">
       <button
         type="button"
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-white/80 hover:bg-white/10 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+        onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+        className="flex items-center gap-1 rounded px-3 py-1.5 text-xs font-medium text-white/80 hover:bg-white/10 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 min-h-[44px] min-w-[44px] justify-center"
         aria-label={`Playback speed ${speed}x`}
         aria-haspopup="true"
         aria-expanded={open}
@@ -58,7 +58,7 @@ export function SpeedMenu({ speed, onSpeedChange }: SpeedMenuProps) {
               type="button"
               role="menuitem"
               onClick={() => handleSpeedChange(s)}
-              className={`w-full px-3 py-1.5 text-xs text-left transition-colors hover:bg-white/10 ${
+              className={`w-full px-3 py-2.5 text-xs text-left transition-colors hover:bg-white/10 min-h-[44px] flex items-center ${
                 s === speed
                   ? 'text-white font-semibold bg-white/5'
                   : 'text-white/70'

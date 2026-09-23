@@ -270,8 +270,17 @@ export function VideoControls({
           )}
 
           <div
-            className="h-1 w-full rounded-full bg-white/20 transition-all group-hover:h-1.5"
+            className="h-1 w-full rounded-full bg-white/20 transition-all group-hover:h-1.5 touch-manipulation"
             onClick={handleProgressClick}
+            onTouchEnd={(e) => {
+              const touch = e.changedTouches[0];
+              if (!touch) return;
+              const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+              const ratio = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
+              const time = ratio * duration;
+              onSeek(time);
+              showControlsTemporarily();
+            }}
             role="presentation"
           >
             <div
@@ -294,7 +303,7 @@ export function VideoControls({
           <div className="flex items-center gap-1">
             <button
               type="button"
-              onClick={handleSeekBack}
+              onClick={(e) => { e.stopPropagation(); handleSeekBack(); }}
               className="rounded p-1.5 text-white/80 hover:bg-white/10 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 min-w-[44px] min-h-[44px] flex items-center justify-center"
               aria-label="Rewind 10 seconds"
             >
@@ -303,7 +312,7 @@ export function VideoControls({
 
             <button
               type="button"
-              onClick={handlePlayPause}
+              onClick={(e) => { e.stopPropagation(); handlePlayPause(); }}
               className="rounded p-1.5 text-white hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 min-w-[44px] min-h-[44px] flex items-center justify-center"
               aria-label={playing ? 'Pause' : 'Play'}
             >
@@ -316,7 +325,7 @@ export function VideoControls({
 
             <button
               type="button"
-              onClick={handleSeekForward}
+              onClick={(e) => { e.stopPropagation(); handleSeekForward(); }}
               className="rounded p-1.5 text-white/80 hover:bg-white/10 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 min-w-[44px] min-h-[44px] flex items-center justify-center"
               aria-label="Forward 10 seconds"
             >
@@ -340,16 +349,25 @@ export function VideoControls({
             >
               <button
                 type="button"
-                onClick={onMute}
+                onClick={(e) => { e.stopPropagation(); onMute(); setShowVolumeSlider((v) => !v); }}
+                onMouseEnter={() => setShowVolumeSlider(true)}
                 className="rounded p-1.5 text-white/80 hover:bg-white/10 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 min-w-[44px] min-h-[44px] flex items-center justify-center"
                 aria-label={muted ? 'Unmute' : 'Mute'}
+                aria-expanded={showVolumeSlider}
               >
                 <VolumeIcon className="h-4 w-4" aria-hidden="true" />
               </button>
               {showVolumeSlider && (
                 <div
-                  className="flex h-8 w-20 items-center rounded bg-gray-900/90 backdrop-blur-sm px-2 mx-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
-                  onClick={handleVolumeSlider}
+                  className="flex h-10 w-28 sm:w-32 items-center rounded bg-gray-900/90 backdrop-blur-sm px-3 mx-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 min-h-[44px] touch-manipulation"
+                  onClick={(e) => { e.stopPropagation(); handleVolumeSlider(e as any); }}
+                  onTouchMove={(e) => {
+                    const touch = e.touches[0];
+                    if (!touch) return;
+                    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+                    const ratio = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
+                    onVolumeChange(ratio);
+                  }}
                   role="slider"
                   aria-label="Volume"
                   aria-valuemin={0}
@@ -359,10 +377,11 @@ export function VideoControls({
                   tabIndex={0}
                   onKeyDown={handleVolumeKeyDown}
                 >
-                  <div className="relative h-1 w-full rounded-full bg-white/20">
+                  <div className="relative h-1.5 w-full rounded-full bg-white/20">
                     <div
                       className="absolute h-full rounded-full bg-white"
                       style={{ width: `${muted ? 0 : volume * 100}%` }}
+                      aria-hidden="true"
                     />
                   </div>
                 </div>

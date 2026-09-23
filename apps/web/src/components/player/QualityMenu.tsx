@@ -70,8 +70,8 @@ export function QualityMenu({ hlsRef, levels, currentLevel }: QualityMenuProps) 
     <div ref={menuRef} className="relative">
       <button
         type="button"
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-white/80 hover:bg-white/10 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+        onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+        className="flex items-center gap-1 rounded px-3 py-1.5 text-xs font-medium text-white/80 hover:bg-white/10 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 min-h-[44px] min-w-[44px] justify-center"
         aria-label={`Video quality: ${currentLabel}`}
         aria-haspopup="true"
         aria-expanded={open}
@@ -89,7 +89,7 @@ export function QualityMenu({ hlsRef, levels, currentLevel }: QualityMenuProps) 
             type="button"
             role="menuitem"
             onClick={() => handleQualityChange(-1)}
-            className={`flex items-center justify-between w-full px-3 py-2 text-xs text-left transition-colors hover:bg-white/10 ${
+            className={`flex items-center justify-between w-full px-3 py-2.5 text-xs text-left transition-colors hover:bg-white/10 min-h-[44px] ${
               currentLevel === -1
                 ? 'text-white font-semibold bg-white/5'
                 : 'text-white/70'
@@ -108,7 +108,7 @@ export function QualityMenu({ hlsRef, levels, currentLevel }: QualityMenuProps) 
               type="button"
               role="menuitem"
               onClick={() => handleQualityChange(level.index)}
-              className={`flex items-center justify-between w-full px-3 py-2 text-xs text-left transition-colors hover:bg-white/10 ${
+              className={`flex items-center justify-between w-full px-3 py-2.5 text-xs text-left transition-colors hover:bg-white/10 min-h-[44px] ${
                 currentLevel === level.index
                   ? 'text-white font-semibold bg-white/5'
                   : 'text-white/70'
