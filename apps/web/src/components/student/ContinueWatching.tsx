@@ -6,6 +6,7 @@ import { Play, Clock } from 'lucide-react';
 export interface Watchable {
   id: string;
   title: string;
+  description?: string;
   duration_seconds?: number;
   durationSeconds?: number;
   progress: {
@@ -31,6 +32,7 @@ function formatDuration(seconds: number): string {
 interface ContinueWatchingItem {
   id: string;
   title: string;
+  description?: string;
   watchedSeconds: number;
   totalDuration: number;
   completed: boolean;
@@ -49,6 +51,7 @@ export function ContinueWatching({ recordings }: { recordings: Watchable[] }) {
     .map((v) => ({
       id: v.id,
       title: v.title,
+      description: (v as any).description,
       watchedSeconds: v.progress?.watched_seconds ?? v.progress?.watchedSeconds ?? 0,
       totalDuration: v.duration_seconds ?? v.durationSeconds ?? 0,
       completed: v.progress?.completed ?? false,
@@ -91,6 +94,11 @@ export function ContinueWatching({ recordings }: { recordings: Watchable[] }) {
                 <h3 className="text-sm font-semibold text-text-primary truncate">
                   {item.title}
                 </h3>
+                {item.description?.trim() ? (
+                  <p className="mt-0.5 line-clamp-2 break-words text-xs leading-snug text-text-secondary">
+                    {item.description.trim()}
+                  </p>
+                ) : null}
                 <div className="mt-1.5 flex items-center gap-2">
                   <div className="flex-1 h-1.5 rounded-full bg-surface-muted overflow-hidden">
                     <div

@@ -165,13 +165,18 @@ export function CurriculumView({ batchName, batchId, categories, recordings }: P
                             <Icon className="h-5 w-5 text-brand-navy" />
                           )}
                         </div>
-                        <div className="min-w-0 flex-1">
+                        <div className="min-w-0 flex-1 overflow-hidden">
                           <div className="flex items-center gap-2">
                             {contentTypeBadge(item.content_type)}
                             <p className="text-sm font-medium text-text-primary truncate">
                               {item.content?.title ?? item.content_type}
                             </p>
                           </div>
+                          {item.content?.description?.trim() ? (
+                            <p className="mt-0.5 line-clamp-2 break-words text-xs leading-snug text-text-secondary">
+                              {item.content.description.trim()}
+                            </p>
+                          ) : null}
                           <div className="mt-0.5 flex items-center gap-2 text-xs text-text-muted">
                             {item.module_name && <span>{item.module_name}</span>}
                             {progress && progress.watched_seconds > 0 && (

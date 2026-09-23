@@ -52,6 +52,11 @@ export function RecentLearning({ recordings }: { recordings: StudentVideo[] }) {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-text-primary">{item.title}</p>
+                {item.description?.trim() ? (
+                  <p className="mt-0.5 line-clamp-2 break-words text-xs leading-snug text-text-secondary">
+                    {item.description.trim()}
+                  </p>
+                ) : null}
                 <div className="mt-0.5 flex items-center gap-1.5 text-xs text-text-muted">
                   <Clock className="h-3 w-3 shrink-0" aria-hidden="true" />
                   <span>{pct != null ? `${pct}%` : `${Math.floor((item.progress.watched_seconds ?? 0) / 60)}m`} watched</span>

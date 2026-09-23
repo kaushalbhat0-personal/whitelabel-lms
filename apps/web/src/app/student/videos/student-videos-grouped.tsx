@@ -42,6 +42,11 @@ function RecordingCard({ rec }: { rec: GroupedRecording }) {
         <p className="text-sm font-medium text-text-primary truncate">
           {rec.title}
         </p>
+        {rec.description?.trim() ? (
+          <p className="mt-0.5 line-clamp-2 break-words text-xs leading-snug text-text-secondary">
+            {rec.description.trim()}
+          </p>
+        ) : null}
         <div className="mt-0.5 flex items-center gap-2 text-xs text-text-muted">
           {rec.durationSeconds && (
             <span className="flex items-center gap-1">

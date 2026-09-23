@@ -57,6 +57,11 @@ export function CourseDetailRecordings({ videos, hideHeader }: Props) {
               <p className="text-sm font-medium text-text-primary truncate">
                 {video.title}
               </p>
+              {video.description?.trim() ? (
+                <p className="mt-0.5 line-clamp-2 break-words text-xs leading-snug text-text-secondary">
+                  {video.description.trim()}
+                </p>
+              ) : null}
               <div className="mt-0.5 flex items-center gap-2 text-xs text-text-muted">
                 <span>{formatDate(video.createdAt)}</span>
                 {video.durationSeconds ? (
@@ -96,6 +101,11 @@ export function CourseDetailRecordings({ videos, hideHeader }: Props) {
               <p className="text-sm font-medium text-text-primary truncate">
                 {video.title}
               </p>
+              {video.description?.trim() ? (
+                <p className="mt-0.5 line-clamp-2 break-words text-xs leading-snug text-text-secondary">
+                  {video.description.trim()}
+                </p>
+              ) : null}
               <div className="mt-0.5 flex items-center gap-2 text-xs text-text-muted">
                 <span>{formatDate(video.createdAt)}</span>
                 {video.durationSeconds ? (

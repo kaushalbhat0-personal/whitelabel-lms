@@ -61,6 +61,11 @@ export function RecordingsList({ recordings }: Props) {
                   <p className="text-sm font-medium text-text-primary truncate">
                     {rec.title}
                   </p>
+                  {rec.description?.trim() ? (
+                    <p className="mt-0.5 line-clamp-2 break-words text-xs leading-snug text-text-secondary">
+                      {rec.description.trim()}
+                    </p>
+                  ) : null}
                   <div className="mt-0.5 flex items-center gap-2 text-xs text-text-muted">
                     <span>{formatDate(rec.created_at)}</span>
                     {rec.progress.watched_seconds > 0 && (
