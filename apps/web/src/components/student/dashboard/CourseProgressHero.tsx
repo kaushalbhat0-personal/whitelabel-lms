@@ -194,7 +194,7 @@ export function CourseProgressHero({ total, completed, inProgress, courseName, b
           return orderedRecordings.map((r, idx) => {
             const raw = r.title ?? `R${idx + 1}`;
             const pt = fullCoursePoints[idx];
-            return { sectionIndex: idx, label: raw.length > 14 ? raw.slice(0, 14) + '…' : raw, state: recState(r, idx), x: pt.x, y: pt.y };
+            return { sectionIndex: idx, label: raw.length > 18 ? raw.slice(0, 18) + '…' : raw, state: recState(r, idx), x: pt.x, y: pt.y };
           });
         }
         // >5 recordings in single category: adaptive sampling (first, current, next, last + gap)
@@ -221,7 +221,7 @@ export function CourseProgressHero({ total, completed, inProgress, courseName, b
           const r = orderedRecordings[idx];
           const raw = r.title ?? `R${idx + 1}`;
           const pt = fullCoursePoints[idx];
-          return { sectionIndex: idx, label: raw.length > 14 ? raw.slice(0, 14) + '…' : raw, state: recState(r, idx), x: pt.x, y: pt.y };
+          return { sectionIndex: idx, label: raw.length > 18 ? raw.slice(0, 18) + '…' : raw, state: recState(r, idx), x: pt.x, y: pt.y };
         });
       }
       const s = sections[0];
@@ -232,7 +232,7 @@ export function CourseProgressHero({ total, completed, inProgress, courseName, b
       else if (sInProgress > 0 || pct > 0) state = 'current';
       else if (pct >= 100) state = 'completed';
       const raw = s.sectionName ?? 'M1';
-      return [{ sectionIndex: 0, label: raw.length > 14 ? raw.slice(0, 14) + '…' : raw, state, x: 100, y: fullCoursePoints[0].y }];
+      return [{ sectionIndex: 0, label: raw.length > 18 ? raw.slice(0, 18) + '…' : raw, state, x: 100, y: fullCoursePoints[0].y }];
     }
     if (n <= 5) {
       return sections.map((s, idx) => {
@@ -241,7 +241,7 @@ export function CourseProgressHero({ total, completed, inProgress, courseName, b
         const pt = fullCoursePoints[idx];
         return {
           sectionIndex: idx,
-          label: raw.length > 14 ? raw.slice(0, 14) + '…' : raw,
+          label: raw.length > 18 ? raw.slice(0, 18) + '…' : raw,
           state,
           x: pt.x,
           y: pt.y,
@@ -285,7 +285,7 @@ export function CourseProgressHero({ total, completed, inProgress, courseName, b
       const pt = fullCoursePoints[idx];
       return {
         sectionIndex: idx,
-        label: raw.length > 14 ? raw.slice(0, 14) + '…' : raw,
+        label: raw.length > 18 ? raw.slice(0, 18) + '…' : raw,
         state,
         x: pt.x,
         y: pt.y,
@@ -348,7 +348,7 @@ export function CourseProgressHero({ total, completed, inProgress, courseName, b
         role="img"
         aria-label={ariaLabel}
       >
-        <div className="relative">
+        <div className="relative w-full max-w-[560px] sm:max-w-[640px] mx-auto">
           <svg viewBox="0 0 200 40" className="h-[48px] w-full sm:h-[56px]" preserveAspectRatio="none" aria-hidden>
             {/* baseline */}
             <line x1="10" y1="36" x2="190" y2="36" stroke="currentColor" className="text-surface-border" strokeWidth="0.7" opacity="0.9" />
@@ -404,22 +404,22 @@ export function CourseProgressHero({ total, completed, inProgress, courseName, b
                 let containerClass: string;
                 let textAlignClass: string;
                 if (isSingle) {
-                  style = { left: '50%', transform: 'translateX(-50%)', maxWidth: '88px' };
+                  style = { left: '50%', transform: 'translateX(-50%)', maxWidth: '110px' };
                   containerClass = 'absolute top-0 flex flex-col items-center';
                   textAlignClass = 'text-center';
                 } else if (isFirst) {
-                  style = { left: '0', transform: 'translateX(0)', maxWidth: '72px' };
+                  style = { left: '0', transform: 'translateX(0)', maxWidth: '96px' };
                   containerClass = 'absolute top-0 flex flex-col items-start';
                   textAlignClass = 'text-left';
                 } else if (isLast) {
-                  style = { right: '0', left: 'auto', transform: 'translateX(0)', maxWidth: '72px' };
+                  style = { right: '0', left: 'auto', transform: 'translateX(0)', maxWidth: '96px' };
                   containerClass = 'absolute top-0 flex flex-col items-end';
                   textAlignClass = 'text-right';
                 } else {
                   style = {
                     left: `${(m.x / 200) * 100}%`,
                     transform: 'translateX(-50%)',
-                    maxWidth: markers.length > 3 ? '72px' : '88px',
+                    maxWidth: markers.length > 3 ? '96px' : '110px',
                   };
                   containerClass = 'absolute top-0 flex flex-col items-center';
                   textAlignClass = 'text-center';
@@ -431,7 +431,7 @@ export function CourseProgressHero({ total, completed, inProgress, courseName, b
                       aria-hidden
                     />
                     <p
-                      className={`mt-1 max-w-[72px] truncate ${textAlignClass} text-[10px] font-medium leading-tight sm:max-w-[88px] sm:text-xs`}
+                      className={`mt-1 max-w-[96px] truncate ${textAlignClass} text-[10px] font-medium leading-tight sm:max-w-[110px] sm:text-xs`}
                       title={m.label}
                     >
                       <span className={m.state === 'completed' ? 'text-brand-700' : m.state === 'current' ? 'text-text-primary' : 'text-text-muted'}>

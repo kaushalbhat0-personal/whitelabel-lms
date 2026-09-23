@@ -1,8 +1,6 @@
 import { getStudentCourse } from '@/lib/api/courses';
-import { getMySessions } from '@/lib/api/live-sessions';
 import { getMyVideosGrouped } from '@/lib/api/videos';
 import { PageHeader } from '@/components/shared/PageHeader';
-import { CourseDetailSessions } from './course-detail-sessions';
 import { CourseProgress } from '@/components/student/CourseProgress';
 import { ContinueWatching } from '@/components/student/ContinueWatching';
 import { CollapsibleBatchList } from './collapsible-batch-list';
@@ -24,29 +22,7 @@ export default async function StudentCourseDetailPage({ params }: Props) {
 
     const batchIds = enrolledBatches.map((b: any) => b.id);
 
-    const [sessionsResult, groupedRecordings] = await Promise.all([
-      getMySessions(),
-      getMyVideosGrouped(),
-    ]);
-
-    const allSessions = [
-      ...(sessionsResult.upcoming ?? []),
-      ...(sessionsResult.past ?? []),
-    ];
-
-    const now = new Date();
-    const upcomingSessions = allSessions
-      .filter((s) => s.status === 'scheduled' || s.status === 'live')
-      .sort(
-        (a, b) =>
-          new Date(a.start_time).getTime() - new Date(b.start_time).getTime(),
-      );
-    const pastSessions = allSessions
-      .filter((s) => s.status === 'ended' || s.status === 'cancelled')
-      .sort(
-        (a, b) =>
-          new Date(b.start_time).getTime() - new Date(a.start_time).getTime(),
-      );
+    const groupedRecordings = await getMyVideosGrouped();
 
     const recordingsForCourse = groupedRecordings.filter((br) =>
       batchIds.includes(br.batchId),
@@ -86,11 +62,6 @@ export default async function StudentCourseDetailPage({ params }: Props) {
           <ContinueWatching recordings={continueRecordings as any} />
 
           <CourseProgress batchIds={batchIds} />
-
-          <CourseDetailSessions
-            upcoming={upcomingSessions}
-            past={pastSessions}
-          />
 
           <CollapsibleBatchList batches={recordingsForCourse} />
         </div>
