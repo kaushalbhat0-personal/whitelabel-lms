@@ -7,6 +7,7 @@ export interface CreateRecordingData {
   videoUrl?: string;
   batchIds: string[];
   categoryName?: string;
+  categoryByBatch?: Record<string, string>;
   moduleName?: string;
   isPublished?: boolean;
   titleOverride?: string;

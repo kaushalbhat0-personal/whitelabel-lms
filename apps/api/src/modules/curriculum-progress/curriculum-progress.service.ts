@@ -1,6 +1,7 @@
 import { Injectable, Logger, ForbiddenException } from '@nestjs/common';
 import { SupabaseService } from '../../common/services/supabase.service';
 import { TABLES } from '../../common/constants/tables.constant';
+import { groupByCategoryMerged } from '../../common/utils/category.util';
 
 const PROGRESS_BATCH_SIZE = 50;
 
@@ -81,14 +82,17 @@ export class CurriculumProgressService {
     let completedCurriculum = 0;
     let activeCount = 0;
 
-    // Course breakdown by category
+    // Course breakdown by category — merge case/whitespace variants via groupByCategoryMerged
+    const mergedGroups = groupByCategoryMerged(curriculumItems as any[]);
     const categoryMap = new Map<string, { totalItems: number; completedItems: number }>();
-    for (const item of curriculumItems as any[]) {
-      const cat = item.category_name ?? 'General';
-      if (!categoryMap.has(cat)) {
-        categoryMap.set(cat, { totalItems: 0, completedItems: 0 });
-      }
-      categoryMap.get(cat)!.totalItems += 1;
+    for (const g of mergedGroups) {
+      categoryMap.set(g.category, { totalItems: g.items.length, completedItems: 0 });
+    }
+
+    // Build canonical -> itemIds using merged groups for accurate aggregation
+    const canonicalToIds = new Map<string, Set<string>>();
+    for (const g of mergedGroups) {
+      canonicalToIds.set(g.category, new Set(g.items.map((i: any) => i.id)));
     }
 
     for (const [sid, progress] of studentProgressMap) {
@@ -104,12 +108,9 @@ export class CurriculumProgressService {
 
       // Category-level aggregation
       for (const [cat, counts] of categoryMap) {
-        const categoryItems = (curriculumItems as any[])
-          .filter((i: any) => (i.category_name ?? 'General') === cat)
-          .map((i: any) => i.id);
-
+        const categoryIds = canonicalToIds.get(cat) ?? new Set<string>();
         const userCategoryCompleted = progressRows
-          .filter((p: any) => p.user_id === sid && categoryItems.includes(p.curriculum_id) && p.completed)
+          .filter((p: any) => p.user_id === sid && categoryIds.has(p.curriculum_id) && p.completed)
           .length;
 
         counts.completedItems += userCategoryCompleted;
@@ -354,12 +355,6 @@ export class CurriculumProgressService {
   }
 
   private groupByCategory(items: any[]) {
-    const grouped: Record<string, any[]> = {};
-    for (const item of items) {
-      const cat = item.category_name ?? 'General';
-      if (!grouped[cat]) grouped[cat] = [];
-      grouped[cat].push(item);
-    }
-    return Object.entries(grouped).map(([category, items]) => ({ category, items }));
+    return groupByCategoryMerged(items);
   }
 }

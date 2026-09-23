@@ -54,13 +54,16 @@ describe('BatchCurriculumService', () => {
       chain.from.mockImplementation(() => {
         const c = buildChain();
         if (callIndex === 0) {
+          // pre-fetch existing categories (case-insensitive dedup)
+          c.then = jest.fn((resolve) => resolve({ data: [], error: null }));
+        } else if (callIndex === 1) {
           c.insert.mockReturnValue(c);
           c.select.mockReturnValue(c);
           c.single.mockResolvedValue({
             data: { id: 'curriculum-1', batch_id: batchId, content_id: recordingId, content_type: 'recording' },
             error: null,
           });
-        } else if (callIndex === 1) {
+        } else if (callIndex === 2) {
           c.upsert.mockResolvedValue({ data: null, error: null });
         }
         callIndex++;
@@ -87,18 +90,20 @@ describe('BatchCurriculumService', () => {
       chain.from.mockImplementation(() => {
         const c = buildChain();
         if (callIndex === 0) {
+          c.then = jest.fn((resolve) => resolve({ data: [], error: null }));
+        } else if (callIndex === 1) {
           c.insert.mockReturnValue(c);
           c.select.mockReturnValue(c);
           c.single.mockResolvedValue({
             data: { id: curriculumId, batch_id: batchId, content_id: recordingId, content_type: 'recording' },
             error: null,
           });
-        } else if (callIndex === 1) {
+        } else if (callIndex === 2) {
           c.upsert.mockResolvedValue({
             data: null,
             error: { message: 'FK violation', code: '23503' },
           });
-        } else if (callIndex === 2) {
+        } else if (callIndex === 3) {
           c.delete.mockReturnValue(c);
           c.eq.mockResolvedValue({ data: null, error: null });
         }
@@ -118,14 +123,20 @@ describe('BatchCurriculumService', () => {
     it('should NOT insert into recording_batches for non-recording types', async () => {
       const batchId = 'batch-1';
 
+      let callIndex = 0;
       chain.from.mockImplementation(() => {
         const c = buildChain();
-        c.insert.mockReturnValue(c);
-        c.select.mockReturnValue(c);
-        c.single.mockResolvedValue({
-          data: { id: 'curriculum-pdf', batch_id: batchId, content_id: null, content_type: 'pdf' },
-          error: null,
-        });
+        if (callIndex === 0) {
+          c.then = jest.fn((resolve) => resolve({ data: [], error: null }));
+        } else {
+          c.insert.mockReturnValue(c);
+          c.select.mockReturnValue(c);
+          c.single.mockResolvedValue({
+            data: { id: 'curriculum-pdf', batch_id: batchId, content_id: null, content_type: 'pdf' },
+            error: null,
+          });
+        }
+        callIndex++;
         return c;
       });
 

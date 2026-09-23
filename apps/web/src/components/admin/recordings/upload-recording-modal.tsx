@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getAllBatches, type Batch } from '@/lib/api/courses';
-import { createRecording } from '@/lib/api/recordings';
+import { createRecording, getBatchCurriculum } from '@/lib/api/recordings';
 import { tusUpload } from '@/lib/upload/tus-uploader';
 
 interface UploadRecordingModalProps {
@@ -52,11 +52,22 @@ export function UploadRecordingModal({
   const [loadingBatches, setLoadingBatches] = useState(true);
   const [selectedBatchIds, setSelectedBatchIds] = useState<Set<string>>(new Set());
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [categoryName, setCategoryName] = useState('General');
-  const [moduleName, setModuleName] = useState('');
   const [displayTitle, setDisplayTitle] = useState('');
   const [isPublished, setIsPublished] = useState(true);
   const [phase, setPhase] = useState<UploadPhase>({ phase: 'idle' });
+
+  // Per-batch category state
+  const [categoryByBatch, setCategoryByBatch] = useState<Record<string, string>>({});
+  const [batchCategories, setBatchCategories] = useState<Record<string, string[]>>({});
+  const [creatingNewByBatch, setCreatingNewByBatch] = useState<Record<string, boolean>>({});
+  const [newCategoryInputByBatch, setNewCategoryInputByBatch] = useState<Record<string, string>>({});
+
+  const normalizeDisplay = (s: string) => s.trim().replace(/\s+/g, ' ');
+  const normalizeKey = (s: string) => normalizeDisplay(s).toLowerCase();
+  const findCanonical = (input: string, existing: string[]) => {
+    const key = normalizeKey(input);
+    return existing.find((e) => normalizeKey(e) === key) ?? null;
+  };
 
   const fetchBatches = useCallback(async () => {
     setLoadingBatches(true);
@@ -77,14 +88,63 @@ export function UploadRecordingModal({
       setFile(null);
       setSelectedBatchIds(new Set());
       setDropdownOpen(false);
-      setCategoryName('General');
-      setModuleName('');
+      setCategoryByBatch({});
+      setBatchCategories({});
+      setCreatingNewByBatch({});
+      setNewCategoryInputByBatch({});
       setDisplayTitle('');
       setIsPublished(true);
       setPhase({ phase: 'idle' });
       fetchBatches();
     }
   }, [isOpen, fetchBatches]);
+
+  // Fetch categories per selected batch and init defaults
+  useEffect(() => {
+    if (selectedBatchIds.size === 0) {
+      setBatchCategories({});
+      return;
+    }
+    const ids = Array.from(selectedBatchIds);
+    let cancelled = false;
+    (async () => {
+      const entries = await Promise.all(
+        ids.map(async (id) => {
+          try {
+            const cats = await getBatchCurriculum(id);
+            const names = (cats ?? []).map((c) => c.category);
+            return [id, names] as [string, string[]];
+          } catch {
+            return [id, []] as [string, string[]];
+          }
+        }),
+      );
+      if (cancelled) return;
+      const map: Record<string, string[]> = {};
+      for (const [id, names] of entries) map[id] = names;
+      setBatchCategories((prev) => {
+        // merge: keep previous for batches not re-fetched? but simple replace for selected
+        const next = { ...prev };
+        for (const id of ids) next[id] = map[id] ?? [];
+        for (const k of Object.keys(next)) if (!ids.includes(k)) delete next[k];
+        return next;
+      });
+      setCategoryByBatch((prev) => {
+        const next = { ...prev };
+        for (const id of ids) {
+          if (!next[id]) {
+            const cats = map[id] ?? [];
+            next[id] = cats.length > 0 ? cats[0] : 'General';
+          }
+        }
+        for (const k of Object.keys(next)) if (!ids.includes(k)) delete next[k];
+        return next;
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedBatchIds]);
 
   const handleClose = () => {
     if (phase.phase === 'uploading') {
@@ -105,7 +165,18 @@ export function UploadRecordingModal({
   const selectAll = () => setSelectedBatchIds(new Set(batches.map((b) => b.id)));
   const deselectAll = () => setSelectedBatchIds(new Set());
 
-  const isValid = title.trim().length >= 2 && file !== null && selectedBatchIds.size > 0;
+  const isValid =
+    title.trim().length >= 2 &&
+    file !== null &&
+    selectedBatchIds.size > 0 &&
+    Array.from(selectedBatchIds).every((id) => {
+      const cat = categoryByBatch[id];
+      if (creatingNewByBatch[id]) {
+        const input = newCategoryInputByBatch[id]?.trim() ?? '';
+        return input.length > 0;
+      }
+      return (cat?.trim().length ?? 0) > 0;
+    });
 
   const handleSubmit = async () => {
     if (!file || !isValid) return;
@@ -113,13 +184,32 @@ export function UploadRecordingModal({
     setPhase({ phase: 'requesting_url' });
 
     try {
+      const batchIds = Array.from(selectedBatchIds);
+      // Build per-batch canonical categories with normalization + duplicate detection
+      const categoryByBatchPayload: Record<string, string> = {};
+      for (const batchId of batchIds) {
+        let raw: string;
+        if (creatingNewByBatch[batchId]) {
+          raw = newCategoryInputByBatch[batchId] ?? '';
+        } else {
+          raw = categoryByBatch[batchId] ?? 'General';
+        }
+        const display = normalizeDisplay(raw) || 'General';
+        const existing = batchCategories[batchId] ?? [];
+        const canonical = findCanonical(display, existing);
+        categoryByBatchPayload[batchId] = canonical ?? display;
+      }
+
+      // For backward compat, also send single categoryName when only one batch
+      const singleCategoryName = batchIds.length === 1 ? categoryByBatchPayload[batchIds[0]] : undefined;
+
       const { uploadUrl, upload } = await createRecording(
         {
           title: title.trim(),
           description: description.trim() || undefined,
-          batchIds: Array.from(selectedBatchIds),
-          categoryName: categoryName.trim() || undefined,
-          moduleName: moduleName.trim() || undefined,
+          batchIds,
+          categoryName: singleCategoryName,
+          categoryByBatch: categoryByBatchPayload,
           isPublished,
           titleOverride: displayTitle.trim() || undefined,
         },
@@ -331,34 +421,129 @@ export function UploadRecordingModal({
             </div>
           </div>
 
-          {/* Category */}
+          {/* Category — per batch */}
           <div>
             <label className="mb-1.5 block text-sm font-medium text-gray-700">
-              Category
+              Category {selectedBatchIds.size > 1 && <span className="text-xs font-normal text-gray-400">(per batch)</span>}
             </label>
-            <input
-              type="text"
-              value={categoryName}
-              onChange={(e) => setCategoryName(e.target.value)}
-              disabled={isSubmitting}
-              placeholder="e.g. Week 1, Module 2"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-gray-100"
-            />
-          </div>
-
-          {/* Module */}
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-gray-700">
-              Module
-            </label>
-            <input
-              type="text"
-              value={moduleName}
-              onChange={(e) => setModuleName(e.target.value)}
-              disabled={isSubmitting}
-              placeholder="e.g. Core Concepts"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-gray-100"
-            />
+            {selectedBatchIds.size === 0 ? (
+              <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-400">
+                Select a batch first to choose category
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {Array.from(selectedBatchIds).map((batchId) => {
+                  const batchName = batches.find((b) => b.id === batchId)?.name ?? batchId;
+                  const cats = batchCategories[batchId] ?? [];
+                  const isCreating = !!creatingNewByBatch[batchId];
+                  const selectedCat = categoryByBatch[batchId] ?? 'General';
+                  return (
+                    <div key={batchId} className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
+                      <div className="text-xs font-semibold text-gray-600">{batchName}</div>
+                      {!isCreating ? (
+                        <div className="flex gap-2">
+                          <select
+                            value={selectedCat}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === '__CREATE_NEW__') {
+                                setCreatingNewByBatch((prev) => ({ ...prev, [batchId]: true }));
+                                setNewCategoryInputByBatch((prev) => ({ ...prev, [batchId]: '' }));
+                              } else {
+                                setCategoryByBatch((prev) => ({ ...prev, [batchId]: val }));
+                              }
+                            }}
+                            disabled={isSubmitting}
+                            className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-gray-100"
+                          >
+                            {cats.length === 0 && <option value="General">General</option>}
+                            {cats.map((c) => (
+                              <option key={c} value={c}>
+                                {c}
+                              </option>
+                            ))}
+                            <option value="__CREATE_NEW__">+ Create New Category</option>
+                          </select>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <input
+                            type="text"
+                            value={newCategoryInputByBatch[batchId] ?? ''}
+                            onChange={(e) => setNewCategoryInputByBatch((prev) => ({ ...prev, [batchId]: e.target.value }))}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                const raw = newCategoryInputByBatch[batchId] ?? '';
+                                const display = normalizeDisplay(raw);
+                                if (!display) return;
+                                const canonical = findCanonical(display, cats);
+                                const finalCat = canonical ?? display;
+                                setCategoryByBatch((prev) => ({ ...prev, [batchId]: finalCat }));
+                                // If it's genuinely new, add to local list optimistically
+                                if (!canonical && display && !cats.includes(display)) {
+                                  setBatchCategories((prev) => ({ ...prev, [batchId]: [...cats, display] }));
+                                }
+                                setCreatingNewByBatch((prev) => ({ ...prev, [batchId]: false }));
+                              }
+                              if (e.key === 'Escape') {
+                                setCreatingNewByBatch((prev) => ({ ...prev, [batchId]: false }));
+                              }
+                            }}
+                            disabled={isSubmitting}
+                            placeholder="New category name"
+                            autoFocus
+                            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-gray-100"
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const raw = newCategoryInputByBatch[batchId] ?? '';
+                                const display = normalizeDisplay(raw);
+                                if (!display) return;
+                                const canonical = findCanonical(display, cats);
+                                const finalCat = canonical ?? display;
+                                setCategoryByBatch((prev) => ({ ...prev, [batchId]: finalCat }));
+                                if (!canonical && display && !cats.includes(display)) {
+                                  setBatchCategories((prev) => ({ ...prev, [batchId]: [...cats, display] }));
+                                }
+                                setCreatingNewByBatch((prev) => ({ ...prev, [batchId]: false }));
+                              }}
+                              disabled={isSubmitting || !(newCategoryInputByBatch[batchId]?.trim())}
+                              className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+                            >
+                              Use Category
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCreatingNewByBatch((prev) => ({ ...prev, [batchId]: false }))}
+                              disabled={isSubmitting}
+                              className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                          {(() => {
+                            const raw = newCategoryInputByBatch[batchId] ?? '';
+                            if (!raw.trim()) return null;
+                            const display = normalizeDisplay(raw);
+                            const canonical = findCanonical(display, cats);
+                            if (canonical) {
+                              return <p className="text-xs text-amber-600">Matches existing &ldquo;{canonical}&rdquo; — will reuse that category.</p>;
+                            }
+                            return null;
+                          })()}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <p className="mt-1.5 text-xs text-gray-400">
+              Category is stored per batch using existing curriculum. Duplicate spellings (case/whitespace) reuse the original category.
+            </p>
           </div>
 
           {/* Display Title */}

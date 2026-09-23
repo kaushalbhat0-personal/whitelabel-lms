@@ -6,6 +6,7 @@ import {
   IsOptional,
   ArrayMinSize,
   MinLength,
+  IsObject,
 } from 'class-validator';
 
 export class CreateRecordingDto {
@@ -29,6 +30,10 @@ export class CreateRecordingDto {
   @IsString()
   @IsOptional()
   categoryName?: string;
+
+  @IsOptional()
+  @IsObject()
+  categoryByBatch?: Record<string, string>;
 
   @IsString()
   @IsOptional()

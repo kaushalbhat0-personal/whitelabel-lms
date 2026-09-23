@@ -6,6 +6,12 @@ import { AddCurriculumItemDto } from './dto/add-curriculum-item.dto';
 import { UpdateCurriculumItemDto } from './dto/update-curriculum-item.dto';
 import { ReorderCurriculumDto } from './dto/reorder-curriculum.dto';
 import { Transaction, TransactionStep } from '../../common/utils/transaction.util';
+import {
+  normalizeCategoryDisplay,
+  normalizeCategoryKey,
+  groupByCategoryMerged,
+  resolveCanonicalCategoryName,
+} from '../../common/utils/category.util';
 
 @Injectable()
 export class BatchCurriculumService {
@@ -174,20 +180,25 @@ export class BatchCurriculumService {
   }
 
   private groupByCategory(items: any[]) {
-    const grouped: Record<string, any[]> = {};
-    for (const item of items) {
-      const cat = item.category_name ?? 'General';
-      if (!grouped[cat]) grouped[cat] = [];
-      grouped[cat].push(item);
-    }
-    return Object.entries(grouped).map(([category, items]) => ({
-      category,
-      items,
-    }));
+    return groupByCategoryMerged(items);
   }
 
   async add(batchId: string, dto: AddCurriculumItemDto) {
     let insertedData: any = null;
+
+    // Normalize whitespace + case-insensitive dedup within this batch
+    const normalizedDisplay = normalizeCategoryDisplay(dto.categoryName ?? 'General');
+    let canonicalCategory = normalizedDisplay;
+    try {
+      const { data: existing } = await this.supabaseService.client
+        .from(TABLES.BATCH_RECORDING_CURRICULUM)
+        .select('category_name')
+        .eq('batch_id', batchId);
+      const existingNames = (existing ?? []).map((r: any) => r.category_name as string);
+      canonicalCategory = resolveCanonicalCategoryName(normalizedDisplay, existingNames);
+    } catch {
+      // best-effort: fallback to normalized display
+    }
 
     const steps: TransactionStep[] = [
       {
@@ -199,7 +210,7 @@ export class BatchCurriculumService {
               batch_id: batchId,
               content_id: dto.contentId ?? null,
               content_type: dto.contentType,
-              category_name: dto.categoryName,
+              category_name: canonicalCategory,
               module_name: dto.moduleName ?? null,
               sort_order: dto.sortOrder ?? 0,
               is_published: dto.isPublished ?? true,
@@ -267,10 +278,27 @@ export class BatchCurriculumService {
   }
 
   async update(id: string, dto: UpdateCurriculumItemDto) {
-    await this.findById(id);
+    const existingItem = await this.findById(id);
 
     const updates: Record<string, any> = {};
-    if (dto.categoryName !== undefined) updates.category_name = dto.categoryName;
+    if (dto.categoryName !== undefined) {
+      const display = normalizeCategoryDisplay(dto.categoryName);
+      let canonical = display;
+      try {
+        const { data: existing } = await this.supabaseService.client
+          .from(TABLES.BATCH_RECORDING_CURRICULUM)
+          .select('category_name')
+          .eq('batch_id', (existingItem as any).batch_id);
+        const existingNames = (existing ?? []).map((r: any) => r.category_name as string);
+        canonical = resolveCanonicalCategoryName(display, existingNames);
+        // If the desired category already exists as a different item's category with same key,
+        // we already deduped to that canonical. Also allow keeping own display if it's the only
+        // instance — but reuse rule above already handles case-only differences.
+        // Also handle empty -> General.
+        if (!canonical) canonical = 'General';
+      } catch {}
+      updates.category_name = canonical;
+    }
     if (dto.moduleName !== undefined) updates.module_name = dto.moduleName;
     if (dto.sortOrder !== undefined) updates.sort_order = dto.sortOrder;
     if (dto.isPublished !== undefined) updates.is_published = dto.isPublished;

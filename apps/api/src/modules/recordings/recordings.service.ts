@@ -17,6 +17,13 @@ import { TABLES } from '../../common/constants/tables.constant';
 import { REDIS_KEYS, REDIS_TTL } from '../../common/constants/redis-keys.constant';
 import { Transaction, TransactionStep } from '../../common/utils/transaction.util';
 import { logEntityEvent } from '../../common/utils/observability-helper';
+import {
+  normalizeCategoryDisplay,
+  normalizeCategoryKey,
+  groupByCategoryMerged,
+  resolveCanonicalCategoryName,
+  buildBatchCanonicalMap,
+} from '../../common/utils/category.util';
 import { CreateRecordingDto } from './dto/create-recording.dto';
 import { CreateTopicDto } from '../videos/dto/create-topic.dto';
 import { RequestUploadDto } from '../videos/dto/request-upload.dto';
@@ -278,6 +285,7 @@ export class RecordingsService {
         execute: async () => {
           await this.createBatchLinksAndCurriculum(recordingId, dto.batchIds, {
             categoryName: dto.categoryName,
+            categoryByBatch: dto.categoryByBatch,
             moduleName: dto.moduleName,
             isPublished: dto.isPublished,
             titleOverride: dto.titleOverride,
@@ -594,13 +602,37 @@ export class RecordingsService {
         if (a.assigned !== false) assignmentMap.set(a.batchId, a);
       }
 
+      // Resolve per-batch canonical category (case-insensitive dedup) before building entries
+      const canonicalByBatchForAdd = new Map<string, string>();
+      try {
+        const { data: existingForAdd } = await this.supabaseService.client
+          .from(TABLES.BATCH_RECORDING_CURRICULUM)
+          .select('batch_id, category_name')
+          .in('batch_id', addBatches);
+        const map = buildBatchCanonicalMap((existingForAdd ?? []) as any);
+        for (const batchId of addBatches) {
+          const raw = assignmentMap.get(batchId)?.sectionName ?? 'General';
+          const display = normalizeCategoryDisplay(raw);
+          const key = normalizeCategoryKey(display);
+          const existingMap = map.get(batchId);
+          let canonical = display || 'General';
+          if (existingMap?.has(key)) canonical = existingMap.get(key)!;
+          canonicalByBatchForAdd.set(batchId, canonical);
+        }
+      } catch {
+        for (const batchId of addBatches) {
+          const raw = assignmentMap.get(batchId)?.sectionName ?? 'General';
+          canonicalByBatchForAdd.set(batchId, normalizeCategoryDisplay(raw) || 'General');
+        }
+      }
+
       const curriculumEntries = addBatches.map((batchId) => {
         const meta = assignmentMap.get(batchId);
         return {
           batch_id: batchId,
           content_id: recordingId,
           content_type: 'recording',
-          category_name: meta?.sectionName ?? 'General',
+          category_name: canonicalByBatchForAdd.get(batchId) ?? 'General',
           sort_order: meta?.sortOrder ?? 0,
           is_published: meta?.isVisible ?? true,
           module_name: null,
@@ -1373,14 +1405,23 @@ export class RecordingsService {
     const flat = recordings.map((rec:any)=>({ ...rec, progress: progressMap.get(rec.id) ?? { watched_seconds:0, completed:false, last_watched_at:null } }));
     // grouped construction reusing already fetched publishedCurriculumAll filtered to recIds
     const curriculum = (publishedCurriculumAll ?? []).filter((c:any)=> recIds.includes(c.content_id));
-    const curriculumByBatch = new Map();
+    // Case-insensitive grouping per batch — merge variants like "Stock Market Basic to Advance" vs "To Advance"
+    const curriculumByBatch = new Map<string, Map<string, { display: string; items: any[]; counts: Map<string, number> }>>();
     for(const c of curriculum){
-      const bId=c.batch_id;
-      const sec=c.category_name ?? 'Uncategorized';
+      const bId=c.batch_id as string;
+      const rawSec = (c as any).category_name ?? 'Uncategorized';
+      const display = normalizeCategoryDisplay(rawSec);
+      const key = normalizeCategoryKey(display);
       if(!curriculumByBatch.has(bId)) curriculumByBatch.set(bId, new Map());
-      const m=curriculumByBatch.get(bId);
-      if(!m.has(sec)) m.set(sec, []);
-      m.get(sec).push(c);
+      const m=curriculumByBatch.get(bId)!;
+      if(!m.has(key)) m.set(key, { display, items: [c], counts: new Map([[display,1]]) });
+      else {
+        const g=m.get(key)!;
+        g.items.push(c);
+        g.counts.set(display, (g.counts.get(display) ?? 0)+1);
+        const bestDisp=g.display;
+        if ((g.counts.get(display) ?? 0) > (g.counts.get(bestDisp) ?? 0)) g.display=display;
+      }
     }
     const grouped=[];
     const recById = new Map(recordings.map((r:any)=>[r.id,r]));
@@ -1390,8 +1431,10 @@ export class RecordingsService {
       const recIdsInBatch = (accessRecords ?? []).filter((a:any)=>a.batch_id===bId).map((a:any)=>a.recording_id);
       if(sections){
         const secArr=[];
-        for(const [secName, items] of sections){
-          const recs=items.map((it:any)=>{
+        for(const [_key, group] of sections){
+          const secName = (group as any).display as string;
+          const groupItems = (group as any).items as any[];
+          const recs=groupItems.map((it:any)=>{
             const rec=recById.get(it.content_id);
             if(!rec || !recIdsInBatch.includes(rec.id)) return null;
             const prog=progressMap.get(rec.id);
@@ -1484,18 +1527,22 @@ export class RecordingsService {
       (progress ?? []).map((p: any) => [p.video_id, p]),
     );
 
-    const curriculumByBatch = new Map<string, Map<string, any[]>>();
+    const curriculumByBatch = new Map<string, Map<string, { display: string; items: any[]; counts: Map<string, number> }>>();
     for (const c of curriculum ?? []) {
-      const bId = (c as any).batch_id;
-      const section = (c as any).category_name ?? 'Uncategorized';
-      if (!curriculumByBatch.has(bId)) {
-        curriculumByBatch.set(bId, new Map());
+      const bId = (c as any).batch_id as string;
+      const rawSec = (c as any).category_name ?? 'Uncategorized';
+      const display = normalizeCategoryDisplay(rawSec);
+      const key = normalizeCategoryKey(display);
+      if (!curriculumByBatch.has(bId)) curriculumByBatch.set(bId, new Map());
+      const m = curriculumByBatch.get(bId)!;
+      if (!m.has(key)) m.set(key, { display, items: [c], counts: new Map([[display, 1]]) });
+      else {
+        const g = m.get(key)!;
+        g.items.push(c);
+        g.counts.set(display, (g.counts.get(display) ?? 0) + 1);
+        const best = g.display;
+        if ((g.counts.get(display) ?? 0) > (g.counts.get(best) ?? 0)) g.display = display;
       }
-      const sections = curriculumByBatch.get(bId)!;
-      if (!sections.has(section)) {
-        sections.set(section, []);
-      }
-      sections.get(section)!.push(c);
     }
 
     const accessByRecording = new Map<string, Set<string>>();
@@ -1520,7 +1567,9 @@ export class RecordingsService {
 
       if (sections) {
         const sectionArr: any[] = [];
-        for (const [sectionName, items] of sections) {
+        for (const [_key, group] of sections) {
+          const sectionName = (group as any).display as string;
+          const items = (group as any).items as any[];
           const recordingsInSection = items
             .map((item: any) => {
               const rec = recordings.find((r: any) => r.id === item.content_id);
@@ -1919,6 +1968,7 @@ export class RecordingsService {
     batchIds: string[],
     options?: {
       categoryName?: string;
+      categoryByBatch?: Record<string, string>;
       moduleName?: string;
       isPublished?: boolean;
       titleOverride?: string;
@@ -1939,21 +1989,51 @@ export class RecordingsService {
       throw new BadRequestException(`Failed to link recording to batches: ${linkError.message}`);
     }
 
-    const categoryName = options?.categoryName || 'General';
+    // Resolve per-batch canonical category (case-insensitive + whitespace normalized)
     const moduleName = options?.moduleName || null;
     const isPublished = options?.isPublished ?? true;
     const titleOverride = options?.titleOverride ?? null;
 
-    const entries = batchIds.map((batchId) => ({
-      batch_id: batchId,
-      content_id: recordingId,
-      content_type: 'recording',
-      category_name: categoryName,
-      module_name: moduleName,
-      title_override: titleOverride,
-      sort_order: 0,
-      is_published: isPublished,
-    }));
+    // Build desired raw map per batch
+    const desiredByBatch = new Map<string, string>();
+    for (const batchId of batchIds) {
+      const raw =
+        options?.categoryByBatch?.[batchId] ?? options?.categoryName ?? 'General';
+      desiredByBatch.set(batchId, raw);
+    }
+
+    // Fetch existing categories for these batches to dedup against
+    let batchCanonicalMap: Map<string, Map<string, string>> = new Map();
+    try {
+      const { data: rows } = await this.supabaseService.client
+        .from(TABLES.BATCH_RECORDING_CURRICULUM)
+        .select('batch_id, category_name')
+        .in('batch_id', batchIds);
+      batchCanonicalMap = buildBatchCanonicalMap((rows ?? []) as any);
+    } catch {
+      // best-effort fallback
+    }
+
+    const entries = batchIds.map((batchId) => {
+      const desiredRaw = desiredByBatch.get(batchId) ?? 'General';
+      const displayDesired = normalizeCategoryDisplay(desiredRaw);
+      const keyDesired = normalizeCategoryKey(displayDesired);
+      const existingMap = batchCanonicalMap.get(batchId);
+      let canonical = displayDesired || 'General';
+      if (existingMap?.has(keyDesired)) {
+        canonical = existingMap.get(keyDesired)!;
+      }
+      return {
+        batch_id: batchId,
+        content_id: recordingId,
+        content_type: 'recording',
+        category_name: canonical,
+        module_name: moduleName,
+        title_override: titleOverride,
+        sort_order: 0,
+        is_published: isPublished,
+      };
+    });
 
     const { error: curriculumError } = await this.supabaseService.client
       .from(TABLES.BATCH_RECORDING_CURRICULUM)
@@ -1969,20 +2049,42 @@ export class RecordingsService {
   private async autoCreateCurriculumEntries(recordingId: string, dto: CreateRecordingDto) {
     this.validateCurriculumPayload(recordingId, dto.batchIds);
 
-    const categoryName = dto.categoryName || 'General';
     const moduleName = dto.moduleName || null;
     const isPublished = dto.isPublished ?? true;
 
-    const entries = dto.batchIds.map((batchId) => ({
-      batch_id: batchId,
-      content_id: recordingId,
-      content_type: 'recording',
-      category_name: categoryName,
-      module_name: moduleName,
-      title_override: dto.titleOverride ?? null,
-      sort_order: 0,
-      is_published: isPublished,
-    }));
+    // Resolve per-batch canonical categories (same dedup logic as createBatchLinks)
+    const desiredByBatch = new Map<string, string>();
+    for (const batchId of dto.batchIds) {
+      const raw = (dto as any).categoryByBatch?.[batchId] ?? dto.categoryName ?? 'General';
+      desiredByBatch.set(batchId, raw);
+    }
+    let batchCanonicalMap: Map<string, Map<string, string>> = new Map();
+    try {
+      const { data: rows } = await this.supabaseService.client
+        .from(TABLES.BATCH_RECORDING_CURRICULUM)
+        .select('batch_id, category_name')
+        .in('batch_id', dto.batchIds);
+      batchCanonicalMap = buildBatchCanonicalMap((rows ?? []) as any);
+    } catch {}
+
+    const entries = dto.batchIds.map((batchId) => {
+      const desiredRaw = desiredByBatch.get(batchId) ?? 'General';
+      const displayDesired = normalizeCategoryDisplay(desiredRaw);
+      const keyDesired = normalizeCategoryKey(displayDesired);
+      const existingMap = batchCanonicalMap.get(batchId);
+      let canonical = displayDesired || 'General';
+      if (existingMap?.has(keyDesired)) canonical = existingMap.get(keyDesired)!;
+      return {
+        batch_id: batchId,
+        content_id: recordingId,
+        content_type: 'recording',
+        category_name: canonical,
+        module_name: moduleName,
+        title_override: dto.titleOverride ?? null,
+        sort_order: 0,
+        is_published: isPublished,
+      };
+    });
 
     this.logger.log(
       `[Curriculum UPSERT] BEGIN | recordingId=${recordingId} | batchIds=${JSON.stringify(dto.batchIds)} | entries=${JSON.stringify(entries)} | table=${TABLES.BATCH_RECORDING_CURRICULUM} | ts=${new Date().toISOString()}`,
