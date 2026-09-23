@@ -216,6 +216,7 @@ export class CoursesService {
                     content_id: c.content_id,
                     content_type: c.content_type ?? 'recording',
                     category_name: c.category_name,
+                    category_sort_order: c.category_sort_order ?? 0,
                     module_name: c.module_name,
                     sort_order: c.sort_order,
                     is_published: false,

@@ -9,6 +9,7 @@ import {
   addCurriculumItem,
   removeCurriculumItem,
   reorderCurriculum,
+  reorderCategories,
   updateCurriculumItem,
   getRecordings,
   type Recording,
@@ -69,6 +70,7 @@ export function CurriculumTab({ batchId }: CurriculumTabProps) {
   const [liveMessage, setLiveMessage] = useState('');
 
   const dragItem = useRef<{ category: string; index: number } | null>(null);
+  const dragCategory = useRef<number | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -194,6 +196,37 @@ export function CurriculumTab({ batchId }: CurriculumTabProps) {
     // Use drop path so logic stays single
     dragItem.current = { category, index: fromIndex };
     await handleDrop(category, toIndex);
+  };
+
+  const handleCategoryDragStart = (index: number) => {
+    dragCategory.current = index;
+  };
+
+  const handleCategoryDrop = async (targetIndex: number) => {
+    const sourceIndex = dragCategory.current;
+    dragCategory.current = null;
+    if (sourceIndex === null || sourceIndex === targetIndex) return;
+    if (sourceIndex < 0 || sourceIndex >= categories.length) return;
+    if (targetIndex < 0 || targetIndex >= categories.length) return;
+
+    const newCategories = [...categories];
+    const [moved] = newCategories.splice(sourceIndex, 1);
+    if (!moved) return;
+    newCategories.splice(targetIndex, 0, moved);
+
+    const prev = categories;
+    setCategories(newCategories);
+
+    try {
+      await reorderCategories(batchId, newCategories.map((c) => c.category));
+      setError('');
+      setLiveMessage(`Reordered category ${moved.category} to position ${targetIndex + 1}`);
+    } catch {
+      setError('Category reorder failed');
+      setLiveMessage('Category reorder failed');
+      setCategories(prev);
+      load();
+    }
   };
 
   const handleRenameCategory = async (oldName: string) => {
@@ -389,9 +422,59 @@ export function CurriculumTab({ batchId }: CurriculumTabProps) {
         <p className="text-gray-500 text-center py-8">No curriculum items yet. Add content to get started.</p>
       ) : (
         <div className="space-y-4">
-          {categories.map((cat) => (
-            <div key={cat.category} className="rounded-lg border border-gray-200">
+          {categories.map((cat, catIndex) => (
+            <div
+              key={cat.category}
+              onDragOver={(e) => {
+                if (dragCategory.current === null) return;
+                e.preventDefault();
+                e.currentTarget.classList.add('ring-2', 'ring-brand-200');
+              }}
+              onDragLeave={(e) => e.currentTarget.classList.remove('ring-2', 'ring-brand-200')}
+              onDrop={(e) => {
+                if (dragCategory.current === null) return;
+                e.preventDefault();
+                e.stopPropagation();
+                e.currentTarget.classList.remove('ring-2', 'ring-brand-200');
+                handleCategoryDrop(catIndex);
+              }}
+              onDragEnd={() => {
+                document.querySelectorAll('.ring-2').forEach((el) => el.classList.remove('ring-2', 'ring-brand-200'));
+                dragCategory.current = null;
+              }}
+              className="rounded-lg border border-gray-200"
+              aria-label={`Category ${cat.category}, position ${catIndex + 1} of ${categories.length}`}
+            >
               <div className="flex items-center gap-2 border-b border-gray-100 bg-gray-50 px-4 py-2.5">
+                <span className="w-6 shrink-0 text-right text-xs font-mono text-gray-400 select-none" aria-hidden="true">
+                  #{catIndex + 1}
+                </span>
+                <span
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Drag to reorder category ${cat.category}, position ${catIndex + 1} of ${categories.length}`}
+                  title="Drag to reorder category"
+                  draggable
+                  onDragStart={(e) => {
+                    e.stopPropagation();
+                    handleCategoryDragStart(catIndex);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowUp' && catIndex > 0) {
+                      e.preventDefault();
+                      dragCategory.current = catIndex;
+                      handleCategoryDrop(catIndex - 1);
+                    }
+                    if (e.key === 'ArrowDown' && catIndex < categories.length - 1) {
+                      e.preventDefault();
+                      dragCategory.current = catIndex;
+                      handleCategoryDrop(catIndex + 1);
+                    }
+                  }}
+                  className="flex cursor-grab items-center rounded p-0.5 text-gray-300 hover:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 active:cursor-grabbing"
+                >
+                  <GripVertical className="h-4 w-4 shrink-0" aria-hidden="true" />
+                </span>
                 <button
                   onClick={() => toggleCollapse(cat.category)}
                   className="flex items-center gap-2 text-left text-sm font-semibold text-gray-900 flex-1"

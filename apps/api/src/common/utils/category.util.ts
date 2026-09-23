@@ -49,12 +49,11 @@ export function groupByCategoryMerged(items: any[]): { category: string; items: 
     }
   }
 
-  // Sort groups by display name case-insensitive for stable UI
+  // Preserve DB order (category_sort_order) — insertion order = DB order
   const result = Array.from(keyToGroup.values()).map((g) => ({
     category: g.display,
     items: g.items,
   }));
-  result.sort((a, b) => a.category.toLowerCase().localeCompare(b.category.toLowerCase()));
   return result;
 }
 

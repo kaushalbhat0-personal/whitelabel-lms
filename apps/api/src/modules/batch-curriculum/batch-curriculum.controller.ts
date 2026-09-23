@@ -14,6 +14,7 @@ import { BatchCurriculumService } from './batch-curriculum.service';
 import { AddCurriculumItemDto } from './dto/add-curriculum-item.dto';
 import { UpdateCurriculumItemDto } from './dto/update-curriculum-item.dto';
 import { ReorderCurriculumDto } from './dto/reorder-curriculum.dto';
+import { ReorderCategoriesDto } from './dto/reorder-categories.dto';
 
 @Controller()
 export class BatchCurriculumController {
@@ -62,6 +63,15 @@ export class BatchCurriculumController {
     @Body() dto: ReorderCurriculumDto,
   ) {
     return this.service.reorder(batchId, dto);
+  }
+
+  @Patch('admin/batch-curriculum/:batchId/reorder-categories')
+  @Roles(UserRole.ADMIN)
+  reorderCategories(
+    @Param('batchId', ParseUUIDPipe) batchId: string,
+    @Body() dto: ReorderCategoriesDto,
+  ) {
+    return this.service.reorderCategories(batchId, dto);
   }
 
   @Get('admin/batch-curriculum/:batchId/integrity')

@@ -137,11 +137,16 @@ describe('RecordingCurriculumReconciliationService', () => {
           // rec-4 no batch link → orphan
           q.maybeSingle.mockResolvedValue({ data: null, error: null });
         } else if (idx === 6) {
+          // fetch existing categories for category_sort_order
+          q.then.mockImplementation((resolve: Function) => {
+            resolve({ data: [], error: null, status: 200, count: 0 });
+          });
+        } else if (idx === 7) {
           // insertMissingEntries: insert rec-2
           q.then.mockImplementation((resolve: Function) => {
             resolve({ data: null, error: null, status: 201, count: 1 });
           });
-        } else if (idx === 7) {
+        } else if (idx === 8) {
           // deleteOrphanEntries: delete curr-3
           q.then.mockImplementation((resolve: Function) => {
             resolve({ data: null, error: null, status: 200, count: 1 });
@@ -181,11 +186,16 @@ describe('RecordingCurriculumReconciliationService', () => {
         } else if (idx === 3) {
           q.maybeSingle.mockResolvedValue({ data: null, error: null });
         } else if (idx === 4) {
+          // fetch existing categories for category_sort_order (new in Phase 1)
+          q.then.mockImplementation((resolve: Function) => {
+            resolve({ data: [], error: null, status: 200, count: 0 });
+          });
+        } else if (idx === 5) {
           // insert fails
           q.then.mockImplementation((resolve: Function) => {
             resolve({ data: null, error: { message: 'Insert failed', code: '23505' }, status: 409, count: null });
           });
-        } else if (idx === 5) {
+        } else if (idx === 6) {
           // delete fails
           q.then.mockImplementation((resolve: Function) => {
             resolve({ data: null, error: { message: 'Delete failed', code: 'PGRST301' }, status: 500, count: null });

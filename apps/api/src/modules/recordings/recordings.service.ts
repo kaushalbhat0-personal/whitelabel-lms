@@ -397,16 +397,54 @@ export class RecordingsService {
       batch_id: batchId,
     }));
 
-    const curriculumEntries = batchIds.map((batchId) => ({
-      batch_id: batchId,
-      content_id: recordingId,
-      content_type: 'recording',
-      category_name: 'General',
-      module_name: null,
-      title_override: null,
-      sort_order: 0,
-      is_published: true,
-    }));
+    // Resolve category_sort_order for 'General' per batch
+    const generalKey = normalizeCategoryKey('General');
+    const batchSortMap = new Map<string, number>();
+    const batchMaxMap = new Map<string, number>();
+    try {
+      const { data: rows } = await this.supabaseService.client
+        .from(TABLES.BATCH_RECORDING_CURRICULUM)
+        .select('batch_id, category_name, category_sort_order')
+        .in('batch_id', batchIds);
+      for (const row of (rows ?? []) as any[]) {
+        const bId = row.batch_id as string;
+        const key = normalizeCategoryKey(normalizeCategoryDisplay(row.category_name ?? 'General'));
+        if (!batchSortMap.has(bId) && key === generalKey) {
+          batchSortMap.set(bId, row.category_sort_order ?? 0);
+        } else if (key === generalKey && !batchSortMap.has(bId)) {
+          batchSortMap.set(bId, row.category_sort_order ?? 0);
+        }
+        const curMax = batchMaxMap.get(bId) ?? -1;
+        batchMaxMap.set(bId, Math.max(curMax, row.category_sort_order ?? 0));
+      }
+      // For batches with no existing General, batchSortMap won't have entry, max remains
+    } catch {}
+
+    const curriculumEntries = batchIds.map((batchId) => {
+      let catSort = 0;
+      if (batchSortMap.has(batchId)) {
+        catSort = batchSortMap.get(batchId)!;
+      } else {
+        const max = batchMaxMap.get(batchId);
+        catSort = max !== undefined ? max + 1 : 0;
+        // If batch has no rows at all, max is undefined -> 0
+        if ((batchMaxMap.get(batchId) === undefined) && !batchSortMap.has(batchId)) {
+          // No rows for this batch, first category is General at 0
+          catSort = 0;
+        }
+      }
+      return {
+        batch_id: batchId,
+        content_id: recordingId,
+        content_type: 'recording',
+        category_name: 'General',
+        category_sort_order: catSort,
+        module_name: null,
+        title_override: null,
+        sort_order: 0,
+        is_published: true,
+      };
+    });
 
     const steps: TransactionStep[] = [
       {
@@ -602,14 +640,27 @@ export class RecordingsService {
         if (a.assigned !== false) assignmentMap.set(a.batchId, a);
       }
 
-      // Resolve per-batch canonical category (case-insensitive dedup) before building entries
+      // Resolve per-batch canonical category and category_sort_order before building entries
       const canonicalByBatchForAdd = new Map<string, string>();
+      const categorySortByBatchForAdd = new Map<string, number>();
       try {
         const { data: existingForAdd } = await this.supabaseService.client
           .from(TABLES.BATCH_RECORDING_CURRICULUM)
-          .select('batch_id, category_name')
+          .select('batch_id, category_name, category_sort_order')
           .in('batch_id', addBatches);
         const map = buildBatchCanonicalMap((existingForAdd ?? []) as any);
+        // Build sort maps per batch
+        const sortMapByBatch = new Map<string, Map<string, number>>();
+        const maxByBatch = new Map<string, number>();
+        for (const row of (existingForAdd ?? []) as any[]) {
+          const bId = row.batch_id as string;
+          const key = normalizeCategoryKey(normalizeCategoryDisplay(row.category_name ?? 'General'));
+          if (!sortMapByBatch.has(bId)) sortMapByBatch.set(bId, new Map());
+          const m = sortMapByBatch.get(bId)!;
+          if (!m.has(key)) m.set(key, row.category_sort_order ?? 0);
+          const curMax = maxByBatch.get(bId) ?? -1;
+          maxByBatch.set(bId, Math.max(curMax, row.category_sort_order ?? 0));
+        }
         for (const batchId of addBatches) {
           const raw = assignmentMap.get(batchId)?.sectionName ?? 'General';
           const display = normalizeCategoryDisplay(raw);
@@ -618,11 +669,24 @@ export class RecordingsService {
           let canonical = display || 'General';
           if (existingMap?.has(key)) canonical = existingMap.get(key)!;
           canonicalByBatchForAdd.set(batchId, canonical);
+          const sMap = sortMapByBatch.get(batchId);
+          if (sMap?.has(key)) {
+            categorySortByBatchForAdd.set(batchId, sMap.get(key)!);
+          } else {
+            const max = maxByBatch.get(batchId);
+            const newSort = max !== undefined ? max + 1 : 0;
+            categorySortByBatchForAdd.set(batchId, newSort);
+            // Update maps for subsequent same-batch entries in this request
+            if (!sortMapByBatch.has(batchId)) sortMapByBatch.set(batchId, new Map());
+            sortMapByBatch.get(batchId)!.set(key, newSort);
+            maxByBatch.set(batchId, newSort);
+          }
         }
       } catch {
         for (const batchId of addBatches) {
           const raw = assignmentMap.get(batchId)?.sectionName ?? 'General';
           canonicalByBatchForAdd.set(batchId, normalizeCategoryDisplay(raw) || 'General');
+          categorySortByBatchForAdd.set(batchId, 0);
         }
       }
 
@@ -633,6 +697,7 @@ export class RecordingsService {
           content_id: recordingId,
           content_type: 'recording',
           category_name: canonicalByBatchForAdd.get(batchId) ?? 'General',
+          category_sort_order: categorySortByBatchForAdd.get(batchId) ?? 0,
           sort_order: meta?.sortOrder ?? 0,
           is_published: meta?.isVisible ?? true,
           module_name: null,
@@ -1383,8 +1448,8 @@ export class RecordingsService {
     const { data: accessRecords } = await this.supabaseService.client.from(TABLES.RECORDING_BATCHES).select('recording_id, batch_id').in('batch_id', batchIds);
     const recordingIds = [...new Set((accessRecords ?? []).map((r:any)=>r.recording_id))];
     if (recordingIds.length===0) return { flat: [], grouped: [] };
-    // publish gate — order by curriculum sort_order (authoritative)
-    const { data: publishedCurriculumAll } = await this.supabaseService.client.from(TABLES.BATCH_RECORDING_CURRICULUM).select('content_id, batch_id, category_name, sort_order, is_published, title_override').eq('content_type','recording').in('batch_id', batchIds).eq('is_published', true).in('content_id', recordingIds).order('sort_order', { ascending: true });
+    // publish gate — order by category_sort_order then sort_order (authoritative)
+    const { data: publishedCurriculumAll } = await this.supabaseService.client.from(TABLES.BATCH_RECORDING_CURRICULUM).select('content_id, batch_id, category_name, sort_order, category_sort_order, is_published, title_override').eq('content_type','recording').in('batch_id', batchIds).eq('is_published', true).in('content_id', recordingIds).order('category_sort_order', { ascending: true }).order('sort_order', { ascending: true });
     let publishedIds = [...new Set((publishedCurriculumAll ?? []).map((r:any)=>r.content_id))];
     if (publishedIds.length===0){
       const { data: anyCur } = await this.supabaseService.client.from(TABLES.BATCH_RECORDING_CURRICULUM).select('content_id').eq('content_type','recording').in('batch_id', batchIds).in('content_id', recordingIds);
@@ -1406,7 +1471,7 @@ export class RecordingsService {
     // grouped construction reusing already fetched publishedCurriculumAll filtered to recIds
     const curriculum = (publishedCurriculumAll ?? []).filter((c:any)=> recIds.includes(c.content_id));
     // Case-insensitive grouping per batch — merge variants like "Stock Market Basic to Advance" vs "To Advance"
-    const curriculumByBatch = new Map<string, Map<string, { display: string; items: any[]; counts: Map<string, number> }>>();
+    const curriculumByBatch = new Map<string, Map<string, { display: string; items: any[]; counts: Map<string, number>; categorySortOrder: number }>>();
     for(const c of curriculum){
       const bId=c.batch_id as string;
       const rawSec = (c as any).category_name ?? 'Uncategorized';
@@ -1414,7 +1479,7 @@ export class RecordingsService {
       const key = normalizeCategoryKey(display);
       if(!curriculumByBatch.has(bId)) curriculumByBatch.set(bId, new Map());
       const m=curriculumByBatch.get(bId)!;
-      if(!m.has(key)) m.set(key, { display, items: [c], counts: new Map([[display,1]]) });
+      if(!m.has(key)) m.set(key, { display, items: [c], counts: new Map([[display,1]]), categorySortOrder: (c as any).category_sort_order ?? 0 });
       else {
         const g=m.get(key)!;
         g.items.push(c);
@@ -1446,10 +1511,11 @@ export class RecordingsService {
             const prog=progressMap.get(rec.id);
             return { id:rec.id, title:it.title_override ?? rec.title, description:rec.description, muxPlaybackId:rec.mux_playback_id, durationSeconds:rec.duration_seconds, sortOrder: it.sort_order ?? rec.sort_order, createdAt: rec.created_at, progress: prog ? { watchedSeconds: prog.watched_seconds, completed: prog.completed, lastWatchedAt: prog.last_watched_at } : { watchedSeconds:0, completed:false, lastWatchedAt:null } };
           }).filter(Boolean);
-          if(recs.length) secArr.push({ sectionName: secName, recordings: recs });
+          if(recs.length) secArr.push({ sectionName: secName, recordings: recs, categorySortOrder: (group as any).categorySortOrder ?? 0 });
         }
-        secArr.sort((a,b)=>a.sectionName.localeCompare(b.sectionName));
-        if(secArr.length) grouped.push({ batchId:bId, batchName:bName, sections:secArr });
+        secArr.sort((a:any,b:any)=> (a.categorySortOrder ?? 0) - (b.categorySortOrder ?? 0));
+        const cleanedSecArr = secArr.map(({categorySortOrder, ...rest}:any)=> rest);
+        if(cleanedSecArr.length) grouped.push({ batchId:bId, batchName:bName, sections:cleanedSecArr });
       } else {
         const uncategorized = recordings.filter((r:any)=>recIdsInBatch.includes(r.id)).map((r:any)=>{ const prog=progressMap.get(r.id); return { id:r.id, title:r.title, description:r.description, muxPlaybackId:r.mux_playback_id, durationSeconds:r.duration_seconds, sortOrder:r.sort_order, createdAt:r.created_at, progress: prog ? { watchedSeconds:prog.watched_seconds, completed:prog.completed, lastWatchedAt:prog.last_watched_at } : { watchedSeconds:0, completed:false, lastWatchedAt:null } };});
         if(uncategorized.length) grouped.push({ batchId:bId, batchName:bName, sections:[{ sectionName:null, recordings:uncategorized }]});
@@ -1515,11 +1581,12 @@ export class RecordingsService {
 
     const { data: curriculum } = await this.supabaseService.client
       .from(TABLES.BATCH_RECORDING_CURRICULUM)
-      .select('batch_id, content_id, category_name, sort_order, is_published, title_override')
+      .select('batch_id, content_id, category_name, sort_order, category_sort_order, is_published, title_override')
       .eq('content_type', 'recording')
       .in('content_id', recordingIdList)
       .in('batch_id', userBatchIds)
       .eq('is_published', true)
+      .order('category_sort_order', { ascending: true })
       .order('sort_order', { ascending: true });
 
     this.logger.debug(`[DEBUG] fetchMyRecordingsGrouped | curriculum query returned count=${curriculum?.length ?? 0} | filters: content_type=recording, is_published=true | rows=${JSON.stringify(curriculum ?? [])}`);
@@ -1534,7 +1601,7 @@ export class RecordingsService {
       (progress ?? []).map((p: any) => [p.video_id, p]),
     );
 
-    const curriculumByBatch = new Map<string, Map<string, { display: string; items: any[]; counts: Map<string, number> }>>();
+    const curriculumByBatch = new Map<string, Map<string, { display: string; items: any[]; counts: Map<string, number>; categorySortOrder: number }>>();
     for (const c of curriculum ?? []) {
       const bId = (c as any).batch_id as string;
       const rawSec = (c as any).category_name ?? 'Uncategorized';
@@ -1542,7 +1609,7 @@ export class RecordingsService {
       const key = normalizeCategoryKey(display);
       if (!curriculumByBatch.has(bId)) curriculumByBatch.set(bId, new Map());
       const m = curriculumByBatch.get(bId)!;
-      if (!m.has(key)) m.set(key, { display, items: [c], counts: new Map([[display, 1]]) });
+      if (!m.has(key)) m.set(key, { display, items: [c], counts: new Map([[display, 1]]), categorySortOrder: (c as any).category_sort_order ?? 0 });
       else {
         const g = m.get(key)!;
         g.items.push(c);
@@ -1604,11 +1671,12 @@ export class RecordingsService {
             .filter(Boolean);
           this.logger.debug(`[DEBUG] fetchMyRecordingsGrouped | batchId=${batchId} | sectionName=${sectionName} | recordingsInSection count=${recordingsInSection.length}`);
           if (recordingsInSection.length > 0) {
-            sectionArr.push({ sectionName, recordings: recordingsInSection });
+            sectionArr.push({ sectionName, recordings: recordingsInSection, categorySortOrder: (group as any).categorySortOrder ?? 0 });
           }
         }
-        sectionArr.sort((a, b) => a.sectionName?.localeCompare(b.sectionName ?? '') ?? 0);
-        result.push({ batchId, batchName, sections: sectionArr });
+        sectionArr.sort((a:any,b:any)=> (a.categorySortOrder ?? 0) - (b.categorySortOrder ?? 0));
+        const cleanedSecArr = sectionArr.map(({categorySortOrder, ...rest}:any)=> rest);
+        result.push({ batchId, batchName, sections: cleanedSecArr });
       } else {
         const uncategorized = recordings
           .filter((r: any) => recordingsInBatch.includes(r.id))
@@ -1907,14 +1975,15 @@ export class RecordingsService {
       return [];
     }
 
-    // Phase 9: enforce publish gate — filter to is_published=true curriculum for this batch, ordered by curriculum sort_order (authoritative)
+    // Phase 9: enforce publish gate — filter to is_published=true curriculum for this batch, ordered by category_sort_order then sort_order (authoritative)
     const { data: publishedCurriculum } = await this.supabaseService.client
       .from(TABLES.BATCH_RECORDING_CURRICULUM)
-      .select('content_id, sort_order')
+      .select('content_id, sort_order, category_sort_order')
       .eq('content_type', 'recording')
       .eq('batch_id', batchId)
       .eq('is_published', true)
       .in('content_id', recordingIds)
+      .order('category_sort_order', { ascending: true })
       .order('sort_order', { ascending: true });
 
     // Preserve curriculum order (dedup while keeping first occurrence)
@@ -1925,10 +1994,14 @@ export class RecordingsService {
       if (cid && !seenPub.has(cid)) { seenPub.add(cid); orderedPublishedIds.push(cid); }
     }
     let publishedIds = orderedPublishedIds;
-    // Map for sorting recordings by curriculum order
+    // Map for sorting recordings by curriculum order (category_sort_order primary)
     const curriculumOrderMap = new Map<string, number>();
     (publishedCurriculum ?? []).forEach((row: any, idx: number) => {
-      if (!curriculumOrderMap.has(row.content_id)) curriculumOrderMap.set(row.content_id, row.sort_order ?? idx);
+      if (!curriculumOrderMap.has(row.content_id)) {
+        const catSort = row.category_sort_order ?? 0;
+        const sort = row.sort_order ?? 0;
+        curriculumOrderMap.set(row.content_id, catSort * 100000 + sort);
+      }
     });
     if (publishedIds.length === 0) {
       // Legacy fallback: if no published rows but also zero curriculum rows at all, use recording_batches.
@@ -2034,14 +2107,26 @@ export class RecordingsService {
       desiredByBatch.set(batchId, raw);
     }
 
-    // Fetch existing categories for these batches to dedup against
+    // Fetch existing categories for these batches to dedup against and resolve category_sort_order
     let batchCanonicalMap: Map<string, Map<string, string>> = new Map();
+    const batchSortMap = new Map<string, Map<string, number>>();
+    const batchMaxSort = new Map<string, number>();
     try {
       const { data: rows } = await this.supabaseService.client
         .from(TABLES.BATCH_RECORDING_CURRICULUM)
-        .select('batch_id, category_name')
+        .select('batch_id, category_name, category_sort_order')
         .in('batch_id', batchIds);
       batchCanonicalMap = buildBatchCanonicalMap((rows ?? []) as any);
+      // Build sort and max maps
+      for (const row of (rows ?? []) as any[]) {
+        const bId = row.batch_id as string;
+        const key = normalizeCategoryKey(normalizeCategoryDisplay(row.category_name ?? 'General'));
+        if (!batchSortMap.has(bId)) batchSortMap.set(bId, new Map());
+        const m = batchSortMap.get(bId)!;
+        if (!m.has(key)) m.set(key, row.category_sort_order ?? 0);
+        const curMax = batchMaxSort.get(bId) ?? -1;
+        batchMaxSort.set(bId, Math.max(curMax, row.category_sort_order ?? 0));
+      }
     } catch {
       // best-effort fallback
     }
@@ -2055,11 +2140,30 @@ export class RecordingsService {
       if (existingMap?.has(keyDesired)) {
         canonical = existingMap.get(keyDesired)!;
       }
+      // Resolve category_sort_order: reuse existing or MAX+1
+      let categorySortOrder = 0;
+      const sortMap = batchSortMap.get(batchId);
+      if (sortMap?.has(keyDesired)) {
+        categorySortOrder = sortMap.get(keyDesired)!;
+      } else {
+        const max = batchMaxSort.get(batchId);
+        categorySortOrder = max !== undefined ? max + 1 : 0;
+        if (batchSortMap.get(batchId)?.size === 0 || max === undefined) categorySortOrder = 0;
+        // Update max for subsequent new categories in same request (multiple batches with same new category? not needed per batch)
+        batchMaxSort.set(batchId, categorySortOrder);
+        // Also populate sortMap for future same-batch new categories in this batchIds loop
+        if (!sortMap) {
+          batchSortMap.set(batchId, new Map([[keyDesired, categorySortOrder]]));
+        } else {
+          sortMap.set(keyDesired, categorySortOrder);
+        }
+      }
       return {
         batch_id: batchId,
         content_id: recordingId,
         content_type: 'recording',
         category_name: canonical,
+        category_sort_order: categorySortOrder,
         module_name: moduleName,
         title_override: titleOverride,
         sort_order: 0,
@@ -2091,12 +2195,23 @@ export class RecordingsService {
       desiredByBatch.set(batchId, raw);
     }
     let batchCanonicalMap: Map<string, Map<string, string>> = new Map();
+    const batchSortMap = new Map<string, Map<string, number>>();
+    const batchMaxSort = new Map<string, number>();
     try {
       const { data: rows } = await this.supabaseService.client
         .from(TABLES.BATCH_RECORDING_CURRICULUM)
-        .select('batch_id, category_name')
+        .select('batch_id, category_name, category_sort_order')
         .in('batch_id', dto.batchIds);
       batchCanonicalMap = buildBatchCanonicalMap((rows ?? []) as any);
+      for (const row of (rows ?? []) as any[]) {
+        const bId = row.batch_id as string;
+        const key = normalizeCategoryKey(normalizeCategoryDisplay(row.category_name ?? 'General'));
+        if (!batchSortMap.has(bId)) batchSortMap.set(bId, new Map());
+        const m = batchSortMap.get(bId)!;
+        if (!m.has(key)) m.set(key, row.category_sort_order ?? 0);
+        const curMax = batchMaxSort.get(bId) ?? -1;
+        batchMaxSort.set(bId, Math.max(curMax, row.category_sort_order ?? 0));
+      }
     } catch {}
 
     const entries = dto.batchIds.map((batchId) => {
@@ -2106,11 +2221,23 @@ export class RecordingsService {
       const existingMap = batchCanonicalMap.get(batchId);
       let canonical = displayDesired || 'General';
       if (existingMap?.has(keyDesired)) canonical = existingMap.get(keyDesired)!;
+      let categorySortOrder = 0;
+      const sortMap = batchSortMap.get(batchId);
+      if (sortMap?.has(keyDesired)) {
+        categorySortOrder = sortMap.get(keyDesired)!;
+      } else {
+        const max = batchMaxSort.get(batchId);
+        categorySortOrder = max !== undefined ? max + 1 : 0;
+        if (sortMap) sortMap.set(keyDesired, categorySortOrder);
+        else batchSortMap.set(batchId, new Map([[keyDesired, categorySortOrder]]));
+        batchMaxSort.set(batchId, categorySortOrder);
+      }
       return {
         batch_id: batchId,
         content_id: recordingId,
         content_type: 'recording',
         category_name: canonical,
+        category_sort_order: categorySortOrder,
         module_name: moduleName,
         title_override: dto.titleOverride ?? null,
         sort_order: 0,

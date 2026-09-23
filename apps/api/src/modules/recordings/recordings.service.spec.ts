@@ -322,8 +322,19 @@ describe('RecordingsService', () => {
       upsertMock.mockResolvedValueOnce({ data: null, error: null });
       upsertMock.mockResolvedValueOnce({ data: null, error: null });
 
-      chain.from.mockReturnValue({
-        upsert: upsertMock,
+      let callIdx = 0;
+      chain.from.mockImplementation(() => {
+        if (callIdx === 0) {
+          callIdx++;
+          const c = mockChain();
+          c.select.mockReturnThis();
+          c.in.mockImplementation(() => ({
+            then: (fn: any) => Promise.resolve({ data: [], error: null }).then(fn),
+          } as any));
+          (c as any).then = (fn: any) => Promise.resolve({ data: [], error: null }).then(fn);
+          return c;
+        }
+        return { upsert: upsertMock } as any;
       });
 
       const result = await service.assignToBatches(
@@ -372,7 +383,20 @@ describe('RecordingsService', () => {
           count: null,
         });
 
-      chain.from.mockReturnValue({ upsert: upsertMock });
+      let callIdx = 0;
+      chain.from.mockImplementation(() => {
+        if (callIdx === 0) {
+          callIdx++;
+          const c = mockChain();
+          c.select.mockReturnThis();
+          c.in.mockImplementation(() => ({
+            then: (fn: any) => Promise.resolve({ data: [], error: null }).then(fn),
+          } as any));
+          (c as any).then = (fn: any) => Promise.resolve({ data: [], error: null }).then(fn);
+          return c;
+        }
+        return { upsert: upsertMock } as any;
+      });
 
       await expect(
         service.assignToBatches(
@@ -394,7 +418,20 @@ describe('RecordingsService', () => {
           count: null,
         });
 
-      chain.from.mockReturnValue({ upsert: upsertMock });
+      let callIdx = 0;
+      chain.from.mockImplementation(() => {
+        if (callIdx === 0) {
+          callIdx++;
+          const c = mockChain();
+          c.select.mockReturnThis();
+          c.in.mockImplementation(() => ({
+            then: (fn: any) => Promise.resolve({ data: [], error: null }).then(fn),
+          } as any));
+          (c as any).then = (fn: any) => Promise.resolve({ data: [], error: null }).then(fn);
+          return c;
+        }
+        return { upsert: upsertMock } as any;
+      });
 
       await expect(
         service.assignToBatches(
@@ -459,11 +496,24 @@ describe('RecordingsService', () => {
       const eqMock = jest.fn().mockReturnThis();
       const inMock = jest.fn().mockResolvedValue({ data: null, error: null });
 
-      chain.from.mockReturnValue({
-        upsert: upsertMock,
-        delete: deleteMock,
-        eq: eqMock,
-        in: inMock,
+      let callIdx = 0;
+      chain.from.mockImplementation(() => {
+        if (callIdx === 0) {
+          callIdx++;
+          const c = mockChain();
+          c.select.mockReturnThis();
+          c.in.mockImplementation(() => ({
+            then: (fn: any) => Promise.resolve({ data: [], error: null }).then(fn),
+          } as any));
+          (c as any).then = (fn: any) => Promise.resolve({ data: [], error: null }).then(fn);
+          return c;
+        }
+        return {
+          upsert: upsertMock,
+          delete: deleteMock,
+          eq: eqMock,
+          in: inMock,
+        } as any;
       });
 
       await expect(
@@ -532,8 +582,18 @@ describe('RecordingsService', () => {
     });
 
     it('should handle duplicate batch assignment without error', async () => {
-      const upsertMock = jest.fn().mockResolvedValue({ data: null, error: null });
-      chain.from.mockReturnValue({ upsert: upsertMock });
+      chain.from.mockImplementation(() => {
+        const c = mockChain();
+        c.select.mockReturnThis();
+        c.in.mockImplementation(() => ({
+          then: (fn: any) => Promise.resolve({ data: [], error: null }).then(fn),
+        } as any));
+        (c as any).then = (fn: any) => Promise.resolve({ data: [], error: null }).then(fn);
+        c.upsert.mockResolvedValue({ data: null, error: null });
+        c.delete.mockReturnThis();
+        c.eq.mockReturnThis();
+        return c;
+      });
 
       const result1 = await service.updateBatchCurriculum(
         '550e8400-e29b-41d4-a716-446655440000',
@@ -1037,14 +1097,11 @@ describe('RecordingsService', () => {
         if (call === 3) {
           // recordings
           const data = recordingsRows;
-          // chain: .select().in().eq().order() -> order resolves
+          // chain: .select().in().eq().order() -> order resolves (may be chained twice)
           q.select.mockReturnThis();
           q.in.mockReturnThis();
           q.eq.mockReturnThis();
-          q.order.mockImplementation(() => ({
-            then: (fn: any) => Promise.resolve({ data, error: null }).then(fn),
-          } as any));
-          // also make the chain itself thenable for safety
+          q.order.mockReturnThis();
           q.then = (fn: any) => Promise.resolve({ data, error: null }).then(fn);
           return q;
         }
@@ -1054,9 +1111,7 @@ describe('RecordingsService', () => {
           q.select.mockReturnThis();
           q.eq.mockReturnThis();
           q.in.mockReturnThis();
-          q.order.mockImplementation(() => ({
-            then: (fn: any) => Promise.resolve({ data, error: null }).then(fn),
-          } as any));
+          q.order.mockReturnThis();
           q.then = (fn: any) => Promise.resolve({ data, error: null }).then(fn);
           return q;
         }
@@ -1150,13 +1205,13 @@ describe('RecordingsService', () => {
         }
         if (call === 3) {
           const data = recordingsRows;
-          q.order.mockImplementation(() => ({ then: (fn:any)=>Promise.resolve({data,error:null}).then(fn)} as any));
+          q.order.mockReturnThis();
           q.then = (fn:any)=>Promise.resolve({data,error:null}).then(fn);
           return q;
         }
         if (call === 4) {
           const data = curriculumRows;
-          q.order.mockImplementation(() => ({ then: (fn:any)=>Promise.resolve({data,error:null}).then(fn)} as any));
+          q.order.mockReturnThis();
           q.then = (fn:any)=>Promise.resolve({data,error:null}).then(fn);
           return q;
         }

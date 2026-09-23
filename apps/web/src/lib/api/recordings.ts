@@ -178,6 +178,20 @@ export async function reorderCurriculum(
   );
 }
 
+/**
+ * Reorder categories within a batch.
+ * PATCH /admin/batch-curriculum/:batchId/reorder-categories
+ */
+export async function reorderCategories(
+  batchId: string,
+  orderedCategoryNames: string[],
+) {
+  return fetchApi<{ reordered: boolean }>(
+    `${API_ROUTES.ADMIN_BATCH_CURRICULUM}/${batchId}/reorder-categories`,
+    { method: 'PATCH', body: JSON.stringify({ orderedCategoryNames }) },
+  );
+}
+
 // ── Curriculum Progress ──────────────────────────────────────
 
 export interface CategoryProgress {

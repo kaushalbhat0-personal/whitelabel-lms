@@ -5,6 +5,7 @@ import { TABLES } from '../../common/constants/tables.constant';
 import { AddCurriculumItemDto } from './dto/add-curriculum-item.dto';
 import { UpdateCurriculumItemDto } from './dto/update-curriculum-item.dto';
 import { ReorderCurriculumDto } from './dto/reorder-curriculum.dto';
+import { ReorderCategoriesDto } from './dto/reorder-categories.dto';
 import { Transaction, TransactionStep } from '../../common/utils/transaction.util';
 import {
   normalizeCategoryDisplay,
@@ -58,7 +59,7 @@ export class BatchCurriculumService {
       .from(TABLES.BATCH_RECORDING_CURRICULUM)
       .select('*')
       .eq('batch_id', batchId)
-      .order('category_name', { ascending: true })
+      .order('category_sort_order', { ascending: true })
       .order('sort_order', { ascending: true });
 
     if (error) {
@@ -189,15 +190,31 @@ export class BatchCurriculumService {
     // Normalize whitespace + case-insensitive dedup within this batch
     const normalizedDisplay = normalizeCategoryDisplay(dto.categoryName ?? 'General');
     let canonicalCategory = normalizedDisplay;
+    let categorySortOrder = 0;
     try {
       const { data: existing } = await this.supabaseService.client
         .from(TABLES.BATCH_RECORDING_CURRICULUM)
-        .select('category_name')
+        .select('category_name, category_sort_order')
         .eq('batch_id', batchId);
       const existingNames = (existing ?? []).map((r: any) => r.category_name as string);
       canonicalCategory = resolveCanonicalCategoryName(normalizedDisplay, existingNames);
+      // Determine category_sort_order: reuse existing if logical category exists, else MAX+1
+      const desiredKey = normalizeCategoryKey(canonicalCategory);
+      const keyToSort = new Map<string, number>();
+      let maxSort = -1;
+      for (const row of (existing ?? []) as any[]) {
+        const key = normalizeCategoryKey(normalizeCategoryDisplay(row.category_name));
+        if (!keyToSort.has(key)) keyToSort.set(key, row.category_sort_order ?? 0);
+        maxSort = Math.max(maxSort, row.category_sort_order ?? 0);
+      }
+      if (keyToSort.has(desiredKey)) {
+        categorySortOrder = keyToSort.get(desiredKey)!;
+      } else {
+        categorySortOrder = maxSort + 1;
+        if ((existing ?? []).length === 0) categorySortOrder = 0;
+      }
     } catch {
-      // best-effort: fallback to normalized display
+      // best-effort: fallback to normalized display and default sort
     }
 
     const steps: TransactionStep[] = [
@@ -211,6 +228,7 @@ export class BatchCurriculumService {
               content_id: dto.contentId ?? null,
               content_type: dto.contentType,
               category_name: canonicalCategory,
+              category_sort_order: categorySortOrder,
               module_name: dto.moduleName ?? null,
               sort_order: dto.sortOrder ?? 0,
               is_published: dto.isPublished ?? true,
@@ -284,20 +302,37 @@ export class BatchCurriculumService {
     if (dto.categoryName !== undefined) {
       const display = normalizeCategoryDisplay(dto.categoryName);
       let canonical = display;
+      let newCategorySort: number | undefined;
       try {
         const { data: existing } = await this.supabaseService.client
           .from(TABLES.BATCH_RECORDING_CURRICULUM)
-          .select('category_name')
+          .select('category_name, category_sort_order')
           .eq('batch_id', (existingItem as any).batch_id);
         const existingNames = (existing ?? []).map((r: any) => r.category_name as string);
         canonical = resolveCanonicalCategoryName(display, existingNames);
-        // If the desired category already exists as a different item's category with same key,
-        // we already deduped to that canonical. Also allow keeping own display if it's the only
-        // instance — but reuse rule above already handles case-only differences.
-        // Also handle empty -> General.
         if (!canonical) canonical = 'General';
+        // Determine category_sort_order: reuse existing if moving to existing category, else keep original
+        const desiredKey = normalizeCategoryKey(canonical);
+        const keyToSort = new Map<string, number>();
+        for (const row of (existing ?? []) as any[]) {
+          const k = normalizeCategoryKey(normalizeCategoryDisplay(row.category_name));
+          if (!keyToSort.has(k)) keyToSort.set(k, row.category_sort_order ?? 0);
+        }
+        const originalKey = normalizeCategoryKey(normalizeCategoryDisplay((existingItem as any).category_name ?? 'General'));
+        const originalSort = (existingItem as any).category_sort_order ?? 0;
+        if (desiredKey === originalKey) {
+          // Same logical category (case/whitespace change) -> keep original
+          newCategorySort = originalSort;
+        } else if (keyToSort.has(desiredKey)) {
+          // Moving to existing category -> inherit its sort
+          newCategorySort = keyToSort.get(desiredKey)!;
+        } else {
+          // New category via rename -> keep original position (do not create new at end)
+          newCategorySort = originalSort;
+        }
       } catch {}
       updates.category_name = canonical;
+      if (newCategorySort !== undefined) updates.category_sort_order = newCategorySort;
     }
     if (dto.moduleName !== undefined) updates.module_name = dto.moduleName;
     if (dto.sortOrder !== undefined) updates.sort_order = dto.sortOrder;
@@ -527,6 +562,156 @@ export class BatchCurriculumService {
         }
       },
     }));
+
+    const tx = new Transaction();
+    await tx.run(steps);
+
+    await this.invalidateForBatch(batchId).catch(() => {});
+    return { reordered: true };
+  }
+
+  async reorderCategories(batchId: string, dto: ReorderCategoriesDto) {
+    // Validate batch exists
+    const { data: batch, error: batchError } = await this.supabaseService.client
+      .from(TABLES.BATCHES)
+      .select('id')
+      .eq('id', batchId)
+      .single();
+    if (batchError || !batch) {
+      throw new NotFoundException(`Batch "${batchId}" not found.`);
+    }
+
+    // Normalize supplied names and check duplicates
+    const suppliedDisplays: string[] = [];
+    const suppliedKeys: string[] = [];
+    const keyToSuppliedDisplay = new Map<string, string>();
+    for (const raw of dto.orderedCategoryNames) {
+      const display = normalizeCategoryDisplay(raw);
+      if (!display) {
+        throw new BadRequestException('Category name must not be empty.');
+      }
+      const key = normalizeCategoryKey(display);
+      if (keyToSuppliedDisplay.has(key)) {
+        throw new BadRequestException(`Duplicate logical category: "${raw}" resolves to same as "${keyToSuppliedDisplay.get(key)}".`);
+      }
+      keyToSuppliedDisplay.set(key, display);
+      suppliedDisplays.push(display);
+      suppliedKeys.push(key);
+    }
+
+    // Fetch existing curriculum rows for this batch
+    const { data: existingRows, error: fetchError } = await this.supabaseService.client
+      .from(TABLES.BATCH_RECORDING_CURRICULUM)
+      .select('id, category_name, category_sort_order')
+      .eq('batch_id', batchId);
+
+    if (fetchError) {
+      this.logger.error(`ReorderCategories fetch failed: ${fetchError.message}`);
+      throw new InternalServerErrorException('Could not load categories.');
+    }
+
+    if (!existingRows || existingRows.length === 0) {
+      throw new BadRequestException('No categories found for this batch.');
+    }
+
+    // Build existing logical categories map: key -> { canonicalDisplay, ids[], currentSort }
+    const existingKeyToIds = new Map<string, string[]>();
+    const existingKeyToCanonical = new Map<string, string>();
+    const existingKeyToSort = new Map<string, number>();
+    const existingDisplayCounts = new Map<string, Map<string, number>>();
+
+    for (const row of existingRows as any[]) {
+      const raw = row.category_name as string;
+      const display = normalizeCategoryDisplay(raw);
+      const key = normalizeCategoryKey(display);
+      if (!existingKeyToIds.has(key)) existingKeyToIds.set(key, []);
+      existingKeyToIds.get(key)!.push(row.id);
+
+      // Track most frequent display for error messages
+      if (!existingDisplayCounts.has(key)) existingDisplayCounts.set(key, new Map());
+      const m = existingDisplayCounts.get(key)!;
+      m.set(display, (m.get(display) ?? 0) + 1);
+
+      // Remember first sort value for this key (should be consistent per logical category)
+      if (!existingKeyToSort.has(key)) {
+        existingKeyToSort.set(key, row.category_sort_order ?? 0);
+      }
+    }
+    for (const [key, counts] of existingDisplayCounts) {
+      let best = '';
+      let bestCnt = -1;
+      for (const [disp, cnt] of counts) {
+        if (cnt > bestCnt) { best = disp; bestCnt = cnt; }
+      }
+      existingKeyToCanonical.set(key, best);
+    }
+
+    const existingKeysSet = new Set(existingKeyToIds.keys());
+    const suppliedKeysSet = new Set(suppliedKeys);
+
+    // Check unknown categories
+    for (const key of suppliedKeys) {
+      if (!existingKeysSet.has(key)) {
+        const disp = keyToSuppliedDisplay.get(key) ?? key;
+        throw new BadRequestException(`Unknown category: "${disp}" does not exist in this batch.`);
+      }
+    }
+    // Check omitted categories
+    for (const key of existingKeysSet) {
+      if (!suppliedKeysSet.has(key)) {
+        const canonical = existingKeyToCanonical.get(key) ?? key;
+        throw new BadRequestException(`Missing category: "${canonical}" must be included in reorder.`);
+      }
+    }
+    // Ensure counts match
+    if (suppliedKeys.length !== existingKeysSet.size) {
+      throw new BadRequestException('Ordered categories must include all existing categories exactly once.');
+    }
+
+    // Build new order map: key -> new position
+    const newPosByKey = new Map<string, number>();
+    suppliedKeys.forEach((key, idx) => newPosByKey.set(key, idx));
+
+    // Build steps: one per logical category
+    // Snapshot original per id for rollback
+    const originalSortById = new Map<string, number>();
+    for (const row of existingRows as any[]) {
+      originalSortById.set(row.id, row.category_sort_order ?? 0);
+    }
+
+    const steps: TransactionStep[] = [];
+    for (const [key, ids] of existingKeyToIds.entries()) {
+      const newPos = newPosByKey.get(key)!;
+      const currentPos = existingKeyToSort.get(key);
+      if (currentPos === newPos) continue; // no change needed, skip DB write
+      steps.push({
+        name: `reorder-category-${key}`,
+        execute: async () => {
+          const { error } = await this.supabaseService.client
+            .from(TABLES.BATCH_RECORDING_CURRICULUM)
+            .update({ category_sort_order: newPos })
+            .eq('batch_id', batchId)
+            .in('id', ids);
+          if (error) {
+            this.logger.error(`ReorderCategories failed for key ${key}: ${error.message}`);
+            throw new InternalServerErrorException(`Failed to reorder category "${existingKeyToCanonical.get(key) ?? key}".`);
+          }
+        },
+        rollback: async () => {
+          const origPos = existingKeyToSort.get(key)!;
+          await this.supabaseService.client
+            .from(TABLES.BATCH_RECORDING_CURRICULUM)
+            .update({ category_sort_order: origPos })
+            .eq('batch_id', batchId)
+            .in('id', ids)
+            .then(() => {}, () => {});
+        },
+      });
+    }
+
+    if (steps.length === 0) {
+      return { reordered: true };
+    }
 
     const tx = new Transaction();
     await tx.run(steps);

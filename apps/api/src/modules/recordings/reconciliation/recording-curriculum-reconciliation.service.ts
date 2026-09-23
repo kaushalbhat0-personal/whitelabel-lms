@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SupabaseService } from '../../../common/services/supabase.service';
 import { TABLES } from '../../../common/constants/tables.constant';
+import { normalizeCategoryDisplay, normalizeCategoryKey } from '../../../common/utils/category.util';
 
 export interface ReconciliationSummary {
   dryRun: boolean;
@@ -127,6 +128,29 @@ export class RecordingCurriculumReconciliationService {
     let failed = 0;
 
     for (const entry of entries) {
+      // Resolve category_sort_order for 'General' in this batch
+      let categorySortOrder = 0;
+      try {
+        const { data: existing } = await this.supabaseService.client
+          .from(TABLES.BATCH_RECORDING_CURRICULUM)
+          .select('category_name, category_sort_order')
+          .eq('batch_id', entry.batch_id);
+        const generalKey = normalizeCategoryKey('General');
+        const keyToSort = new Map<string, number>();
+        let maxSort = -1;
+        for (const row of (existing ?? []) as any[]) {
+          const k = normalizeCategoryKey(normalizeCategoryDisplay(row.category_name ?? 'General'));
+          if (!keyToSort.has(k)) keyToSort.set(k, row.category_sort_order ?? 0);
+          maxSort = Math.max(maxSort, row.category_sort_order ?? 0);
+        }
+        if (keyToSort.has(generalKey)) {
+          categorySortOrder = keyToSort.get(generalKey)!;
+        } else if (maxSort >= 0) {
+          categorySortOrder = maxSort + 1;
+        } else {
+          categorySortOrder = 0;
+        }
+      } catch {}
       const { error } = await this.supabaseService.client
         .from(TABLES.BATCH_RECORDING_CURRICULUM)
         .insert({
@@ -134,6 +158,7 @@ export class RecordingCurriculumReconciliationService {
           content_id: entry.content_id,
           content_type: 'recording',
           category_name: 'General',
+          category_sort_order: categorySortOrder,
           module_name: null,
           title_override: null,
           sort_order: 0,

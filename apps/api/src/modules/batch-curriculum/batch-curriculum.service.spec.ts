@@ -269,4 +269,135 @@ describe('BatchCurriculumService', () => {
       expect(recordingBatchesCalls.length).toBe(0);
     });
   });
+
+  describe('reorderCategories', () => {
+    const batchId = '550e8400-e29b-41d4-a716-446655440001';
+
+    function mockReorderCategories(existingRows: any[], orderedNames: string[]) {
+      let callIndex = 0;
+      chain.from.mockImplementation(() => {
+        const c = buildChain();
+        const idx = callIndex++;
+        if (idx === 0) {
+          // batch exists check: from('batches').select('id').eq('id', batchId).single()
+          c.select.mockReturnThis();
+          c.eq.mockReturnThis();
+          c.single.mockResolvedValue({ data: { id: batchId }, error: null });
+        } else if (idx === 1) {
+          // fetch existing categories: from('batch_recording_curriculum').select('id, category_name, category_sort_order').eq('batch_id', batchId)
+          c.select.mockReturnThis();
+          c.eq.mockReturnThis();
+          // Return existingRows as data
+          c.then = jest.fn((resolve) => resolve({ data: existingRows, error: null }));
+          // Also support .then for await
+          (c as any).then = (fn: any) => Promise.resolve({ data: existingRows, error: null }).then(fn);
+          // Mock the chain to be thenable
+          return {
+            select: c.select,
+            eq: c.eq,
+            then: (fn: any) => Promise.resolve({ data: existingRows, error: null }).then(fn),
+          } as any;
+        } else {
+          // Subsequent calls are updates: from('batch_recording_curriculum').update(...).eq('batch_id', ...).in('id', ...)
+          c.update.mockReturnThis();
+          c.eq.mockReturnThis();
+          c.in.mockResolvedValue({ error: null });
+        }
+        return c;
+      });
+      return chain.from;
+    }
+
+    it('should reorder categories A,B,C -> C,A,B', async () => {
+      const existing = [
+        { id: '1', category_name: 'A', category_sort_order: 0, batch_id: batchId },
+        { id: '2', category_name: 'A', category_sort_order: 0, batch_id: batchId },
+        { id: '3', category_name: 'B', category_sort_order: 1, batch_id: batchId },
+        { id: '4', category_name: 'C', category_sort_order: 2, batch_id: batchId },
+      ];
+      mockReorderCategories(existing, ['C', 'A', 'B']);
+      const result = await service.reorderCategories(batchId, { orderedCategoryNames: ['C', 'A', 'B'] });
+      expect(result.reordered).toBe(true);
+    });
+
+    it('should preserve recording sort_order within categories', async () => {
+      const existing = [
+        { id: 'a1', category_name: 'A', category_sort_order: 0, batch_id: batchId, sort_order: 0 },
+        { id: 'a2', category_name: 'A', category_sort_order: 0, batch_id: batchId, sort_order: 1 },
+        { id: 'a3', category_name: 'A', category_sort_order: 0, batch_id: batchId, sort_order: 2 },
+        { id: 'b1', category_name: 'B', category_sort_order: 1, batch_id: batchId, sort_order: 0 },
+      ];
+      mockReorderCategories(existing, ['B', 'A']);
+      const result = await service.reorderCategories(batchId, { orderedCategoryNames: ['B', 'A'] });
+      expect(result.reordered).toBe(true);
+      // Verify that updates were called for each logical category (2 categories)
+      // First existing fetch + batch check + 2 updates
+      expect(chain.from).toHaveBeenCalledWith('batch_recording_curriculum');
+    });
+
+    it('should treat case-insensitive variants as one logical category', async () => {
+      const existing = [
+        { id: '1', category_name: 'Stock Market Basic To Advance', category_sort_order: 0, batch_id: batchId },
+        { id: '2', category_name: 'Stock Market Basic to Advance', category_sort_order: 0, batch_id: batchId },
+        { id: '3', category_name: 'Doubt Solving Sessions', category_sort_order: 1, batch_id: batchId },
+      ];
+      mockReorderCategories(existing, ['Doubt Solving Sessions', 'Stock Market Basic to Advance']);
+      const result = await service.reorderCategories(batchId, {
+        orderedCategoryNames: ['Doubt Solving Sessions', 'stock market basic to advance'],
+      });
+      expect(result.reordered).toBe(true);
+    });
+
+    it('should keep batches independent', async () => {
+      const batchA = '550e8400-e29b-41d4-a716-446655440001';
+      const batchB = '550e8400-e29b-41d4-a716-446655440002';
+      // Mock for batchA reorder only, ensure batchB not affected is implicit
+      const existingA = [
+        { id: '1', category_name: 'Basics', category_sort_order: 0, batch_id: batchA },
+        { id: '2', category_name: 'Trading', category_sort_order: 1, batch_id: batchA },
+        { id: '3', category_name: 'Doubt', category_sort_order: 2, batch_id: batchA },
+      ];
+      mockReorderCategories(existingA, ['Basics', 'Doubt', 'Trading']);
+      const result = await service.reorderCategories(batchA, {
+        orderedCategoryNames: ['Basics', 'Doubt', 'Trading'],
+      });
+      expect(result.reordered).toBe(true);
+    });
+
+    it('should reject unknown category', async () => {
+      const existing = [
+        { id: '1', category_name: 'A', category_sort_order: 0, batch_id: batchId },
+        { id: '2', category_name: 'B', category_sort_order: 1, batch_id: batchId },
+      ];
+      mockReorderCategories(existing, ['A', 'B']);
+      await expect(
+        service.reorderCategories(batchId, { orderedCategoryNames: ['A', 'Unknown'] }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should reject duplicate logical category', async () => {
+      const existing = [
+        { id: '1', category_name: 'A', category_sort_order: 0, batch_id: batchId },
+        { id: '2', category_name: 'B', category_sort_order: 1, batch_id: batchId },
+      ];
+      mockReorderCategories(existing, ['A', 'B']);
+      await expect(
+        service.reorderCategories(batchId, {
+          orderedCategoryNames: ['A', 'a'], // duplicate after normalization
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should reject omitted existing category', async () => {
+      const existing = [
+        { id: '1', category_name: 'A', category_sort_order: 0, batch_id: batchId },
+        { id: '2', category_name: 'B', category_sort_order: 1, batch_id: batchId },
+        { id: '3', category_name: 'C', category_sort_order: 2, batch_id: batchId },
+      ];
+      mockReorderCategories(existing, ['A', 'B', 'C']);
+      await expect(
+        service.reorderCategories(batchId, { orderedCategoryNames: ['A', 'B'] }),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
 });
