@@ -259,14 +259,22 @@ export default function TestResultPage() {
           </div>
         )}
 
-        {/* Score Header */}
-        <div className="rounded-card border border-surface-border bg-surface-card p-6 text-center">
-          <div className="mb-2 text-4xl font-bold text-text-primary">
-            {result.percentage}%
+        {/* Score Header — Marks Obtained / Total Marks */}
+        <div className="rounded-card border border-surface-border bg-surface-card p-6 text-center overflow-hidden">
+          <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Your Score</p>
+          <div className="mt-2 text-4xl font-bold leading-none text-text-primary break-words">
+            {result.score} / {result.totalMarks || result.questions.reduce((s: number, q: any) => s + (q.marks ?? 0), 0)}
           </div>
-          <div className="mb-3 text-sm text-text-secondary">
-            {result.score} / {result.totalMarks} marks
+          <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs">
+            <span className="text-text-muted">
+              Marks Obtained: <span className="font-semibold text-text-primary">{result.score}</span>
+            </span>
+            <span className="hidden text-surface-border sm:inline" aria-hidden="true">·</span>
+            <span className="text-text-muted">
+              Total Marks: <span className="font-semibold text-text-primary">{result.totalMarks || result.questions.reduce((s: number, q: any) => s + (q.marks ?? 0), 0)}</span>
+            </span>
           </div>
+          <div className="mt-1 text-sm font-medium text-text-secondary">{result.percentage}%</div>
           <div className="flex items-center justify-center gap-3">
             <span className={cn(
               'inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold',
