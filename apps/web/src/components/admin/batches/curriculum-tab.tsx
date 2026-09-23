@@ -149,14 +149,28 @@ export function CurriculumTab({ batchId }: CurriculumTabProps) {
     const source = dragItem.current;
     dragItem.current = null;
 
-    if (!source || (source.category === targetCategory && source.index === targetIndex)) return;
+    if (!source) return;
+    // Category isolation: only reorder within same category
+    if (source.category !== targetCategory) return;
+    if (source.index === targetIndex) return;
 
     const cat = (categories ?? []).find((c) => c.category === targetCategory);
     if (!cat) return;
+    if (source.index < 0 || source.index >= cat.items.length) return;
+    if (targetIndex < 0 || targetIndex > cat.items.length) return;
 
     const items = [...cat.items];
     const [moved] = items.splice(source.index, 1);
-    items.splice(targetIndex, 0, moved);
+    if (!moved) return;
+    // When moving forward, targetIndex refers to position in original array
+    // After removal, if source < target, the target has shifted left by 1.
+    // Our splice above inserts at targetIndex which correctly places *after* the original target when moving forward,
+    // and *before* when moving backward. To ensure deterministic, keep as is but clamp.
+    const clampedTarget = Math.max(0, Math.min(targetIndex, items.length));
+    items.splice(clampedTarget, 0, moved);
+
+    // Snapshot for rollback
+    const prevCategories = categories;
 
     setCategories((prev) =>
       prev.map((c) => (c.category === targetCategory ? { ...c, items } : c)),
@@ -165,12 +179,21 @@ export function CurriculumTab({ batchId }: CurriculumTabProps) {
     try {
       await reorderCurriculum(batchId, items.map((item, i) => ({ id: item.id, sortOrder: i })));
       setError('');
-      setLiveMessage(`Reordered ${targetCategory}: item moved to position ${targetIndex + 1}`);
+      setLiveMessage(`Reordered ${targetCategory}: item moved to position ${clampedTarget + 1}`);
     } catch {
       setError('Reorder failed');
       setLiveMessage('Reorder failed');
+      // Restore optimistic state immediately, then re-sync from server
+      setCategories(prevCategories);
       load();
     }
+  };
+
+  const handleMove = async (category: string, fromIndex: number, direction: -1 | 1) => {
+    const toIndex = fromIndex + direction;
+    // Use drop path so logic stays single
+    dragItem.current = { category, index: fromIndex };
+    await handleDrop(category, toIndex);
   };
 
   const handleRenameCategory = async (oldName: string) => {
@@ -436,8 +459,23 @@ export function CurriculumTab({ batchId }: CurriculumTabProps) {
                           document.querySelectorAll('.bg-blue-50').forEach((el) => el.classList.remove('bg-blue-50'));
                         }}
                         className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 cursor-grab active:cursor-grabbing"
+                        aria-label={`${itemTitle(item)}, position ${index + 1} of ${cat.items.length} in ${cat.category}`}
                       >
-                        <GripVertical className="h-4 w-4 shrink-0 text-gray-300" />
+                        <span className="w-6 shrink-0 text-right text-xs font-mono text-gray-400 select-none" aria-hidden="true">#{index + 1}</span>
+                        <span className="sr-only">Position {index + 1}</span>
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`Drag to reorder ${itemTitle(item)}, current position ${index + 1} of ${cat.items.length}`}
+                          title="Drag to reorder"
+                          onKeyDown={(e) => {
+                            if (e.key === 'ArrowUp' && index > 0) { e.preventDefault(); handleMove(cat.category, index, -1); }
+                            if (e.key === 'ArrowDown' && index < cat.items.length - 1) { e.preventDefault(); handleMove(cat.category, index, 1); }
+                          }}
+                          className="flex items-center rounded p-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                        >
+                          <GripVertical className="h-4 w-4 shrink-0 text-gray-300" aria-hidden="true" />
+                        </span>
                         <Icon className="h-4 w-4 shrink-0 text-gray-400" />
                         {contentTypeBadge(item.content_type)}
                         {editingItemId === item.id ? (

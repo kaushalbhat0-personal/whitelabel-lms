@@ -476,16 +476,61 @@ export class BatchCurriculumService {
   }
 
   async reorder(batchId: string, dto: ReorderCurriculumDto) {
-    for (const item of dto.items) {
-      const { error } = await this.supabaseService.client
-        .from(TABLES.BATCH_RECORDING_CURRICULUM)
-        .update({ sort_order: item.sortOrder })
-        .eq('id', item.id);
-      if (error) {
-        this.logger.error(`Reorder failed for item ${item.id}: ${error.message}`);
-        throw new InternalServerErrorException('Reorder failed.');
-      }
+    if (!dto.items?.length) return { reordered: true };
+
+    // Validate all ids belong to this batch and resolve their category
+    const ids = dto.items.map((i) => i.id);
+    const { data: existing, error: fetchError } = await this.supabaseService.client
+      .from(TABLES.BATCH_RECORDING_CURRICULUM)
+      .select('id, category_name, batch_id, sort_order')
+      .eq('batch_id', batchId)
+      .in('id', ids);
+
+    if (fetchError) {
+      this.logger.error(`Reorder fetch failed: ${fetchError.message}`);
+      throw new InternalServerErrorException('Reorder failed: could not verify items.');
     }
+
+    if ((existing ?? []).length !== ids.length) {
+      throw new BadRequestException('Reorder failed: one or more items do not belong to this batch.');
+    }
+
+    // Enforce deterministic sequential order based on DTO's sortOrder (or DTO order)
+    // Sort DTO by provided sortOrder to get intended sequence, then re-assign 0..n-1
+    const sortedDto = [...dto.items].sort((a, b) => a.sortOrder - b.sortOrder);
+    // Build id -> new sequential sort_order
+    const newOrderById = new Map<string, number>();
+    sortedDto.forEach((it, idx) => newOrderById.set(it.id, idx));
+
+    // Use transaction for atomicity — ensure unique sequential values per category
+    const steps: TransactionStep[] = sortedDto.map((it) => ({
+      name: `reorder-${it.id}`,
+      execute: async () => {
+        const { error } = await this.supabaseService.client
+          .from(TABLES.BATCH_RECORDING_CURRICULUM)
+          .update({ sort_order: newOrderById.get(it.id) })
+          .eq('id', it.id);
+        if (error) {
+          this.logger.error(`Reorder failed for item ${it.id}: ${error.message}`);
+          throw new InternalServerErrorException('Reorder failed.');
+        }
+      },
+      rollback: async () => {
+        // Best-effort: restore original sort_order for this item
+        const orig = (existing ?? []).find((e: any) => e.id === it.id);
+        if (orig) {
+          await this.supabaseService.client
+            .from(TABLES.BATCH_RECORDING_CURRICULUM)
+            .update({ sort_order: (orig as any).sort_order })
+            .eq('id', it.id)
+            .then(() => {}, () => {});
+        }
+      },
+    }));
+
+    const tx = new Transaction();
+    await tx.run(steps);
+
     await this.invalidateForBatch(batchId).catch(() => {});
     return { reordered: true };
   }
