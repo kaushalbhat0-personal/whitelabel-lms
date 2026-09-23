@@ -163,27 +163,62 @@ export function CourseProgressHero({ total, completed, inProgress, courseName, b
 
       {/* Current / Next — recording-aware, stack on mobile */}
       <div className="mt-4 grid gap-2 sm:grid-cols-2">
-        <div className="flex items-start gap-2 rounded-lg bg-white px-3 py-3 border border-surface-border">
-          <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-600" aria-hidden />
-          <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-text-muted leading-none">Current position</p>
-            <p className="mt-1 text-xs font-medium text-text-primary break-words" title={currentLabel ?? undefined}>
-              {currentLabel}
-            </p>
-            {currentCategory && currentRecording && (
-              <p className="mt-1 truncate text-[10px] leading-none text-text-muted">{currentCategory}</p>
-            )}
+        {currentRecording ? (
+          <Link
+            href={`/student/videos/${currentRecording.id}`}
+            aria-label={`Current: ${currentLabel}`}
+            className="flex items-start gap-2 rounded-lg bg-white px-3 py-3 border border-surface-border hover:bg-surface-muted hover:border-brand-200 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 min-h-[44px] min-w-0"
+          >
+            <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-600" aria-hidden />
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-text-muted leading-none">Current position</p>
+              <p className="mt-1 text-xs font-medium text-text-primary break-words" title={currentLabel ?? undefined}>
+                {currentLabel}
+              </p>
+              {currentCategory && (
+                <p className="mt-1 truncate text-[10px] leading-none text-text-muted">{currentCategory}</p>
+              )}
+            </div>
+          </Link>
+        ) : (
+          <div className="flex items-start gap-2 rounded-lg bg-white px-3 py-3 border border-surface-border min-h-[44px] min-w-0">
+            <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-600" aria-hidden />
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-text-muted leading-none">Current position</p>
+              <p className="mt-1 text-xs font-medium text-text-primary break-words" title={currentLabel ?? undefined}>
+                {currentLabel}
+              </p>
+              {currentCategory && (
+                <p className="mt-1 truncate text-[10px] leading-none text-text-muted">{currentCategory}</p>
+              )}
+            </div>
           </div>
-        </div>
-        <div className="flex items-start gap-2 rounded-lg bg-white px-3 py-3 border border-surface-border">
-          <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-text-muted" aria-hidden />
-          <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-text-muted leading-none">Next up</p>
-            <p className="mt-1 text-xs font-medium text-text-primary break-words" title={nextLabel ?? undefined}>
-              {nextLabel ?? '—'}
-            </p>
+        )}
+        {nextRecording ? (
+          <Link
+            href={`/student/videos/${nextRecording.id}`}
+            aria-label={`Next: ${nextLabel}`}
+            className="flex items-start gap-2 rounded-lg bg-white px-3 py-3 border border-surface-border hover:bg-surface-muted hover:border-brand-200 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 min-h-[44px] min-w-0"
+          >
+            <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-text-muted" aria-hidden />
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-text-muted leading-none">Next up</p>
+              <p className="mt-1 text-xs font-medium text-text-primary break-words" title={nextLabel ?? undefined}>
+                {nextLabel}
+              </p>
+            </div>
+          </Link>
+        ) : (
+          <div className="flex items-start gap-2 rounded-lg bg-white px-3 py-3 border border-surface-border min-h-[44px] min-w-0">
+            <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-text-muted" aria-hidden />
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-text-muted leading-none">Next up</p>
+              <p className="mt-1 text-xs font-medium text-text-primary break-words" title={nextLabel ?? undefined}>
+                {nextLabel ?? '—'}
+              </p>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <p className="sr-only">

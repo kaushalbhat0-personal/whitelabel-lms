@@ -20,6 +20,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ROUTES } from '@/lib/constants';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -343,17 +344,21 @@ export function DashboardClient({ name, nextClass, upcoming, courses, recordings
                           </div>
                         )}
                         <div className="flex flex-col gap-3">
-                          <div className="flex items-center gap-2">
+                          <Link
+                            href={`/student/live-sessions/${nextClass.id}`}
+                            aria-label={`View ${nextClass.topic} details`}
+                            className="flex items-center gap-2 rounded-lg -m-1 p-1 min-h-[44px] min-w-0 hover:bg-surface-muted/40 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                          >
                             <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl', isLive || isStartingSoon ? 'bg-red-50' : 'bg-brand-50')}>
                               <Radio className={cn('h-5 w-5', isLive || isStartingSoon ? 'text-red-500' : 'text-brand-600')} aria-hidden="true" />
                             </div>
                             <div className="min-w-0">
                               <h3 className="truncate text-sm font-bold text-text-primary">{nextClass.topic}</h3>
-                              <p className="text-xs text-text-muted">
+                              <p className="truncate text-xs text-text-muted">
                                 {formatDate(nextClass.start_time)} · {formatTime(nextClass.start_time)} · {nextClass.duration_minutes} min
                               </p>
                             </div>
-                          </div>
+                          </Link>
                           <p className={cn('text-xs font-medium', isLive ? 'text-red-600' : isStartingSoon ? 'text-amber-600' : 'text-text-muted')}>
                             {timeLabel}
                           </p>
@@ -401,10 +406,14 @@ export function DashboardClient({ name, nextClass, upcoming, courses, recordings
 
                 {/* Quick stats - real only */}
                 <div className="grid grid-cols-2 gap-3">
-                  <StatCard label="Courses" value={courses.length} icon={<BookOpen className="h-5 w-5" />} iconColor="bg-brand-50 text-brand-600" />
+                  <Link href={ROUTES.STUDENT.COURSES} aria-label="View courses" className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+                    <StatCard label="Courses" value={courses.length} icon={<BookOpen className="h-5 w-5" />} iconColor="bg-brand-50 text-brand-600" className="hover:border-brand-200 hover:shadow-card-hover transition-all h-full" />
+                  </Link>
                   <StatCard label="Completed" value={completed} icon={<CheckCircle2 className="h-5 w-5" />} iconColor="bg-emerald-50 text-emerald-600" />
                   <StatCard label="Watched" value={`${Math.floor(totalWatchedSeconds / 3600)}h`} icon={<Clock className="h-5 w-5" />} iconColor="bg-blue-50 text-blue-600" />
-                  <StatCard label="Pending Tests" value={pendingTests} icon={<BarChart3 className="h-5 w-5" />} iconColor="bg-amber-50 text-amber-600" />
+                  <Link href={ROUTES.STUDENT.TESTS} aria-label="View tests" className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+                    <StatCard label="Pending Tests" value={pendingTests} icon={<BarChart3 className="h-5 w-5" />} iconColor="bg-amber-50 text-amber-600" className="hover:border-brand-200 hover:shadow-card-hover transition-all h-full" />
+                  </Link>
                 </div>
 
                 {/* Recent result */}
