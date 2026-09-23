@@ -1,11 +1,12 @@
 'use client';
 
-import { useRef, useEffect, useState, useCallback } from 'react';
-import { Calendar, X } from 'lucide-react';
+import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
+import Link from 'next/link';
+import { Calendar, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import Hls from 'hls.js';
 import { usePlaybackToken } from '@/hooks/usePlaybackToken';
 import { usePlayerPreferences } from '@/hooks/usePlayerPreferences';
-import { updateVideoProgress } from '@/lib/api/videos';
+import { updateVideoProgress, getMyVideosGrouped, type StudentBatchRecordings } from '@/lib/api/videos';
 import { WatermarkOverlay } from '@/components/shared/WatermarkOverlay';
 import { ScreenRecordingDetector } from '@/components/shared/ScreenRecordingDetector';
 import {
@@ -71,6 +72,8 @@ export function VideoPlayerClient({
   const [playerReady, setPlayerReady] = useState(false);
   const [pipSupported, setPipSupported] = useState(false);
   const [isMini, setIsMini] = useState(false);
+
+  const [grouped, setGrouped] = useState<StudentBatchRecordings[] | null>(null);
 
   const {
     playbackUrl,
@@ -381,6 +384,35 @@ export function VideoPlayerClient({
     };
   }, [recordingId]);
 
+  // Previous/Next navigation — batch-scoped, ordered by category_sort_order then sort_order
+  useEffect(() => {
+    let cancelled = false;
+    getMyVideosGrouped()
+      .then((data) => { if (!cancelled) setGrouped(data); })
+      .catch(() => { if (!cancelled) setGrouped([]); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const navigation = useMemo(() => {
+    if (!grouped || grouped.length === 0) return { prev: null as any, next: null as any, currentBatchName: null as string | null, currentSection: null as string | null };
+    // Find batch containing recordingId
+    let targetBatch: StudentBatchRecordings | null = null;
+    for (const batch of grouped) {
+      for (const section of batch.sections) {
+        if (section.recordings.some((r) => r.id === recordingId)) { targetBatch = batch; break; }
+      }
+      if (targetBatch) break;
+    }
+    if (!targetBatch) return { prev: null, next: null, currentBatchName: null, currentSection: null };
+    const flat = targetBatch.sections.flatMap((s) => s.recordings);
+    const idx = flat.findIndex((r) => r.id === recordingId);
+    if (idx === -1) return { prev: null, next: null, currentBatchName: targetBatch.batchName, currentSection: null };
+    const prev = idx > 0 ? flat[idx - 1] : null;
+    const next = idx < flat.length - 1 ? flat[idx + 1] : null;
+    const currentSection = targetBatch.sections.find((s) => s.recordings.some((r) => r.id === recordingId))?.sectionName ?? null;
+    return { prev, next, currentBatchName: targetBatch.batchName, currentSection };
+  }, [grouped, recordingId]);
+
   // PiP support detection
   useEffect(() => {
     setPipSupported(
@@ -545,16 +577,16 @@ export function VideoPlayerClient({
   );
 
   return (
-    <div>
+    <div className="min-w-0 max-w-full overflow-hidden">
       <ScreenRecordingDetector
         contextType="recording"
         contextId={recordingId}
       >
         <div
           ref={containerRef}
-          className={`relative aspect-video w-full bg-black overflow-hidden group select-none transition-all duration-300 ${
+          className={`relative aspect-video w-full max-w-full bg-black overflow-hidden group select-none transition-all duration-300 ${
             isMini
-              ? 'fixed bottom-[calc(1rem+56px+env(safe-area-inset-bottom,0px))] md:bottom-4 right-4 z-50 w-[calc(100vw-2rem)] sm:w-72 max-w-[288px] rounded-xl shadow-2xl border border-white/10'
+              ? 'fixed bottom-[calc(1rem+56px+env(safe-area-inset-bottom,0px))] md:bottom-4 right-4 z-50 w-[min(calc(100vw-2rem),288px)] sm:w-72 max-w-[288px] rounded-xl shadow-2xl border border-white/10'
               : ''
           }`}
           onDoubleClick={handleFullscreen}
@@ -644,9 +676,57 @@ export function VideoPlayerClient({
         />
       </ScreenRecordingDetector>
 
-      {isMini && <div className="aspect-video w-full" aria-hidden />}
+      {isMini && <div className="aspect-video w-full max-w-full" aria-hidden />}
 
-        <div className="px-4 py-4 md:px-0 overflow-hidden">
+      {/* Previous / Next navigation — batch-scoped, curriculum ordered */}
+      <nav aria-label="Recording navigation" className="px-4 md:px-0 mt-3 min-w-0 max-w-full">
+        <div className="grid gap-2 sm:grid-cols-2">
+          {navigation.prev ? (
+            <Link
+              href={`/student/videos/${navigation.prev.id}`}
+              aria-label={`Previous: ${navigation.prev.title}`}
+              className="flex min-w-0 items-center gap-3 rounded-card border border-surface-border bg-surface-card p-3 text-left hover:bg-surface-muted hover:border-brand-200 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 min-h-[44px]"
+            >
+              <ChevronLeft className="h-4 w-4 shrink-0 text-text-muted" aria-hidden="true" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-text-muted leading-none">Previous</p>
+                <p className="mt-1 truncate text-sm font-medium text-text-primary">{navigation.prev.title}</p>
+              </div>
+            </Link>
+          ) : (
+            <div className="flex min-w-0 items-center gap-3 rounded-card border border-surface-border bg-surface-muted/50 p-3 opacity-60" aria-hidden="true">
+              <ChevronLeft className="h-4 w-4 shrink-0 text-text-muted" aria-hidden="true" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-text-muted leading-none">Previous</p>
+                <p className="mt-1 truncate text-sm text-text-muted">No previous video</p>
+              </div>
+            </div>
+          )}
+          {navigation.next ? (
+            <Link
+              href={`/student/videos/${navigation.next.id}`}
+              aria-label={`Next: ${navigation.next.title}`}
+              className="flex min-w-0 items-center gap-3 rounded-card border border-surface-border bg-surface-card p-3 text-left hover:bg-surface-muted hover:border-brand-200 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 min-h-[44px]"
+            >
+              <div className="min-w-0 flex-1 text-right sm:text-left">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-text-muted leading-none">Next</p>
+                <p className="mt-1 truncate text-sm font-medium text-text-primary">{navigation.next.title}</p>
+              </div>
+              <ChevronRight className="h-4 w-4 shrink-0 text-text-muted" aria-hidden="true" />
+            </Link>
+          ) : (
+            <div className="flex min-w-0 items-center gap-3 rounded-card border border-surface-border bg-surface-muted/50 p-3 opacity-60" aria-hidden="true">
+              <div className="min-w-0 flex-1 text-right sm:text-left">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-text-muted leading-none">Next</p>
+                <p className="mt-1 truncate text-sm text-text-muted">No next video</p>
+              </div>
+              <ChevronRight className="h-4 w-4 shrink-0 text-text-muted" aria-hidden="true" />
+            </div>
+          )}
+        </div>
+      </nav>
+
+        <div className="px-4 py-4 md:px-0 overflow-hidden min-w-0 max-w-full">
         <div className="rounded-card border border-surface-border bg-surface-card p-4 md:p-5 overflow-hidden">
           <h2 className="text-base font-bold leading-tight text-text-primary line-clamp-2 break-words">
             {title || 'Recording'}

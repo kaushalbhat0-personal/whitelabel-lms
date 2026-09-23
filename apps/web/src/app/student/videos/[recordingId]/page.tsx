@@ -27,9 +27,9 @@ export default async function StudentVideoPlayerPage({ params }: Props) {
   }
 
   return (
-    <div>
+    <div className="min-w-0 max-w-full overflow-hidden">
       <PageHeader title={videoTitle || 'Recording'} showBack />
-      <div className="md:px-0">
+      <div className="md:px-0 min-w-0 max-w-full overflow-hidden">
         <VideoPlayerClient
           recordingId={params.recordingId}
           sessionId=""

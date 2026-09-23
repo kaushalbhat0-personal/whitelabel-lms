@@ -4,8 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Play,
   Pause,
-  SkipBack,
-  SkipForward,
+  RotateCcw,
+  RotateCw,
   Volume2,
   Volume1,
   VolumeX,
@@ -299,15 +299,15 @@ export function VideoControls({
         </div>
 
         {/* Controls row */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center justify-between gap-2 gap-y-2 min-w-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-1">
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); handleSeekBack(); }}
               className="rounded p-1.5 text-white/80 hover:bg-white/10 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 min-w-[44px] min-h-[44px] flex items-center justify-center"
               aria-label="Rewind 10 seconds"
             >
-              <SkipBack className="h-5 w-5" fill="currentColor" aria-hidden="true" />
+              <RotateCcw className="h-5 w-5" aria-hidden="true" />
             </button>
 
             <button
@@ -329,15 +329,15 @@ export function VideoControls({
               className="rounded p-1.5 text-white/80 hover:bg-white/10 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 min-w-[44px] min-h-[44px] flex items-center justify-center"
               aria-label="Forward 10 seconds"
             >
-              <SkipForward className="h-5 w-5" fill="currentColor" aria-hidden="true" />
+              <RotateCw className="h-5 w-5" aria-hidden="true" />
             </button>
 
-            <span className="ml-1 text-xs text-white/70 font-medium tabular-nums select-none">
+            <span className="ml-1 min-w-0 truncate text-xs text-white/70 font-medium tabular-nums select-none">
               {formatTime(currentTime)} / {formatTime(duration)}
             </span>
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-1">
             <div
               className="relative flex items-center"
               onMouseEnter={() => setShowVolumeSlider(true)}
@@ -359,7 +359,7 @@ export function VideoControls({
               </button>
               {showVolumeSlider && (
                 <div
-                  className="flex h-10 w-28 sm:w-32 items-center rounded bg-gray-900/90 backdrop-blur-sm px-3 mx-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 min-h-[44px] touch-manipulation"
+                  className="hidden sm:flex h-10 w-28 sm:w-32 items-center rounded bg-gray-900/90 backdrop-blur-sm px-3 mx-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 min-h-[44px] touch-manipulation"
                   onClick={(e) => { e.stopPropagation(); handleVolumeSlider(e as any); }}
                   onTouchMove={(e) => {
                     const touch = e.touches[0];
