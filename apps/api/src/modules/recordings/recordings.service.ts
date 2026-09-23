@@ -1651,6 +1651,47 @@ export class RecordingsService {
   }
 
   /**
+   * Get single recording metadata for a student.
+   * Reuses validateAccess (recording_batches + publish gate) to enforce
+   * the same authorization boundary as /recordings/:id/play.
+   * Performs single-record lookup (no full-list fetch) — performance fix for
+   * student video detail page.
+   * @param recordingId - UUID of the recording.
+   * @param userId - UUID of the student.
+   * @returns Recording row with topic + progress (shape compatible with StudentVideo).
+   * @throws NotFoundException if recording not found.
+   * @throws BadRequestException if recording not ready.
+   * @throws ForbiddenException if student has no batch access.
+   */
+  async getRecordingMetaForStudent(recordingId: string, userId: string) {
+    await this.validateAccess(recordingId, userId);
+
+    const { data: rec, error } = await this.supabaseService.client
+      .from(TABLES.RECORDINGS)
+      .select('id, title, description, topic_id, sort_order, status, created_at, topics(name)')
+      .eq('id', recordingId)
+      .single();
+
+    if (error || !rec) {
+      throw new NotFoundException('Recording not found');
+    }
+
+    const { data: prog } = await this.supabaseService.client
+      .from(TABLES.VIDEO_PROGRESS)
+      .select('watched_seconds, completed, last_watched_at')
+      .eq('video_id', recordingId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    return {
+      ...(rec as any),
+      progress: prog
+        ? { watched_seconds: (prog as any).watched_seconds, completed: (prog as any).completed, last_watched_at: (prog as any).last_watched_at }
+        : { watched_seconds: 0, completed: false, last_watched_at: null },
+    };
+  }
+
+  /**
    * Authorize a student's playback request for a recording.
    * Validates access via recording_batches, then delegates to PlaybackGuard for token authorization.
    * @param recordingId - UUID of the recording.

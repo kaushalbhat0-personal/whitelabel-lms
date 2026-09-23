@@ -208,6 +208,10 @@ export async function getVideoPlaybackUrl(videoId: string) {
   return fetchApi<PlaybackResponse>(`${API_ROUTES.RECORDINGS}/${videoId}/play`);
 }
 
+export async function getVideoMeta(videoId: string) {
+  return fetchApi<StudentVideo>(`${API_ROUTES.RECORDINGS}/${videoId}/meta`);
+}
+
 export async function updateVideoProgress(
   videoId: string,
   watchedSeconds: number,

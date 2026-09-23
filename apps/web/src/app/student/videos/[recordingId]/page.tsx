@@ -1,4 +1,4 @@
-import { getMyVideos } from '@/lib/api/videos';
+import { getVideoMeta } from '@/lib/api/videos';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { VideoPlayerClient } from './video-player-client';
 
@@ -13,8 +13,7 @@ export default async function StudentVideoPlayerPage({ params }: Props) {
   let videoDate = '';
 
   try {
-    const recordings = await getMyVideos().catch(() => []);
-    const video = recordings.find((r) => r.id === params.recordingId);
+    const video = await getVideoMeta(params.recordingId);
     if (video) {
       videoTitle = video.title;
       videoDate = new Date(video.created_at).toLocaleDateString('en-IN', {

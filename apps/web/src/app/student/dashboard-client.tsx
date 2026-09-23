@@ -293,7 +293,7 @@ export function DashboardClient({ name, nextClass, upcoming, courses, recordings
 
                     <RecentLearning recordings={recordings} />
 
-                    <CourseProgressHero total={total} completed={completed} inProgress={inProgress} courseName={courseName} batchName={batchName} />
+                    <CourseProgressHero total={total} completed={completed} inProgress={inProgress} courseName={courseName} batchName={batchName} grouped={grouped} />
                   </>
                 )}
 

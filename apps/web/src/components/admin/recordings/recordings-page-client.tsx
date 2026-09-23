@@ -141,21 +141,21 @@ export function RecordingsPageClient({ initialVideos, total, topics }: Recording
               className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
             />
           </div>
-          <select value={status} onChange={(e) => setStatus(e.target.value)} className={selectClass}>
+          <select value={status} onChange={(e) => setStatus(e.target.value)} className={selectClass} aria-label="Filter by status">
             {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
-          <select value={topicId} onChange={(e) => setTopicId(e.target.value)} className={selectClass}>
+          <select value={topicId} onChange={(e) => setTopicId(e.target.value)} className={selectClass} aria-label="Filter by topic">
             <option value="">All topics</option>
             {topics.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
-          <select value={published} onChange={(e) => setPublished(e.target.value)} className={selectClass}>
+          <select value={published} onChange={(e) => setPublished(e.target.value)} className={selectClass} aria-label="Filter by published state">
             {PUBLISHED_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
-          <select value={batchId} onChange={(e) => setBatchId(e.target.value)} className={selectClass}>
+          <select value={batchId} onChange={(e) => setBatchId(e.target.value)} className={selectClass} aria-label="Filter by batch">
             <option value="">All batches</option>
             {batches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
-          <select value={sort} onChange={(e) => setSort(e.target.value)} className={selectClass}>
+          <select value={sort} onChange={(e) => setSort(e.target.value)} className={selectClass} aria-label="Sort recordings">
             {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </div>
@@ -185,6 +185,7 @@ export function RecordingsPageClient({ initialVideos, total, topics }: Recording
                 onChange={(e) => setPageSize(Number(e.target.value))}
                 className={selectClass}
                 title="Rows per page"
+                aria-label="Rows per page"
               >
                 {PAGE_SIZES.map((s) => <option key={s} value={s}>{s} / page</option>)}
               </select>

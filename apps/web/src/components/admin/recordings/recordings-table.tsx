@@ -179,6 +179,7 @@ export function RecordingsTable({
                   type="checkbox"
                   checked={allVisibleSelected}
                   onChange={toggleSelectAll}
+                  aria-label={allVisibleSelected ? 'Deselect all recordings' : 'Select all recordings'}
                   title={allVisibleSelected ? 'Deselect all visible' : 'Select all visible'}
                   className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
                 />
@@ -225,6 +226,7 @@ export function RecordingsTable({
                       type="checkbox"
                       checked={selectedIds.has(video.id)}
                       onChange={() => toggleSelect(video.id)}
+                      aria-label={`Select ${video.title}`}
                       className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
                     />
                   </td>

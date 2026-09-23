@@ -29,7 +29,7 @@ export function EmptyState({
           <Inbox className="h-12 w-12" />
         </div>
       )}
-      <h3 className="text-lg font-semibold text-text-primary">{title}</h3>
+      <h2 className="text-lg font-semibold text-text-primary">{title}</h2>
       {description && (
         <p className="text-sm text-text-muted mt-1 max-w-sm text-center">{description}</p>
       )}

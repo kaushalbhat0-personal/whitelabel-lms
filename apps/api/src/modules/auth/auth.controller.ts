@@ -64,6 +64,16 @@ export class AuthController {
       maxAge: 24 * 60 * 60 * 1000,
     });
 
+    // Hardened server-issued cookie alongside existing client-readable flow.
+    // Full httpOnly migration is out of scope — existing JS cookie + localStorage remain.
+    res.cookie('__Host-access_token', result.token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 24 * 60 * 60 * 1000,
+    });
+
     return result;
   }
 
@@ -76,7 +86,16 @@ export class AuthController {
   @Post('logout')
   async logout(
     @CurrentUser() user: { id: string; sessionId: string },
+    @Res({ passthrough: true }) res: Response,
   ) {
+    // Expire hardened cookie alongside existing client cleanup (client also clears via document.cookie).
+    res.cookie('__Host-access_token', '', {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 0,
+    });
     return this.authService.logout(user.id, user.sessionId);
   }
 

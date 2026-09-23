@@ -195,6 +195,15 @@ export class RecordingsController {
   }
 
   @Roles(UserRole.STUDENT)
+  @Get('recordings/:id/meta')
+  async getRecordingMeta(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string },
+  ) {
+    return this.recordingsService.getRecordingMetaForStudent(id, user.id);
+  }
+
+  @Roles(UserRole.STUDENT)
   @Post('recordings/:id/authorize')
   authorizePlayback(
     @Param('id') id: string,
