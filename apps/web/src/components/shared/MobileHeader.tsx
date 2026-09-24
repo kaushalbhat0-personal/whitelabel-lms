@@ -1,8 +1,8 @@
 'use client';
 
-import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { Menu, ChevronLeft } from 'lucide-react';
+import { useBusinessConfig } from '@/components/providers/BusinessConfigProvider';
 
 interface MobileHeaderProps {
   title: string;
@@ -12,6 +12,7 @@ interface MobileHeaderProps {
 }
 
 export function MobileHeader({ title, showBack, onBack, onMenuClick }: MobileHeaderProps) {
+  const { businessName, logoUrl } = useBusinessConfig();
   return (
     <header className="sticky top-0 z-30 border-b border-surface-border bg-white md:hidden">
       <div className="flex h-12 items-center gap-2 px-3">
@@ -31,15 +32,15 @@ export function MobileHeader({ title, showBack, onBack, onMenuClick }: MobileHea
           >
             <Menu className="h-5 w-5" />
           </button>
+        ) : logoUrl ? (
+          <img src={logoUrl} alt={businessName} className="h-9 w-9 shrink-0 rounded-md object-contain bg-white p-1" />
         ) : (
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center" aria-hidden="true">
-            <Image
-              src="/mct-logo.png"
-              alt="MCT Learn"
-              width={28}
-              height={28}
-              className="h-7 w-7 object-contain rounded-md"
-            />
+          <div
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-brand-700 text-xs font-bold text-white"
+            aria-hidden="true"
+            title={businessName}
+          >
+            {businessName.trim()[0]?.toUpperCase() ?? 'L'}
           </div>
         )}
 

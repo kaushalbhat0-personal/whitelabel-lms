@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { verifyCertificate } from '@/lib/api/certificates';
+import { getPublicBusinessConfig } from '@/lib/api/business-config';
 import { formatDate } from '@/lib/utils';
 import { CheckCircle2, BadgeCheck, AlertTriangle, XCircle, Loader2 } from 'lucide-react';
 
@@ -30,7 +31,16 @@ type ViewState =
 function VerifyCertificateContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
+  const [businessName, setBusinessName] = useState('LMS Platform');
   const [view, setView] = useState<ViewState>({ kind: 'loading' });
+
+  useEffect(() => {
+    getPublicBusinessConfig()
+      .then((cfg) => {
+        if (cfg.business_name) setBusinessName(cfg.business_name);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!token) {
@@ -148,7 +158,7 @@ function VerifyCertificateContent() {
             <p className="text-xs text-text-muted">
               Powered by{' '}
               <span className="font-semibold" style={{ color: '#1e3a5f' }}>
-                MCT Learn
+                {businessName}
               </span>
             </p>
           </div>

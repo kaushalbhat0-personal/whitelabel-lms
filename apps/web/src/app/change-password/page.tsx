@@ -7,10 +7,12 @@ import { API_ROUTES, ROUTES } from '@/lib/constants';
 import { getAccessTokenSync } from '@/lib/auth-token';
 import { clearMustChangePassword, getSessionCache } from '@/lib/auth';
 import { useAuthStore } from '@/stores/auth.store';
+import { getPublicBusinessConfig } from '@/lib/api/business-config';
 import { Button } from '@/components/ui/Button';
 
 export default function ChangePasswordPage() {
   const router = useRouter();
+  const [businessName, setBusinessName] = useState('LMS Platform');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
@@ -30,6 +32,14 @@ export default function ChangePasswordPage() {
     }
     setInitialCheckDone(true);
   }, [router]);
+
+  useEffect(() => {
+    getPublicBusinessConfig()
+      .then((cfg) => {
+        if (cfg.business_name) setBusinessName(cfg.business_name);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -129,7 +139,7 @@ export default function ChangePasswordPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-100">
       <div className="w-full max-w-md rounded-xl bg-white p-6 sm:p-8 shadow-lg mx-4">
-        <h1 className="mb-2 text-2xl font-bold text-gray-900">MCT Learn</h1>
+        <h1 className="mb-2 text-2xl font-bold text-gray-900">{businessName}</h1>
         <p className="mb-6 text-sm text-gray-500">Set Your Password</p>
 
         <div className="mb-6 rounded-lg bg-amber-50 p-3 text-sm text-amber-700">

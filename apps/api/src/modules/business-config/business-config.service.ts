@@ -56,12 +56,13 @@ export class BusinessConfigService {
 
   /**
    * Public presentation-safe subset — no sensitive financial/legal fields.
-   * Returns only business_name, logo_url, currency, locale, timezone with DEFAULT_* fallbacks.
-   * Used by authenticated admin/student shell; never exposes gstin/pan/address/tax/etc.
+   * Returns business_name, logo_url, favicon_url, currency, locale, timezone with DEFAULT_* fallbacks.
+   * Used by authenticated admin/student shell and browser metadata; never exposes gstin/pan/address/tax/etc.
    */
   async getPublicConfig(): Promise<{
     business_name: string;
     logo_url?: string;
+    favicon_url?: string;
     currency: string;
     locale: string;
     timezone: string;
@@ -71,6 +72,7 @@ export class BusinessConfigService {
     return {
       business_name: r.business_name ?? DEFAULT_BUSINESS_NAME,
       logo_url: r.logo_url ?? undefined,
+      favicon_url: r.favicon_url ?? undefined,
       currency: r.currency ?? DEFAULT_CURRENCY,
       locale: r.locale ?? DEFAULT_LOCALE,
       timezone: r.timezone ?? DEFAULT_TIMEZONE,

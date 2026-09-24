@@ -36,6 +36,7 @@ export interface BusinessConfig {
 export interface BusinessConfigPublic {
   business_name: string;
   logo_url?: string;
+  favicon_url?: string;
   currency: string;
   locale: string;
   timezone: string;

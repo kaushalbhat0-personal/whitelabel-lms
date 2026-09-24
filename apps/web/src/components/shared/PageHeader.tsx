@@ -1,8 +1,8 @@
 'use client';
 
-import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft } from 'lucide-react';
+import { useBusinessConfig } from '@/components/providers/BusinessConfigProvider';
 
 interface PageHeaderProps {
   title: string;
@@ -13,6 +13,7 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, subtitle, showBack, action }: PageHeaderProps) {
   const router = useRouter();
+  const { businessName, logoUrl } = useBusinessConfig();
 
   return (
     <header className="sticky top-0 z-10 border-b border-surface-border bg-white md:static md:border-0 md:bg-transparent">
@@ -25,15 +26,19 @@ export function PageHeader({ title, subtitle, showBack, action }: PageHeaderProp
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
+        ) : logoUrl ? (
+          <img
+            src={logoUrl}
+            alt={businessName}
+            className="flex h-9 w-9 shrink-0 rounded-md object-contain bg-white p-1 md:hidden"
+          />
         ) : (
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center md:hidden" aria-hidden="true">
-            <Image
-              src="/mct-logo.png"
-              alt="MCT Learn"
-              width={28}
-              height={28}
-              className="h-7 w-7 object-contain rounded-md"
-            />
+          <div
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-brand-700 text-xs font-bold text-white md:hidden"
+            aria-hidden="true"
+            title={businessName}
+          >
+            {businessName.trim()[0]?.toUpperCase() ?? 'L'}
           </div>
         )}
         <div className="flex-1 min-w-0">

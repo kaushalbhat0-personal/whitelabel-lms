@@ -6,6 +6,7 @@ import { getPublicBusinessConfig, BusinessConfigPublic } from '@/lib/api/busines
 interface BusinessConfigContextValue {
   businessName: string;
   logoUrl?: string;
+  faviconUrl?: string;
   currency: string;
   locale: string;
   timezone: string;
@@ -15,6 +16,7 @@ interface BusinessConfigContextValue {
 const defaults: BusinessConfigContextValue = {
   businessName: 'LMS Platform',
   logoUrl: undefined,
+  faviconUrl: undefined,
   currency: 'INR',
   locale: 'en-IN',
   timezone: 'Asia/Kolkata',
@@ -34,6 +36,7 @@ export function BusinessConfigProvider({ children }: { children: ReactNode }) {
         setValue({
           businessName: cfg.business_name ?? defaults.businessName,
           logoUrl: cfg.logo_url ?? undefined,
+          faviconUrl: cfg.favicon_url ?? undefined,
           currency: cfg.currency ?? defaults.currency,
           locale: cfg.locale ?? defaults.locale,
           timezone: cfg.timezone ?? defaults.timezone,

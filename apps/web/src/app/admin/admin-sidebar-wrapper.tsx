@@ -8,6 +8,7 @@ import { useSession } from '@/hooks/useSession';
 import { NavigationLink } from '@/components/shared/NavigationLink';
 import { Button } from '@/components/ui/Button';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
+import { useBusinessConfig } from '@/components/providers/BusinessConfigProvider';
 import {
   LayoutDashboard,
   Users,
@@ -125,6 +126,7 @@ function SidebarContent({
   toggleGroup: (label: string) => void;
   isLoggingOut?: boolean;
 }) {
+  const { businessName, logoUrl } = useBusinessConfig();
   const isGroupActive = (group: NavGroup) =>
     group.items.some((item) => pathname === item.href || (item.href !== ROUTES.ADMIN.HOME && pathname.startsWith(item.href)));
   const isItemActive = (href: string) =>
@@ -133,11 +135,17 @@ function SidebarContent({
   return (
     <>
       <div className="flex h-16 items-center gap-2.5 border-b border-sidebar-divider px-6">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500/20">
-          <Trophy className="h-4 w-4 text-brand-300" />
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500/20 overflow-hidden">
+          {logoUrl ? (
+            <img src={logoUrl} alt={businessName} className="h-full w-full object-contain p-0.5" />
+          ) : (
+            <Trophy className="h-4 w-4 text-brand-300" />
+          )}
         </div>
-        <div>
-          <span className="text-base font-bold tracking-tight text-white">MCT Learn</span>
+        <div className="min-w-0">
+          <span className="block truncate text-base font-bold tracking-tight text-white" title={businessName}>
+            {businessName}
+          </span>
           <p className="text-2xs font-medium text-brand-200">Admin Panel</p>
         </div>
       </div>
@@ -250,6 +258,8 @@ export function AdminSidebarWrapper() {
     });
   }, []);
 
+  const { businessName: mobileBusinessName, logoUrl: mobileLogoUrl } = useBusinessConfig();
+
   const handleLogout = () => {
     setMobileOpen(false);
     logout();
@@ -270,9 +280,15 @@ export function AdminSidebarWrapper() {
 
       {/* Mobile Top Bar */}
       <div className="md:hidden flex items-center justify-between bg-sidebar-bg px-4 py-2 shrink-0">
-        <div className="flex items-center gap-2">
-          <Trophy className="h-5 w-5 text-brand-300" />
-          <span className="text-sm font-bold text-white">MCT Learn Admin</span>
+        <div className="flex items-center gap-2 min-w-0">
+          {mobileLogoUrl ? (
+            <img src={mobileLogoUrl} alt={mobileBusinessName} className="h-5 w-5 object-contain rounded" />
+          ) : (
+            <Trophy className="h-5 w-5 text-brand-300 shrink-0" />
+          )}
+          <span className="truncate text-sm font-bold text-white" title={mobileBusinessName}>
+            {mobileBusinessName}
+          </span>
         </div>
         <button
           ref={triggerRef}

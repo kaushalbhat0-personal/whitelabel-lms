@@ -1,17 +1,19 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff } from 'lucide-react';
 import { fetchApi, ApiError } from '@/lib/api-client';
 import { ROUTES, API_ROUTES } from '@/lib/constants';
 import { useSession } from '@/hooks/useSession';
 import { useDeviceFingerprint } from '@/lib/hooks/useDeviceFingerprint';
+import { getPublicBusinessConfig } from '@/lib/api/business-config';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 
 export default function LoginPage() {
   const router = useRouter();
+  const [businessName, setBusinessName] = useState('LMS Platform');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -22,6 +24,14 @@ export default function LoginPage() {
   const forgotSubmittingRef = useRef(false);
   const { login } = useSession();
   const fingerprint = useDeviceFingerprint();
+
+  useEffect(() => {
+    getPublicBusinessConfig()
+      .then((cfg) => {
+        if (cfg.business_name) setBusinessName(cfg.business_name);
+      })
+      .catch(() => {});
+  }, []);
 
   // Forgot password state
   const [showForgotPassword, setShowForgotPassword] = useState(false);
@@ -95,7 +105,7 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface-page px-4 py-8">
       <div className="w-full max-w-md rounded-card-lg bg-surface-card p-6 shadow-modal md:p-8">
-        <h1 className="mb-2 text-2xl font-bold text-text-primary">MCT Learn</h1>
+        <h1 className="mb-2 text-2xl font-bold text-text-primary">{businessName}</h1>
         <p className="mb-6 text-sm text-text-secondary">Sign in to your account</p>
 
         {sessionReplaced ? (

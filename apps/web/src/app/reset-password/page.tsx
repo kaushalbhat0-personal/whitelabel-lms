@@ -4,10 +4,12 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { ROUTES } from '@/lib/constants';
+import { getPublicBusinessConfig } from '@/lib/api/business-config';
 import { Button } from '@/components/ui/Button';
 
 export default function ResetPasswordPage() {
   const router = useRouter();
+  const [businessName, setBusinessName] = useState('LMS Platform');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
@@ -98,6 +100,14 @@ export default function ResetPasswordPage() {
     // supabase is memoized, so stable — effect runs once
   }, [supabase, ready, readyError, success]);
 
+  useEffect(() => {
+    getPublicBusinessConfig()
+      .then((cfg) => {
+        if (cfg.business_name) setBusinessName(cfg.business_name);
+      })
+      .catch(() => {});
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (submittingRef.current) return;
@@ -178,7 +188,7 @@ export default function ResetPasswordPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-100">
       <div className="w-full max-w-md rounded-xl bg-white p-8 shadow-lg">
-        <h1 className="mb-2 text-2xl font-bold text-gray-900">MCT Learn</h1>
+        <h1 className="mb-2 text-2xl font-bold text-gray-900">{businessName}</h1>
         <p className="mb-6 text-sm text-gray-500">Reset Your Password</p>
 
         {readyError ? (

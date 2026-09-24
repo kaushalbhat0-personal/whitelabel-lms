@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import { ROUTES } from '@/lib/constants';
 import { useSession } from '@/hooks/useSession';
 import { useAuthStore } from '@/stores/auth.store';
-import Image from 'next/image';
+import { useBusinessConfig } from '@/components/providers/BusinessConfigProvider';
 import { NavigationLink } from '@/components/shared/NavigationLink';
 import { Button } from '@/components/ui/Button';
 import {
@@ -37,6 +37,7 @@ function isActive(href: string, exact: boolean | undefined, pathname: string) {
 export function StudentSidebar() {
   const pathname = usePathname();
   const { logout, isLoggingOut } = useSession();
+  const { businessName, logoUrl } = useBusinessConfig();
   const user = useAuthStore((s) => s.user);
   const displayName =
     user?.name?.trim() ||
@@ -47,18 +48,19 @@ export function StudentSidebar() {
   return (
     <>
       <div className="flex h-16 items-center gap-2.5 border-b border-sidebar-divider px-6">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white p-1">
-          <Image
-            src="/mct-logo.png"
-            alt=""
-            width={32}
-            height={32}
-            className="h-full w-full object-contain"
-            aria-hidden="true"
-          />
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white p-1 overflow-hidden">
+          {logoUrl ? (
+            <img src={logoUrl} alt={businessName} className="h-full w-full object-contain" />
+          ) : (
+            <span className="text-xs font-bold text-brand-700" aria-hidden="true">
+              {businessName.trim()[0]?.toUpperCase() ?? 'L'}
+            </span>
+          )}
         </div>
-        <div>
-          <span className="text-base font-bold tracking-tight text-white">MCT Learn</span>
+        <div className="min-w-0">
+          <span className="block truncate text-base font-bold tracking-tight text-white" title={businessName}>
+            {businessName}
+          </span>
           <p className="text-2xs font-medium text-brand-200">Student Portal</p>
         </div>
       </div>
