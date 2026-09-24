@@ -32,7 +32,7 @@
   <div class="header">
     <div>
       <h1>Tax Invoice</h1>
-      <p class="subtitle">GST Invoice for Educational Services</p>
+      <p class="subtitle">{{#if legalFooter}}{{legalFooter}}{{else}}GST Invoice for Educational Services{{/if}}</p>
     </div>
     <div style="text-align:right">
       {{#if businessLogo}}<img class="logo" src="{{businessLogo}}" alt="Logo" /><br />{{/if}}
@@ -68,15 +68,15 @@
     </thead>
     <tbody>
       <tr><td>1</td><td>Full Course Tuition Fee — {{courseName}}</td><td class="amount">{{baseAmount}}</td></tr>
-      <tr><td></td><td>CGST @ 9%</td><td class="amount">{{cgstAmount}}</td></tr>
-      <tr><td></td><td>SGST @ 9%</td><td class="amount">{{sgstAmount}}</td></tr>
+      {{#if hasTax}}<tr><td></td><td>CGST @ 9%</td><td class="amount">{{cgstAmount}}</td></tr>{{/if}}
+      {{#if hasTax}}<tr><td></td><td>SGST @ 9%</td><td class="amount">{{sgstAmount}}</td></tr>{{/if}}
     </tbody>
   </table>
 
   <table class="totals">
     <tr><td class="label">Base Amount</td><td class="value">{{baseAmount}}</td></tr>
-    <tr><td class="label">CGST (9%)</td><td class="value">{{cgstAmount}}</td></tr>
-    <tr><td class="label">SGST (9%)</td><td class="value">{{sgstAmount}}</td></tr>
+    {{#if hasTax}}<tr><td class="label">CGST (9%)</td><td class="value">{{cgstAmount}}</td></tr>{{/if}}
+    {{#if hasTax}}<tr><td class="label">SGST (9%)</td><td class="value">{{sgstAmount}}</td></tr>{{/if}}
     <tr class="grand-total"><td class="label">Total Amount</td><td class="value">&#x20B9; {{totalAmount}}</td></tr>
   </table>
 

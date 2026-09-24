@@ -15,6 +15,13 @@ import { PdfGenerationService } from '../pdf/pdf-generation.service';
 import { ObservabilityService } from '../observability/observability.service';
 import { TABLES } from '../../common/constants/tables.constant';
 import { logEntityEvent } from '../../common/utils/observability-helper';
+import {
+  DEFAULT_FINANCIAL_YEAR_START_MONTH,
+  DEFAULT_INVOICE_PREFIX,
+  DEFAULT_RECEIPT_PREFIX,
+  DEFAULT_TAX_MODE,
+  DEFAULT_TAX_RATE,
+} from '../../common/config/defaults';
 
 @Injectable()
 export class InvoicesService {
@@ -32,30 +39,64 @@ export class InvoicesService {
   // ──────────────────────────────────────────────────────────────
 
   /**
-   * Calculate the Indian financial year string (e.g. "2025-26").
+   * Calculate the financial year string (e.g. "2025-26").
+   *
+   * fyStartMonth is 0-indexed JS month (0=Jan, 3=Apr). When provided, FY starts
+   * at that month; otherwise defaults to April (Indian FY).
    *
    * Logic:
-   *   - Indian FY starts in April (JS month index 3).
-   *   - If current month >= 3 (April), FY = YYYY-(YY+1).
-   *   - If current month < 3 (Jan-Mar), FY = (YYYY-1)-YY.
+   *   - If current month >= fyStartMonth, FY = YYYY-(YY+1).
+   *   - If current month < fyStartMonth, FY = (YYYY-1)-YY.
    *
-   * Examples:
+   * Examples (fyStartMonth=3):
    *   - May 2025  → "2025-26"
    *   - Jan 2026  → "2025-26"
    *   - Apr 2026  → "2026-27"
+   * Examples (fyStartMonth=0 Jan):
+   *   - Jan 2027 → "2027-28"
+   *   - Dec 2027 → "2027-28"
+   *   - Jan 2028 → "2028-29"
    */
-  calculateFinancialYear(): string {
-    const now = new Date();
+  calculateFinancialYear(
+    fyStartMonth: number = DEFAULT_FINANCIAL_YEAR_START_MONTH,
+    now: Date = new Date(),
+  ): string {
     const year = now.getFullYear();
     const month = now.getMonth();
+    const start = fyStartMonth ?? DEFAULT_FINANCIAL_YEAR_START_MONTH;
 
-    if (month >= 3) {
+    if (month >= start) {
       const shortNext = (year + 1).toString().slice(-2);
       return `${year}-${shortNext}`;
     }
 
     const shortCurr = year.toString().slice(-2);
     return `${year - 1}-${shortCurr}`;
+  }
+
+  private async getBusinessConfigWithDefaults(): Promise<any> {
+    const { data } = await this.supabaseService.client
+      .from(TABLES.BUSINESS_CONFIG)
+      .select('*')
+      .limit(1)
+      .single();
+    const biz: any = data ?? {};
+    return {
+      business_name: biz.business_name ?? 'Business Name',
+      address_line_1: biz.address_line_1 ?? '',
+      city: biz.city ?? '',
+      state: biz.state ?? '',
+      pincode: biz.pincode ?? '',
+      gstin: biz.gstin ?? '',
+      pan: biz.pan ?? '',
+      logo_url: biz.logo_url ?? '',
+      invoice_prefix: biz.invoice_prefix ?? DEFAULT_INVOICE_PREFIX,
+      receipt_prefix: biz.receipt_prefix ?? DEFAULT_RECEIPT_PREFIX,
+      fy_start_month: biz.fy_start_month ?? biz.fyStartMonth ?? DEFAULT_FINANCIAL_YEAR_START_MONTH,
+      tax_mode: biz.tax_mode ?? biz.taxMode ?? DEFAULT_TAX_MODE,
+      tax_rate: biz.tax_rate ?? biz.taxRate ?? DEFAULT_TAX_RATE,
+      legal_footer: biz.legal_footer ?? biz.legalFooter ?? null,
+    };
   }
 
   // ──────────────────────────────────────────────────────────────
@@ -70,7 +111,7 @@ export class InvoicesService {
    * read-from, incremented, and wrote-back to business_config.
    *
    * Format: {prefix}-{FY}-{NNNN}  (6-digit zero-padded)
-   *   e.g. "MCT-INV-2025-26-000001"
+   *   e.g. "INV-2025-26-000001"
    *
    * If the invoice_sequences row does not exist for this type + FY,
    * a fallback to business_config is used for backward compatibility.
@@ -79,7 +120,8 @@ export class InvoicesService {
     type: 'INVOICE' | 'RECEIPT',
   ): Promise<{ formatted: string; rawNumber: number }> {
     const supabase = this.supabaseService.client;
-    const fy = this.calculateFinancialYear();
+    const bizCfgPrefetched = await this.getBusinessConfigWithDefaults();
+    const fy = this.calculateFinancialYear(bizCfgPrefetched.fy_start_month);
     const isInvoice = type === 'INVOICE';
 
     // Atomic UPDATE ... RETURNING: guaranteed unique, no race condition
@@ -91,7 +133,7 @@ export class InvoicesService {
 
     if (!error && data) {
       const rawNumber = Number(data);
-      const prefix = isInvoice ? 'MCT-INV' : 'MCT-RCP';
+      const prefix = isInvoice ? bizCfgPrefetched.invoice_prefix : bizCfgPrefetched.receipt_prefix;
       const formatted = `${prefix}-${fy}-${String(rawNumber).padStart(6, '0')}`;
       return { formatted, rawNumber };
     }
@@ -114,7 +156,7 @@ export class InvoicesService {
           .eq('fiscal_year', fy);
 
         if (!updateErr) {
-          const prefix = isInvoice ? 'MCT-INV' : 'MCT-RCP';
+          const prefix = isInvoice ? bizCfgPrefetched.invoice_prefix : bizCfgPrefetched.receipt_prefix;
           const formatted = `${prefix}-${fy}-${String(newCounter).padStart(6, '0')}`;
           return { formatted, rawNumber: newCounter };
         }
@@ -127,7 +169,7 @@ export class InvoicesService {
         .insert({ sequence_type: type, fiscal_year: fy, counter: initialCounter });
 
       if (!insertErr) {
-        const prefix = isInvoice ? 'MCT-INV' : 'MCT-RCP';
+        const prefix = isInvoice ? bizCfgPrefetched.invoice_prefix : bizCfgPrefetched.receipt_prefix;
         const formatted = `${prefix}-${fy}-${String(initialCounter).padStart(6, '0')}`;
         return { formatted, rawNumber: initialCounter };
       }
@@ -228,24 +270,62 @@ export class InvoicesService {
   // ──────────────────────────────────────────────────────────────
 
   /**
-   * Split a total amount (inclusive of 18% GST) into Base, CGST, SGST.
+   * Split an amount into Base, CGST, SGST based on client tax configuration.
    *
-   * The admin-facing price (payment amount) already includes 18% GST.
-   *   - Base  = Total / 1.18
-   *   - CGST  = Base × 0.09  (9%)
-   *   - SGST  = Base × 0.09  (9%)
+   * Modes:
+   *   - inclusive (default, India 18%): Total is gross inclusive. Base = Total/(1+r), tax = Total-Base, CGST/SGST = tax/2.
+   *   - exclusive: Total is net. tax = Base*r, gross = Base+tax.
+   *   - zero: tax = 0.
    *
-   * All values are rounded to 2 decimal places.
+   * Uses cent-safe rounding and reconciles cgst+sgst = tax within 1 cent.
+   * Preserves existing India 18% inclusive semantics as default.
    */
-  private calculateGstSplit(totalAmount: number): {
+  private calculateGstSplit(
+    totalAmount: number,
+    taxMode: string = DEFAULT_TAX_MODE,
+    taxRate: number = DEFAULT_TAX_RATE,
+  ): {
     baseAmount: number;
     cgstAmount: number;
     sgstAmount: number;
+    totalAmount: number;
   } {
-    const baseAmount = +(totalAmount / 1.18).toFixed(2);
-    const cgstAmount = +(baseAmount * 0.09).toFixed(2);
-    const sgstAmount = +(baseAmount * 0.09).toFixed(2);
-    return { baseAmount, cgstAmount, sgstAmount };
+    const r = Number(taxRate) || 0;
+    const mode = (taxMode ?? DEFAULT_TAX_MODE).toLowerCase();
+
+    if (mode === 'zero' || r === 0) {
+      const base = +Number(totalAmount).toFixed(2);
+      return { baseAmount: base, cgstAmount: 0, sgstAmount: 0, totalAmount: base };
+    }
+
+    if (mode === 'exclusive') {
+      const baseCents = Math.round(Number(totalAmount) * 100);
+      const taxCents = Math.round((baseCents * r) / 100);
+      const cgstCents = Math.floor(taxCents / 2);
+      const sgstCents = taxCents - cgstCents;
+      const totalCents = baseCents + taxCents;
+      return {
+        baseAmount: baseCents / 100,
+        cgstAmount: cgstCents / 100,
+        sgstAmount: sgstCents / 100,
+        totalAmount: totalCents / 100,
+      };
+    }
+
+    // inclusive (default)
+    const totalCents = Math.round(Number(totalAmount) * 100);
+    const divisor = 1 + r / 100;
+    const baseCents = Math.round(totalCents / divisor);
+    const taxCents = totalCents - baseCents;
+    const cgstCents = Math.round(taxCents / 2);
+    const sgstCents = taxCents - cgstCents;
+    // Reconcile base+cgst+sgst = total within 1 cent via cent math (already exact)
+    return {
+      baseAmount: baseCents / 100,
+      cgstAmount: cgstCents / 100,
+      sgstAmount: sgstCents / 100,
+      totalAmount: totalCents / 100,
+    };
   }
 
   // ──────────────────────────────────────────────────────────────
@@ -256,7 +336,7 @@ export class InvoicesService {
    * Upload a PDF buffer to Supabase Storage under the `invoices` bucket.
    *
    * Path: {type}s/{studentId}/{documentNumber}.pdf
-   *   e.g. receipts/abc-123/MCT-RCP-2025-26-0001.pdf
+   *   e.g. receipts/abc-123/RCP-2025-26-0001.pdf
    */
   private async uploadPdf(
     pdfBuffer: Buffer,
@@ -332,7 +412,14 @@ export class InvoicesService {
       .single();
 
     const biz = bizCfg as any;
-    const { baseAmount, cgstAmount, sgstAmount } = this.calculateGstSplit(pay.amount);
+    const taxModeReceipt = biz?.tax_mode ?? biz?.taxMode ?? DEFAULT_TAX_MODE;
+    const taxRateReceipt = biz?.tax_rate ?? biz?.taxRate ?? DEFAULT_TAX_RATE;
+    const legalFooterReceipt = biz?.legal_footer ?? biz?.legalFooter ?? null;
+    const { baseAmount, cgstAmount, sgstAmount, totalAmount: calcTotalReceipt } = this.calculateGstSplit(
+      pay.amount,
+      taxModeReceipt,
+      taxRateReceipt,
+    );
 
     // 3. Get receipt number AFTER guard (no leak on duplicate)
     const { formatted: receiptNumber } = await this.getNextDocumentNumber('RECEIPT');
@@ -366,12 +453,15 @@ export class InvoicesService {
       baseAmount: baseAmount.toFixed(2),
       cgstAmount: cgstAmount.toFixed(2),
       sgstAmount: sgstAmount.toFixed(2),
-      totalAmount: pay.amount.toFixed(2),
+      totalAmount: calcTotalReceipt.toFixed(2),
       businessName: biz?.business_name ?? 'Business Name',
       businessAddress: `${biz?.address_line_1 ?? ''}, ${biz?.city ?? ''}, ${biz?.state ?? ''} ${biz?.pincode ?? ''}`,
       businessGst: biz?.gstin ?? '',
       businessPan: biz?.pan ?? '',
       businessLogo: biz?.logo_url ?? '',
+      legalFooter: legalFooterReceipt ?? 'GST Invoice / Receipt for Educational Services',
+      taxRate: Number(taxRateReceipt).toFixed(2),
+      hasTax: Number(taxRateReceipt) > 0 && taxModeReceipt.toLowerCase() !== 'zero',
     });
 
     const pdfBuffer = await this.generatePdf(html);
@@ -519,7 +609,14 @@ export class InvoicesService {
       .single();
 
     const biz = bizCfg as any;
-    const { baseAmount, cgstAmount, sgstAmount } = this.calculateGstSplit(pay.amount);
+    const taxModeInv = biz?.tax_mode ?? biz?.taxMode ?? DEFAULT_TAX_MODE;
+    const taxRateInv = biz?.tax_rate ?? biz?.taxRate ?? DEFAULT_TAX_RATE;
+    const legalFooterInv = biz?.legal_footer ?? biz?.legalFooter ?? null;
+    const { baseAmount, cgstAmount, sgstAmount, totalAmount: calcTotalInv } = this.calculateGstSplit(
+      pay.amount,
+      taxModeInv,
+      taxRateInv,
+    );
 
     const { formatted: invoiceNumber } = await this.getNextDocumentNumber('INVOICE');
 
@@ -551,19 +648,26 @@ export class InvoicesService {
       baseAmount: baseAmount.toFixed(2),
       cgstAmount: cgstAmount.toFixed(2),
       sgstAmount: sgstAmount.toFixed(2),
-      totalAmount: pay.amount.toFixed(2),
+      totalAmount: calcTotalInv.toFixed(2),
       businessName: biz?.business_name ?? 'Business Name',
       businessAddress: `${biz?.address_line_1 ?? ''}, ${biz?.city ?? ''}, ${biz?.state ?? ''} ${biz?.pincode ?? ''}`,
       businessGst: biz?.gstin ?? '',
       businessPan: biz?.pan ?? '',
       businessLogo: biz?.logo_url ?? '',
+      legalFooter: legalFooterInv ?? 'GST Invoice for Educational Services',
+      taxRate: Number(taxRateInv).toFixed(2),
+      hasTax: Number(taxRateInv) > 0 && taxModeInv.toLowerCase() !== 'zero',
     });
 
     const pdfBuffer = await this.generatePdf(html);
     const storagePath = `invoices/${studentId}/${invoiceNumber}.pdf`;
     const pdfUrl = await this.uploadPdf(pdfBuffer, storagePath);
 
-    const { baseAmount: subTotal, cgstAmount: cgst, sgstAmount: sgst } = this.calculateGstSplit(pay.amount);
+    const { baseAmount: subTotal, cgstAmount: cgst, sgstAmount: sgst, totalAmount: calcTotalDb } = this.calculateGstSplit(
+      pay.amount,
+      taxModeInv,
+      taxRateInv,
+    );
 
     const { data: inserted, error: insertError } = await this.supabaseService.client
       .from(TABLES.INVOICES)
@@ -576,8 +680,8 @@ export class InvoicesService {
         cgst_amount: cgst,
         sgst_amount: sgst,
         igst_amount: 0,
-        total_amount: pay.amount,
-        gst_applicable: true,
+        total_amount: calcTotalDb,
+        gst_applicable: Number(taxRateInv) > 0 && taxModeInv.toLowerCase() !== 'zero',
         issued_on: new Date().toISOString().split('T')[0],
         pdf_url: pdfUrl || null,
         storage_path: storagePath,
@@ -749,7 +853,14 @@ export class InvoicesService {
 
     const biz = bizCfg as any;
     const totalAmount = Number(p.total_amount);
-    const { baseAmount, cgstAmount, sgstAmount } = this.calculateGstSplit(totalAmount);
+    const taxModePlan = biz?.tax_mode ?? biz?.taxMode ?? DEFAULT_TAX_MODE;
+    const taxRatePlan = biz?.tax_rate ?? biz?.taxRate ?? DEFAULT_TAX_RATE;
+    const legalFooterPlan = biz?.legal_footer ?? biz?.legalFooter ?? null;
+    const { baseAmount, cgstAmount, sgstAmount, totalAmount: calcTotalPlan } = this.calculateGstSplit(
+      totalAmount,
+      taxModePlan,
+      taxRatePlan,
+    );
 
     const { formatted: invoiceNumber } = await this.getNextDocumentNumber('INVOICE');
 
@@ -781,19 +892,26 @@ export class InvoicesService {
       baseAmount: baseAmount.toFixed(2),
       cgstAmount: cgstAmount.toFixed(2),
       sgstAmount: sgstAmount.toFixed(2),
-      totalAmount: totalAmount.toFixed(2),
+      totalAmount: calcTotalPlan.toFixed(2),
       businessName: biz?.business_name ?? 'Business Name',
       businessAddress: `${biz?.address_line_1 ?? ''}, ${biz?.city ?? ''}, ${biz?.state ?? ''} ${biz?.pincode ?? ''}`,
       businessGst: biz?.gstin ?? '',
       businessPan: biz?.pan ?? '',
       businessLogo: biz?.logo_url ?? '',
+      legalFooter: legalFooterPlan ?? 'GST Invoice for Educational Services',
+      taxRate: Number(taxRatePlan).toFixed(2),
+      hasTax: Number(taxRatePlan) > 0 && taxModePlan.toLowerCase() !== 'zero',
     });
 
     const pdfBuffer = await this.generatePdf(html);
     const storagePath = `invoices/${studentId}/${invoiceNumber}.pdf`;
     const pdfUrl = await this.uploadPdf(pdfBuffer, storagePath);
 
-    const { baseAmount: subTotal, cgstAmount: cgst, sgstAmount: sgst } = this.calculateGstSplit(totalAmount);
+    const { baseAmount: subTotal, cgstAmount: cgst, sgstAmount: sgst, totalAmount: calcTotalDbPlan } = this.calculateGstSplit(
+      totalAmount,
+      taxModePlan,
+      taxRatePlan,
+    );
 
     const { data: inserted, error: insertError } = await this.supabaseService.client
       .from(TABLES.INVOICES)
@@ -807,8 +925,8 @@ export class InvoicesService {
         cgst_amount: cgst,
         sgst_amount: sgst,
         igst_amount: 0,
-        total_amount: totalAmount,
-        gst_applicable: true,
+        total_amount: calcTotalDbPlan,
+        gst_applicable: Number(taxRatePlan) > 0 && taxModePlan.toLowerCase() !== 'zero',
         issued_on: new Date().toISOString().split('T')[0],
         pdf_url: pdfUrl || null,
         storage_path: storagePath,
