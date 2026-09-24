@@ -33,8 +33,20 @@ export interface BusinessConfig {
   legal_footer?: string;
 }
 
+export interface BusinessConfigPublic {
+  business_name: string;
+  logo_url?: string;
+  currency: string;
+  locale: string;
+  timezone: string;
+}
+
 export async function getBusinessConfig() {
   return fetchApi<BusinessConfig>('/business-config');
+}
+
+export async function getPublicBusinessConfig() {
+  return fetchApi<BusinessConfigPublic>('/business-config/public');
 }
 
 export async function updateBusinessConfig(

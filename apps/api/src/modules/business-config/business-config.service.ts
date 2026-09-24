@@ -20,6 +20,12 @@ import {
 import { SupabaseService } from '../../common/services/supabase.service';
 import { TABLES } from '../../common/constants/tables.constant';
 import { UpdateBusinessConfigDto } from './dto/update-business-config.dto';
+import {
+  DEFAULT_BUSINESS_NAME,
+  DEFAULT_CURRENCY,
+  DEFAULT_LOCALE,
+  DEFAULT_TIMEZONE,
+} from '../../common/config/defaults';
 
 @Injectable()
 export class BusinessConfigService {
@@ -46,6 +52,29 @@ export class BusinessConfigService {
     }
 
     return data;
+  }
+
+  /**
+   * Public presentation-safe subset — no sensitive financial/legal fields.
+   * Returns only business_name, logo_url, currency, locale, timezone with DEFAULT_* fallbacks.
+   * Used by authenticated admin/student shell; never exposes gstin/pan/address/tax/etc.
+   */
+  async getPublicConfig(): Promise<{
+    business_name: string;
+    logo_url?: string;
+    currency: string;
+    locale: string;
+    timezone: string;
+  }> {
+    const row = await this.getConfig();
+    const r: any = row;
+    return {
+      business_name: r.business_name ?? DEFAULT_BUSINESS_NAME,
+      logo_url: r.logo_url ?? undefined,
+      currency: r.currency ?? DEFAULT_CURRENCY,
+      locale: r.locale ?? DEFAULT_LOCALE,
+      timezone: r.timezone ?? DEFAULT_TIMEZONE,
+    };
   }
 
   /**

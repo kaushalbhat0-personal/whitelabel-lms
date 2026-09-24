@@ -22,6 +22,19 @@ export class BusinessConfigController {
   constructor(private readonly businessConfigService: BusinessConfigService) {}
 
   /**
+   * GET /business-config/public
+   *
+   * Presentation-safe subset for authenticated admin/student shell.
+   * Returns only business_name, logo_url, currency, locale, timezone.
+   * Does NOT expose gstin/pan/address/tax/etc.
+   */
+  @Roles(UserRole.ADMIN, UserRole.STUDENT, UserRole.TEACHER)
+  @Get('public')
+  getPublicConfig() {
+    return this.businessConfigService.getPublicConfig();
+  }
+
+  /**
    * GET /business-config
    *
    * Returns the single business configuration row.

@@ -5,6 +5,7 @@ import { AdminSidebarWrapper } from './admin-sidebar-wrapper';
 import { GlobalSearch } from '@/components/admin/GlobalSearch';
 import { NavigationProvider } from '@/components/providers/NavigationProvider';
 import { NavigationProgress } from '@/components/providers/NavigationProgress';
+import { BusinessConfigProvider } from '@/components/providers/BusinessConfigProvider';
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
@@ -12,7 +13,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       <SessionExpiredOverlay />
       <GuardRoute>
         <NavigationProvider>
-          <NavigationProgress />
+          <BusinessConfigProvider>
+            <NavigationProgress />
           <div className="flex flex-col md:flex-row min-h-screen md:h-screen md:h-[100dvh] md:overflow-hidden md:min-h-0 bg-surface-page">
             {/* Sidebar: fixed desktop aside + mobile drawer bar */}
             <AdminSidebarWrapper />
@@ -32,6 +34,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               <div className="flex-1 min-h-0 p-4 md:p-6 lg:p-8 overflow-x-hidden overflow-y-auto overscroll-contain scrollbar-thin">{children}</div>
             </main>
           </div>
+          </BusinessConfigProvider>
         </NavigationProvider>
       </GuardRoute>
     </>

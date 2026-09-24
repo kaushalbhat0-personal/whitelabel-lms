@@ -7,6 +7,7 @@ import { GuardRoute } from '@/lib/guards/client-guard';
 import { NotificationBell } from '@/components/student/NotificationBell';
 import { NavigationProvider } from '@/components/providers/NavigationProvider';
 import { NavigationProgress } from '@/components/providers/NavigationProgress';
+import { BusinessConfigProvider } from '@/components/providers/BusinessConfigProvider';
 
 export default function StudentLayout({ children }: { children: ReactNode }) {
   return (
@@ -14,7 +15,8 @@ export default function StudentLayout({ children }: { children: ReactNode }) {
       <SessionExpiredOverlay />
       <GuardRoute>
         <NavigationProvider>
-          <NavigationProgress />
+          <BusinessConfigProvider>
+            <NavigationProgress />
           <div className="min-h-screen bg-surface-page">
             {/* Desktop sidebar — hidden on mobile */}
             <aside className="fixed left-0 top-0 z-40 hidden h-screen w-60 flex-col bg-sidebar-bg md:flex">
@@ -31,7 +33,7 @@ export default function StudentLayout({ children }: { children: ReactNode }) {
                 </div>
                 <div className="flex items-center gap-3">
                   <NotificationBell />
-                  <span className="text-xs text-text-muted">MCT Learn v2.0</span>
+                  <span className="text-xs text-text-muted">LMS v2.0</span>
                 </div>
               </header>
 
@@ -44,6 +46,7 @@ export default function StudentLayout({ children }: { children: ReactNode }) {
             {/* Mobile bottom nav — hidden on desktop */}
             <StudentBottomNav />
           </div>
+          </BusinessConfigProvider>
         </NavigationProvider>
       </GuardRoute>
     </>

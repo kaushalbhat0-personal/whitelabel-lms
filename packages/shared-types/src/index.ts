@@ -67,6 +67,14 @@ export interface BusinessConfig {
   legalFooter?: string;
 }
 
+export interface BusinessConfigPublic {
+  businessName: string;
+  logoUrl?: string;
+  currency: string;
+  locale: string;
+  timezone: string;
+}
+
 // ──────────────────────────────────────────────────────────────
 // Courses
 // ──────────────────────────────────────────────────────────────

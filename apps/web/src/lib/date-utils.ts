@@ -1,5 +1,5 @@
 /**
- * Date utilities for MCT LMS — IST ↔ UTC round-trip
+ * Date utilities for LMS Platform — IST ↔ UTC round-trip
  * Product: Admin enters IST (Asia/Kolkata) via datetime-local.
  * Storage: DB timestamptz (UTC ISO).
  * Display: Frontend converts UTC ISO → IST for user.
@@ -28,13 +28,16 @@ export function utcToLocalInput(iso: string | null | undefined): string {
   return `${y}-${m}-${day}T${h}:${min}`;
 }
 
-export function formatIST(iso: string | null | undefined): string {
+export function formatIST(
+  iso: string | null | undefined,
+  locale: string = 'en-IN',
+  timezone: string = 'Asia/Kolkata',
+): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (isNaN(d.getTime())) return '—';
-  // Explicit Asia/Kolkata to avoid browser timezone variance
-  return d.toLocaleString('en-IN', {
-    timeZone: 'Asia/Kolkata',
+  return d.toLocaleString(locale, {
+    timeZone: timezone,
     day: 'numeric',
     month: 'short',
     year: 'numeric',
@@ -44,12 +47,16 @@ export function formatIST(iso: string | null | undefined): string {
   });
 }
 
-export function formatISTDateOnly(iso: string | null | undefined): string {
+export function formatISTDateOnly(
+  iso: string | null | undefined,
+  locale: string = 'en-IN',
+  timezone: string = 'Asia/Kolkata',
+): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('en-IN', {
-    timeZone: 'Asia/Kolkata',
+  return d.toLocaleDateString(locale, {
+    timeZone: timezone,
     day: 'numeric',
     month: 'short',
     year: 'numeric',
