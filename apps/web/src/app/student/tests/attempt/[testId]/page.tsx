@@ -343,6 +343,7 @@ export default function TestAttemptPage() {
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
   const [durationMinutes, setDurationMinutes] = useState<number | null>(null);
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
+  const [submitDialogMessage, setSubmitDialogMessage] = useState('');
   const [warningMessage, setWarningMessage] = useState('');
   const [showWarning, setShowWarning] = useState(false);
   const [sessionExpired, setSessionExpired] = useState(false);
@@ -426,6 +427,16 @@ export default function TestAttemptPage() {
           }
         } catch {}
         setAnswers(savedAnswers);
+
+        // Immediate server timer resync — corrects stale persisted time_remaining_seconds after rejoin
+        try {
+          const timerRes: any = await getAttemptTimer(att.id);
+          const serverRemaining = timerRes.timeRemainingSeconds ?? timerRes.remainingSeconds;
+          if (serverRemaining != null) setTimeRemaining(serverRemaining);
+        } catch {
+          // ignore — keep initial timeRemaining, 30s sync will retry
+        }
+
         startTimeRef.current = Date.now();
       } catch {
         // silent
@@ -564,7 +575,11 @@ export default function TestAttemptPage() {
       if (lastError) {
         const is401 = (lastError as any)?.status === 401;
         const isExpired = (lastError as any)?.status === 403 && ((lastError as any)?.message || '').toLowerCase().includes('expired');
-        if (!is401 && !isExpired) toast.error('Auto-save failed. Your answers are saved locally.');
+        if (!is401 && !isExpired) {
+          // Preserve locally on network failure so tab close/reload while offline keeps answers
+          preserveLocally(attemptId, testId, ans, currentIndex, timeRemaining);
+          toast.error('Auto-save failed. Your answers are saved locally.');
+        }
       }
     }, 2000);
   }, [attemptId, questions, currentIndex, timeRemaining, preserveLocally, testId, timeExpired]);
@@ -577,6 +592,28 @@ export default function TestAttemptPage() {
     });
     debouncedSave();
   }, [debouncedSave, timeExpired, timeRemaining]);
+
+  // Local backup on answer changes — persists offline edits to survive refresh/close before reconnect
+  useEffect(() => {
+    if (!attemptId) return;
+    if (timeExpired) return;
+    // Don't overwrite with empty on initial load where questions not yet loaded
+    if (questions.length === 0) return;
+    preserveLocally(attemptId, testId, answers, currentIndex, timeRemaining);
+  }, [answers, currentIndex, timeRemaining, attemptId, testId, questions.length, preserveLocally, timeExpired]);
+
+  // Reconnect flush — when browser comes back online, immediately save current answers
+  useEffect(() => {
+    const handleOnline = () => {
+      if (!attemptId || timeExpired) return;
+      const ans = answersRef.current;
+      const hasAnswers = ans && Object.keys(ans).length > 0;
+      if (!hasAnswers) return;
+      debouncedSave();
+    };
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [attemptId, timeExpired, debouncedSave]);
 
   const currentQuestion = questions[currentIndex];
   const totalQuestions = questions.length;
@@ -592,15 +629,19 @@ export default function TestAttemptPage() {
   const handleSubmit = async () => {
     if (!attemptId) return;
 
-    // Check unanswered
     const unanswered = questions.filter((q) => {
       const val = answers[q.id];
       return val === undefined || val === '' || (Array.isArray(val) && val.length === 0);
     });
-    if (unanswered.length > 0) {
-      setWarningMessage(`${unanswered.length} question${unanswered.length !== 1 ? 's' : ''} unanswered. Are you sure you want to submit?`);
-      setShowWarning(true);
-      return;
+    const unansweredCount = unanswered.length;
+    if (unansweredCount > 0) {
+      setSubmitDialogMessage(
+        `You have ${unansweredCount} unanswered question${unansweredCount !== 1 ? 's' : ''}. Are you sure you want to submit the test? You won't be able to change your answers after submission.`
+      );
+    } else {
+      setSubmitDialogMessage(
+        `You are about to submit your test. You won't be able to change your answers after submission.`
+      );
     }
     setShowSubmitDialog(true);
   };
@@ -807,14 +848,29 @@ export default function TestAttemptPage() {
                 <span className="text-xs text-text-muted md:hidden">
                   {currentIndex + 1} / {totalQuestions}
                 </span>
-                <button
-                  onClick={() => goToQuestion(Math.min(totalQuestions - 1, currentIndex + 1))}
-                  disabled={currentIndex === totalQuestions - 1}
-                  className="flex items-center gap-1.5 rounded-lg border border-surface-border px-4 py-2.5 text-sm font-medium text-text-secondary hover:bg-surface-muted disabled:opacity-30 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-                >
-                  Next
-                  <ArrowRight className="h-4 w-4" />
-                </button>
+                {totalQuestions > 0 && currentIndex === totalQuestions - 1 ? (
+                  <button
+                    onClick={handleSubmit}
+                    disabled={submitting || timeExpired}
+                    className="flex items-center gap-1.5 rounded-lg bg-brand-navy px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-navyDark disabled:opacity-50 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                  >
+                    {submitting ? (
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    ) : (
+                      <Send className="h-4 w-4" />
+                    )}
+                    Submit Test
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => goToQuestion(Math.min(totalQuestions - 1, currentIndex + 1))}
+                    disabled={totalQuestions === 0 || currentIndex === totalQuestions - 1}
+                    className="flex items-center gap-1.5 rounded-lg border border-surface-border px-4 py-2.5 text-sm font-medium text-text-secondary hover:bg-surface-muted disabled:opacity-30 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                  >
+                    Next
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
+                )}
               </div>
             </div>
           </main>
@@ -891,12 +947,14 @@ export default function TestAttemptPage() {
           onCancel={() => setShowWarning(false)}
         />
 
-        {/* Submit confirmation */}
+        {/* Submit confirmation — single confirmation for manual submit */}
         <ConfirmDialog
           isOpen={showSubmitDialog}
-          title="Submit Test"
-          message={`You are about to submit your test. ${answeredCount} of ${totalQuestions} questions answered. This action cannot be undone.`}
-          confirmLabel="Submit"
+          title="Submit Test?"
+          message={submitDialogMessage}
+          confirmLabel="Submit Test"
+          cancelLabel="Cancel"
+          loading={submitting}
           onConfirm={confirmSubmit}
           onCancel={() => setShowSubmitDialog(false)}
         />
