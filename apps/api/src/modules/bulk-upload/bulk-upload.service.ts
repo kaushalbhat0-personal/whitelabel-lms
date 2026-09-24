@@ -241,10 +241,18 @@ export class BulkUploadService {
       }
 
       // Batch enrollment — warn on not found, never fail
+      // CORE RULE: dto.batchId is authoritative for the entire CSV. When present, CSV batchName/courseName are ignored.
       let batchAssigned = false;
       let warning: string | undefined;
 
-      if (user.batchName) {
+      if (dto.batchId) {
+        try {
+          await this.batchesService.assignStudentToBatch(dto.batchId, userId);
+          batchAssigned = true;
+        } catch {
+          // batch enrollment failure is non-fatal
+        }
+      } else if (user.batchName) {
         const lookup = await this.lookupBatchByName(
           user.batchName,
           user.courseName,
@@ -267,13 +275,6 @@ export class BulkUploadService {
           } catch {
             // batch enrollment failure is non-fatal
           }
-        }
-      } else if (dto.batchId) {
-        try {
-          await this.batchesService.assignStudentToBatch(dto.batchId, userId);
-          batchAssigned = true;
-        } catch {
-          // batch enrollment failure is non-fatal
         }
       }
 

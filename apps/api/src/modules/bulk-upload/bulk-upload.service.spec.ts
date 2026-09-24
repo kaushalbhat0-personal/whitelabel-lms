@@ -233,4 +233,116 @@ describe('BulkUploadService - onboarding', () => {
     expect(supabaseMock.client.auth.admin.listUsers).not.toHaveBeenCalled();
     expect(result.warning).toMatch(/already exists/);
   });
+
+  it('dto.batchId is authoritative — CSV batchName ignored', async () => {
+    const user = { name: 'Wrong Batch User', email: 'wrongbatch@mcttest.com', batchName: 'Wrong Batch', courseName: 'Wrong Course', rowNumber: 10 };
+    const dto = { batchId: '11111111-1111-4111-a111-111111111111' };
+    supabaseMock.client.auth.admin.createUser.mockResolvedValue({ data: { user: { id: 'uid-wrong' } }, error: null });
+    // track if batches table is queried (would indicate lookupBatchByName called)
+    const fromSpy = jest.fn((table: string) => {
+      if (table === 'profiles') {
+        return { upsert: jest.fn().mockReturnValue({ error: null }) } as any;
+      }
+      if (table === 'batches' || table === 'courses') {
+        throw new Error(`lookupBatchByName should NOT be called when dto.batchId is present (queried ${table})`);
+      }
+      return { upsert: jest.fn().mockReturnValue({ error: null }) } as any;
+    });
+    // Preserve original from for non-batches but ensure no batches/courses call leaks
+    // We intercept via spying on client.from after mockProfileLookup sets it; instead override directly
+    supabaseMock.client.from = fromSpy;
+    // Still need profiles upsert mock for other table uses in service (but we threw for batches/courses only)
+    // Mock implementation that returns valid for profiles
+    const originalFrom = fromSpy;
+    supabaseMock.client.from.mockImplementation((table: string) => {
+      if (table === 'profiles') return { upsert: jest.fn().mockReturnValue({ error: null }) } as any;
+      if (table === 'batches' || table === 'courses') throw new Error(`lookupBatchByName should NOT be called — got ${table}`);
+      return { upsert: jest.fn().mockReturnValue({ error: null }) } as any;
+    });
+
+    // Re-mock to simple success for profiles upsert check above: reset to working mock
+    supabaseMock.client.from.mockImplementation((table: string) => {
+      if (table === 'profiles') return { upsert: jest.fn().mockReturnValue({ error: null }) } as any;
+      throw new Error(`Unexpected table ${table} — lookup should not happen`);
+    });
+    batchesMock.assignStudentToBatch.mockClear();
+
+    const result: any = await (service as any).processSingleRow(user, dto);
+
+    expect(batchesMock.assignStudentToBatch).toHaveBeenCalledWith('11111111-1111-4111-a111-111111111111', 'uid-wrong');
+    expect(batchesMock.assignStudentToBatch).toHaveBeenCalledTimes(1);
+    expect(result.status).toBe('success');
+    expect(result.batchAssigned).toBe(true);
+    // Should NOT have batch not-found warning because CSV wrong batch is ignored
+    expect(result.warning ?? '').not.toMatch(/batch "Wrong Batch" not found/i);
+    expect(result.warning ?? '').not.toMatch(/Multiple batches matched/i);
+  });
+
+  it('dto.batchId with empty CSV batchName still assigns', async () => {
+    const user = { name: 'Empty Batch', email: 'emptybatch@mcttest.com', rowNumber: 11 };
+    const dto = { batchId: '22222222-2222-4222-b222-222222222222' };
+    supabaseMock.client.auth.admin.createUser.mockResolvedValue({ data: { user: { id: 'uid-empty' } }, error: null });
+    supabaseMock.client.from.mockImplementation((table: string) => {
+      if (table === 'profiles') return { upsert: jest.fn().mockReturnValue({ error: null }) } as any;
+      throw new Error(`Unexpected table ${table}`);
+    });
+    batchesMock.assignStudentToBatch.mockClear();
+
+    const result: any = await (service as any).processSingleRow(user, dto);
+    expect(batchesMock.assignStudentToBatch).toHaveBeenCalledWith('22222222-2222-4222-b222-222222222222', 'uid-empty');
+    expect(result.batchAssigned).toBe(true);
+  });
+
+  it('dto.batchId overrides different CSV batchName across rows', async () => {
+    const dto = { batchId: '33333333-3333-4333-c333-333333333333' };
+    const users = [
+      { name: 'A', email: 'a-override@mcttest.com', batchName: 'Batch A', rowNumber: 20 },
+      { name: 'B', email: 'b-override@mcttest.com', batchName: 'Batch B', rowNumber: 21 },
+    ];
+    supabaseMock.client.auth.admin.createUser.mockResolvedValue({ data: { user: { id: 'uid-override' } }, error: null });
+    supabaseMock.client.from.mockImplementation((table: string) => {
+      if (table === 'profiles') return { upsert: jest.fn().mockReturnValue({ error: null }) } as any;
+      throw new Error(`Unexpected table ${table}`);
+    });
+    batchesMock.assignStudentToBatch.mockClear();
+    for (const u of users) {
+      supabaseMock.client.auth.admin.createUser.mockResolvedValueOnce({ data: { user: { id: `uid-${u.email}` } }, error: null });
+      const r: any = await (service as any).processSingleRow(u, dto);
+      expect(r.batchAssigned).toBe(true);
+    }
+    expect(batchesMock.assignStudentToBatch).toHaveBeenCalledTimes(2);
+    expect(batchesMock.assignStudentToBatch).toHaveBeenCalledWith('33333333-3333-4333-c333-333333333333', expect.any(String));
+  });
+
+  it('legacy: no dto.batchId falls back to CSV batchName lookup', async () => {
+    const user = { name: 'Legacy', email: 'legacy@mcttest.com', batchName: 'Real Batch', courseName: 'Real Course', rowNumber: 30 };
+    supabaseMock.client.auth.admin.createUser.mockResolvedValue({ data: { user: { id: 'uid-legacy' } }, error: null });
+    // Mock lookup to return a batch
+    supabaseMock.client.from.mockImplementation((table: string) => {
+      if (table === 'profiles') {
+        return { upsert: jest.fn().mockReturnValue({ error: null }) } as any;
+      }
+      if (table === 'courses') {
+        return {
+          select: jest.fn().mockReturnThis(),
+          ilike: jest.fn().mockReturnThis(),
+          maybeSingle: jest.fn().mockResolvedValue({ data: { id: 'course-1' } }),
+        } as any;
+      }
+      if (table === 'batches') {
+        return {
+          select: jest.fn().mockReturnThis(),
+          ilike: jest.fn().mockReturnThis(),
+          eq: jest.fn().mockReturnThis(),
+          limit: jest.fn().mockResolvedValue({ data: [{ id: 'batch-legacy-id' }], error: null }),
+        } as any;
+      }
+      return { upsert: jest.fn().mockReturnValue({ error: null }) } as any;
+    });
+    batchesMock.assignStudentToBatch.mockClear();
+
+    const result: any = await (service as any).processSingleRow(user, {});
+    expect(batchesMock.assignStudentToBatch).toHaveBeenCalledWith('batch-legacy-id', 'uid-legacy');
+    expect(result.batchAssigned).toBe(true);
+  });
 });

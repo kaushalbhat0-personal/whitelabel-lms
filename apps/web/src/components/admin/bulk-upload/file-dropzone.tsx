@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { Upload, FileSpreadsheet, CheckCircle, XCircle, AlertTriangle, Download, AlertCircle } from 'lucide-react';
 import { uploadStudentsCsv, getJobStatus, type RowResult } from '@/lib/api/bulk-upload';
+import { getAllBatches, type Batch } from '@/lib/api/courses';
 import { API_ROUTES } from '@/lib/constants';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -25,10 +26,43 @@ export function FileDropzone({ onUploadSuccess }: FileDropzoneProps) {
     warningCount: number;
     results: RowResult[];
     failures: { email: string; error: string }[];
+    destinationBatchLabel?: string;
   } | null>(null);
+  const [batches, setBatches] = useState<Batch[]>([]);
+  const [batchesLoading, setBatchesLoading] = useState(true);
+  const [batchesError, setBatchesError] = useState('');
+  const [selectedBatchId, setSelectedBatchId] = useState('');
+
+  const selectedBatch = batches.find((b) => b.id === selectedBatchId) ?? null;
+  const selectedBatchLabel = selectedBatch
+    ? `${selectedBatch.name} — ${selectedBatch.course?.name ?? 'Unknown course'}`
+    : '';
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setBatchesLoading(true);
+        setBatchesError('');
+        const res = await getAllBatches({ isActive: true, limit: 200 });
+        if (!cancelled) setBatches(res.items ?? []);
+      } catch (err: any) {
+        if (!cancelled) setBatchesError(err?.message || 'Failed to load batches');
+      } finally {
+        if (!cancelled) setBatchesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleUpload = useCallback(
     async (file: File) => {
+      if (!selectedBatchId) {
+        setError('Please select a destination batch before uploading.');
+        return;
+      }
       setError('');
       setSummary(null);
       setIsUploading(true);
@@ -48,6 +82,7 @@ export function FileDropzone({ onUploadSuccess }: FileDropzoneProps) {
       try {
         const formData = new FormData();
         formData.append('file', file);
+        formData.append('batchId', selectedBatchId);
 
         const { jobId, totalRows } = await uploadStudentsCsv(formData);
 
@@ -79,6 +114,7 @@ export function FileDropzone({ onUploadSuccess }: FileDropzoneProps) {
             warningCount,
             results: jobResult.results || [],
             failures: jobResult.failures || [],
+            destinationBatchLabel: selectedBatchLabel,
           });
         }
       } catch (err: any) {
@@ -88,7 +124,7 @@ export function FileDropzone({ onUploadSuccess }: FileDropzoneProps) {
         onUploadSuccess();
       }
     },
-    [onUploadSuccess],
+    [onUploadSuccess, selectedBatchId, selectedBatchLabel],
   );
 
   const onDrop = useCallback(
@@ -131,25 +167,77 @@ export function FileDropzone({ onUploadSuccess }: FileDropzoneProps) {
           <span className="rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs font-medium text-gray-700">Course Name <span className="font-normal text-gray-500">optional</span></span>
           <span className="rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs font-medium text-gray-700">Batch Name <span className="font-normal text-gray-500">optional</span></span>
         </span>{' '}
-        Leave Course and Batch blank if assigning later via UI.
+        CSV batch/course columns are informational only when a destination batch is selected.
       </p>
+
+      <div className="mb-4">
+        <label htmlFor="bulk-destination-batch" className="block text-sm font-medium text-gray-700">
+          Destination Batch <span className="text-red-500">*</span>
+        </label>
+        <select
+          id="bulk-destination-batch"
+          value={selectedBatchId}
+          onChange={(e) => setSelectedBatchId(e.target.value)}
+          disabled={batchesLoading}
+          className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-gray-50 disabled:text-gray-400"
+          aria-label="Destination Batch"
+        >
+          <option value="">{batchesLoading ? 'Loading batches...' : 'Select destination batch'}</option>
+          {batches.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name} — {b.course?.name ?? 'Unknown course'}
+            </option>
+          ))}
+        </select>
+        {batchesLoading && <p className="mt-1 text-xs text-gray-400">Loading active batches...</p>}
+        {batchesError && <p className="mt-1 text-xs text-red-600">{batchesError}</p>}
+        {!batchesLoading && !batchesError && batches.length === 0 && (
+          <p className="mt-1 text-xs text-amber-600">No active batches found. Create a batch first.</p>
+        )}
+        {selectedBatch && (
+          <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-brand-200 bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700">
+            <FileSpreadsheet className="h-3.5 w-3.5" />
+            Entire CSV will be imported to: {selectedBatchLabel}
+          </p>
+        )}
+        {!selectedBatchId && !batchesLoading && batches.length > 0 && (
+          <p className="mt-1 text-xs text-gray-500">Select a batch to enable upload.</p>
+        )}
+      </div>
 
       <div
         onDragOver={(e) => {
           e.preventDefault();
+          if (!selectedBatchId) return;
           setIsDragging(true);
         }}
         onDragLeave={() => setIsDragging(false)}
-        onDrop={onDrop}
-        onClick={() => inputRef.current?.click()}
+        onDrop={(e) => {
+          if (!selectedBatchId) {
+            e.preventDefault();
+            setError('Please select a destination batch before uploading.');
+            return;
+          }
+          onDrop(e);
+        }}
+        onClick={() => {
+          if (!selectedBatchId) {
+            setError('Please select a destination batch before uploading.');
+            return;
+          }
+          inputRef.current?.click();
+        }}
         role="button"
-        tabIndex={0}
+        tabIndex={selectedBatchId ? 0 : -1}
         aria-label="Upload CSV or Excel file"
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); inputRef.current?.click(); } }}
-        className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 sm:p-10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 ${
-          isDragging
-            ? 'border-brand-500 bg-brand-50'
-            : 'border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-gray-100'
+        aria-disabled={!selectedBatchId}
+        onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && selectedBatchId) { e.preventDefault(); inputRef.current?.click(); } }}
+        className={`flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 sm:p-10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 ${
+          !selectedBatchId
+            ? 'cursor-not-allowed border-gray-200 bg-gray-50 opacity-60'
+            : isDragging
+              ? 'cursor-pointer border-brand-500 bg-brand-50'
+              : 'cursor-pointer border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-gray-100'
         }`}
       >
         <input
@@ -187,6 +275,12 @@ export function FileDropzone({ onUploadSuccess }: FileDropzoneProps) {
 
       {summary && (
         <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4">
+          {summary.destinationBatchLabel && (
+            <div className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-brand-200 bg-white px-2.5 py-1 text-xs font-medium text-brand-700">
+              <FileSpreadsheet className="h-3.5 w-3.5" />
+              Imported to: {summary.destinationBatchLabel}
+            </div>
+          )}
           <div className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700">
             <CheckCircle className="h-4 w-4 text-green-600" />
             Upload complete
