@@ -20,6 +20,17 @@ export interface BusinessConfig {
   current_financial_year: string;
   next_invoice_number: number;
   next_receipt_number: number;
+  timezone: string;
+  currency: string;
+  locale: string;
+  fy_start_month: number;
+  tax_mode: string;
+  tax_rate: number;
+  favicon_url?: string;
+  support_email?: string;
+  support_phone?: string;
+  website?: string;
+  legal_footer?: string;
 }
 
 export async function getBusinessConfig() {
