@@ -1,6 +1,26 @@
 -- ============================================================================
--- LMS Platform — Full Schema (Pre-production rebuild)
--- Run this in Supabase SQL Editor. Idempotent: drops all tables first.
+-- DEPRECATED — REFERENCE ONLY
+-- ============================================================================
+-- LMS Platform — Full Schema Snapshot (Pre-production rebuild)
+--
+-- AUTHORITY: scripts/migrations/ is the authoritative database history.
+-- This file is NOT authoritative and is NOT kept in sync with migrations.
+-- It exists for local reference / emergency rebuild only and is intentionally
+-- destructive (DROP ... CASCADE) — do NOT run against a production database
+-- that contains data.
+--
+-- For production and staging, apply migrations in order:
+--   scripts/migrations/004-*.sql → ... → 039-*.sql, 999-*.sql
+-- via your Supabase migration runner or manual SQL Editor execution.
+--
+-- To verify a live database, use:
+--   node scripts/check-supabase-schema.js
+-- which checks live columns against expected migration state.
+--
+-- This snapshot was last accurate at the pre-039 era and is now stale
+-- (missing outbox, batch_curriculum, certificates/achievements,
+-- observability, notifications, audit, email delivery, and later hardening).
+-- It will be regenerated or removed in a future phase.
 -- ============================================================================
 
 -- ────────────────────────────────────────────────────────────────────────────

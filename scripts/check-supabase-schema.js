@@ -1,3 +1,20 @@
+/**
+ * Migration Schema Verification — Live DB vs Expected Migration State
+ *
+ * Authority: scripts/migrations/ is the single source of truth.
+ * scripts/schema.sql is DEPRECATED reference-only and is NOT checked here.
+ * This script queries live Supabase information_schema.columns and compares
+ * against hard-coded expected columns for a subset of migrations (017–020).
+ *
+ * This is an intentionally narrow, non-fragile checker. It does NOT attempt
+ * to parse all migrations dynamically — that would be fragile. Coverage is
+ * limited to 8 representative tables; extend the `migrations` array as needed.
+ * For full history, inspect scripts/migrations/ in order.
+ *
+ * Usage: node scripts/check-supabase-schema.js  (requires apps/api/.env)
+ *
+ * See also: CONFIG_OWNERSHIP.md (no tenant_id), docs/architecture.md
+ */
 const fs = require('fs');
 const path = require('path');
 
