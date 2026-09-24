@@ -141,7 +141,7 @@ function SidebarContent({
           <p className="text-2xs font-medium text-brand-200">Admin Panel</p>
         </div>
       </div>
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-3 scrollbar-thin" role="navigation">
+      <nav className="flex-1 min-h-0 space-y-0.5 overflow-y-auto overscroll-contain px-3 py-3 scrollbar-thin" role="navigation">
         {navGroups.map((group) => {
           const active = isGroupActive(group);
           const isOpen = !collapsed[group.label];
@@ -258,7 +258,7 @@ export function AdminSidebarWrapper() {
   return (
     <>
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex w-64 flex-col bg-sidebar-bg">
+      <aside className="hidden md:flex w-64 shrink-0 flex-col bg-sidebar-bg md:h-screen md:h-[100dvh] md:overflow-hidden md:min-h-0">
         <SidebarContent
           pathname={pathname}
           onLogout={handleLogout}

@@ -13,12 +13,12 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       <GuardRoute>
         <NavigationProvider>
           <NavigationProgress />
-          <div className="flex flex-col md:flex-row min-h-screen bg-surface-page">
+          <div className="flex flex-col md:flex-row min-h-screen md:h-screen md:h-[100dvh] md:overflow-hidden md:min-h-0 bg-surface-page">
             {/* Sidebar: fixed desktop aside + mobile drawer bar */}
             <AdminSidebarWrapper />
 
             {/* Main content */}
-            <main className="flex flex-1 flex-col min-w-0">
+            <main className="flex flex-1 flex-col min-w-0 md:min-h-0 md:h-screen md:h-[100dvh] md:overflow-hidden">
               {/* Header */}
               <header className="flex h-16 items-center justify-between border-b border-surface-border bg-white px-4 md:px-8 shadow-nav shrink-0">
                 <div className="flex items-center gap-3 md:gap-4">
@@ -29,7 +29,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               </header>
 
               {/* Page content */}
-              <div className="flex-1 p-4 md:p-6 lg:p-8 overflow-x-hidden">{children}</div>
+              <div className="flex-1 min-h-0 p-4 md:p-6 lg:p-8 overflow-x-hidden overflow-y-auto overscroll-contain scrollbar-thin">{children}</div>
             </main>
           </div>
         </NavigationProvider>
