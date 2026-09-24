@@ -49,24 +49,25 @@ Phase 2 will migrate the first meaningful hardcodes to this pattern.
 | **Business identity** | | | | | |
 | `business_name` | Client Admin | `business_config.business_name` (DB) | DB (good) | DB | Per-client display/legal name |
 | `logo_url` | Client Admin | `business_config.logo_url` | DB (good) | DB | Header / PDF / email; fallback to text badge |
-| `favicon_url` | Client Admin | `business_config` (new) | *missing* — code has no favicon per client | DB (`favicon_url TEXT`) Phase 3 | Was hard-coded `apps/web` static file |
+| `favicon_url` | Client Admin | `business_config.favicon_url TEXT` (040) | DB `business_config.favicon_url` via `040-business-config-whitelabel.sql` (nullable) | DB | Was hard-coded `apps/web` static file; P2A adds column, not yet wired |
 | `address` (`address_line_1/2, city, state, pincode, country`) | Client Admin | `business_config` 6 columns | DB (good) | DB | Invoice legal block |
 | `gstin, pan` | Client Admin | `business_config.gstin/pan` | DB (good) | DB | Nullable; invoice template conditional |
-| `email, phone, support_email, support_phone` | Client Admin | `business_config.email/phone` (+ `support_*` new) | DB (partial) | DB — add `support_email/phone` Phase 2 | `email` today doubles as business + support; split for per-client support contact |
+| `email, phone` | Client Admin | `business_config.email/phone` | DB (good) | DB | Business contact |
+| `support_email, support_phone, website` | Client Admin | `business_config.support_email/phone TEXT + website TEXT` (040, nullable) | DB `business_config` via 040 | DB | Per-client support contact; website optional |
 | `website, social links` | Client Admin | *not stored* | *no column* | DB (`website TEXT, social_json JSONB`) Phase 3 if needed | Keep minimal v1; avoid noise |
 | **Branding / Theme** | | | | | |
 | `theme_primary` | Client Admin | `business_config.theme_json` (new) | `tailwind.config.ts:18 #10b981` literal | DB `theme_json` → CSS vars Phase 3 | `#10b981` stays DEFAULT per `defaults.ts` |
 | `theme_sidebarBg, accent` | Client Admin | `business_config.theme_json` | `tailwind.config.ts:60 #064e3b` | DB | Same pattern |
 | `certificate_accent, seal text` | Client Admin | `business_config.certificate_json` (new) | `certificate.template.hbs:29/37 LMS Platform / LMS` literal | DB JSON Phase 3 | |
 | **Localization** | | | | | |
-| `timezone` | Client Admin | `business_config.timezone` (new) | `zoom.service.ts:211 'Asia/Kolkata'` literal | DB `timezone TEXT DEFAULT 'Asia/Kolkata'` Phase 2 | Webinar scheduling; default per defaults.ts |
-| `locale, dateFormat` | Client Admin | `business_config.locale` (new) | `invoices.service.ts:351 'en-IN'` literal | DB `locale TEXT` Phase 2 | `en-IN` default |
-| `currency` | Client Admin | `business_config.currency` (new) | `invoices.service.ts:360 '&#x20B9;' INR` literal | DB `currency TEXT` Phase 2 | `INR` default |
+| `timezone` | Client Admin | `business_config.timezone TEXT DEFAULT 'Asia/Kolkata'` (040) | DB `business_config.timezone` via 040 | DB | Webinar scheduling; `zoom-live.provider.ts:118` uses `DEFAULT_TIMEZONE` fallback until P2B wiring |
+| `locale` | Client Admin | `business_config.locale TEXT DEFAULT 'en-IN'` (040) | DB `business_config.locale` via 040 | DB | `invoices.service.ts:351 'en-IN'` literal until P2C wiring |
+| `currency` | Client Admin | `business_config.currency TEXT DEFAULT 'INR'` (040) | DB `business_config.currency` via 040 | DB | `invoices.service.ts:360 '&#x20B9;' INR` literal until P2C wiring |
 | **Financial** | | | | | |
 | `invoice_prefix, receipt_prefix` | Client Admin | `business_config.invoice_prefix/receipt_prefix` | DB columns exist but `invoices.service.ts:94` ignores prefix in primary path | DB — fix read path to honor DB Phase 2 | `INV`/`RCP` defaults |
 | `current_financial_year` | Client Admin | `business_config.current_financial_year` | DB | DB | Snapshot; Phase 2 may add `fy_start_month` |
-| `fy_start_month, tax_mode, tax_rate` | Client Admin | *not stored* | `invoices.service.ts:52 month>=3` + `240 /1.18 *0.09` literals | DB (`fy_start_month INT, tax_mode TEXT, tax_rate NUMERIC`) Phase 2 | Defaults `3, inclusive, 18` |
-| `legal_footer` | Client Admin | *not stored* | `invoice.template.hbs: GST Invoice for Educational Services` literal | DB `legal_footer TEXT` Phase 2 | |
+| `fy_start_month, tax_mode, tax_rate` | Client Admin | `business_config.fy_start_month INT 0-11 / tax_mode inclusive/exclusive/zero / tax_rate NUMERIC 0-100` (040) | DB `business_config` via 040 (defaults `3, inclusive, 18`) | DB | `invoices.service.ts:52 month>=3` + `240 /1.18 *0.09` literals until P2C wiring |
+| `legal_footer` | Client Admin | `business_config.legal_footer TEXT` (040, nullable) | DB `business_config.legal_footer` via 040 | DB | `invoice.template.hbs:35 GST Invoice…` literal until P2C wiring |
 | **Features / Terminology** | | | | | |
 | `terminology.batch` (display alias) | Client Admin | *not stored* | Code `Batch` everywhere | DB `terminology_json` Phase deferred | Internal `Batch` stays canonical DB enum; display alias optional, not v1 |
 | `feature flags` (e.g., certificates, attendance) | LMS Core / Deployment Operator | *not stored* | All features always-on `app.module.ts:114-147` | `feature_flags` table or ENV deferred | No client has asked; avoid noise |

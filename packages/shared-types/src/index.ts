@@ -54,6 +54,17 @@ export interface BusinessConfig {
   currentFinancialYear: string;
   nextInvoiceNumber: number;
   nextReceiptNumber: number;
+  timezone: string;
+  currency: string;
+  locale: string;
+  fyStartMonth: number;
+  taxMode: string;
+  taxRate: number;
+  faviconUrl?: string;
+  supportEmail?: string;
+  supportPhone?: string;
+  website?: string;
+  legalFooter?: string;
 }
 
 // ──────────────────────────────────────────────────────────────

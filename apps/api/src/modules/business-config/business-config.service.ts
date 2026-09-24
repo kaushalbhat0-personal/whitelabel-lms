@@ -73,6 +73,17 @@ export class BusinessConfigService {
     if (dto.invoicePrefix !== undefined) updateData.invoice_prefix = dto.invoicePrefix;
     if (dto.receiptPrefix !== undefined) updateData.receipt_prefix = dto.receiptPrefix;
     if (dto.currentFinancialYear !== undefined) updateData.current_financial_year = dto.currentFinancialYear;
+    if (dto.timezone !== undefined) updateData.timezone = dto.timezone;
+    if (dto.currency !== undefined) updateData.currency = dto.currency;
+    if (dto.locale !== undefined) updateData.locale = dto.locale;
+    if (dto.fyStartMonth !== undefined) updateData.fy_start_month = dto.fyStartMonth;
+    if (dto.taxMode !== undefined) updateData.tax_mode = dto.taxMode;
+    if (dto.taxRate !== undefined) updateData.tax_rate = dto.taxRate;
+    if (dto.faviconUrl !== undefined) updateData.favicon_url = dto.faviconUrl;
+    if (dto.supportEmail !== undefined) updateData.support_email = dto.supportEmail;
+    if (dto.supportPhone !== undefined) updateData.support_phone = dto.supportPhone;
+    if (dto.website !== undefined) updateData.website = dto.website;
+    if (dto.legalFooter !== undefined) updateData.legal_footer = dto.legalFooter;
 
     updateData.updated_at = new Date().toISOString();
 

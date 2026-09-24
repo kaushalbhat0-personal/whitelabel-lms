@@ -11,7 +11,7 @@
  *   - The business_config table has a UNIQUE index on TRUE to enforce single-row.
  *   - See shared-types BusinessConfig interface for the full shape.
  */
-import { IsOptional, IsString, MinLength, IsEmail } from 'class-validator';
+import { IsOptional, IsString, MinLength, IsEmail, IsUrl, IsInt, Min, Max, IsNumber, IsIn } from 'class-validator';
 
 export class UpdateBusinessConfigDto {
   @IsOptional()
@@ -83,4 +83,55 @@ export class UpdateBusinessConfigDto {
   @IsOptional()
   @IsString()
   currentFinancialYear?: string;
+
+  @IsOptional()
+  @IsString()
+  timezone?: string;
+
+  @IsOptional()
+  @IsString()
+  currency?: string;
+
+  @IsOptional()
+  @IsString()
+  locale?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(11)
+  fyStartMonth?: number;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['inclusive', 'exclusive', 'zero'])
+  taxMode?: string;
+
+  @IsOptional()
+  @IsNumber({}, { message: 'taxRate must be a number' })
+  @Min(0)
+  @Max(100)
+  taxRate?: number;
+
+  @IsOptional()
+  @IsString()
+  @IsUrl({}, { message: 'faviconUrl must be a valid URL' })
+  faviconUrl?: string;
+
+  @IsOptional()
+  @IsEmail({}, { message: 'Invalid support email address' })
+  supportEmail?: string;
+
+  @IsOptional()
+  @IsString()
+  supportPhone?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsUrl({}, { message: 'website must be a valid URL' })
+  website?: string;
+
+  @IsOptional()
+  @IsString()
+  legalFooter?: string;
 }
