@@ -174,8 +174,6 @@ export function DashboardClient({ name, nextClass, upcoming, courses, recordings
       }
     : null;
 
-  // Next action priority: live (if joinable) > continue > pending test > first unwatched
-  // Use derivedState for live clarity, and pending test sorted by due date
   const sortedPendingTests = [...myTests]
     .filter((t: any) => t.status === 'published' || t.status === 'active')
     .sort((a: any, b: any) => {
@@ -183,26 +181,58 @@ export function DashboardClient({ name, nextClass, upcoming, courses, recordings
       const be = b.end_time ? new Date(b.end_time).getTime() : Infinity;
       return ae - be;
     });
+  const earliestLive = nextClass ?? null;
+  const earliestTest = sortedPendingTests[0] ?? null;
+  const liveTime = earliestLive ? new Date(earliestLive.start_time).getTime() : Infinity;
+  const testTime = earliestTest?.end_time
+    ? new Date(earliestTest.end_time).getTime()
+    : earliestTest?.start_time
+      ? new Date(earliestTest.start_time).getTime()
+      : Infinity;
+
   let nextAction: React.ComponentProps<typeof NextActionCard>['action'] = { type: 'start_learning', title: 'Browse videos to start', reason: 'Your learning journey starts here' };
-  if (nextClass && (derivedState === 'live' || derivedState === 'starting_soon')) {
-    const reason = derivedState === 'live' ? 'Live now — join immediately' : 'Starting soon — join opens now (15 min window)';
-    nextAction = { type: 'join_live', id: nextClass.id, title: nextClass.topic, status: derivedState, reason, startTime: nextClass.start_time } as any;
-  } else if (continueCardItem && continueCardItem.watchedSeconds > 0) {
-    const pct = continueCardItem.durationSeconds ? Math.round((continueCardItem.watchedSeconds / continueCardItem.durationSeconds) * 100) : undefined;
-    const reason = pct != null ? `${pct}% completed — pick up where you left off` : 'Continue where you left off';
-    nextAction = { type: 'continue_video', id: continueCardItem.id, title: continueCardItem.title, pct, reason } as any;
-  } else if (myTestsTotal > results.length) {
-    const pendingTest = sortedPendingTests[0];
-    if (pendingTest) {
-      const dueReason = formatDueDate(pendingTest.end_time ?? null);
-      const attemptsLeft = (pendingTest.max_attempts ?? 1) - (results.filter((r: any) => r.test_id === pendingTest.id).length);
-      const reason = dueReason ? `${dueReason}${attemptsLeft > 0 ? ` · ${pendingTest.max_attempts ?? 1} attempt${(pendingTest.max_attempts ?? 1) !== 1 ? 's' : ''}` : ''}` : `${pendingTest.max_attempts ?? 1} attempt${(pendingTest.max_attempts ?? 1) !== 1 ? 's' : ''} · requires attention`;
-      nextAction = { type: 'pending_test', id: pendingTest.id, title: pendingTest.title, reason } as any;
-    } else if (notStarted[0]) nextAction = { type: 'continue_video', id: notStarted[0].id, title: notStarted[0].title, reason: 'Start your next lesson' } as any;
-  } else if (notStarted[0]) {
-    nextAction = { type: 'continue_video', id: notStarted[0].id, title: notStarted[0].title, reason: 'Start your next lesson' } as any;
-  } else if (lastResult) {
-    nextAction = { type: 'view_result', id: 'latest', title: String((lastResult as any).test_title || 'View results'), pct: Number((lastResult as any).percentage || 0), reason: `You scored ${Number((lastResult as any).percentage || 0)}% — review your results` } as any;
+
+  const makePendingTestAction = (pendingTest: any) => {
+    const dueReason = formatDueDate(pendingTest.end_time ?? null);
+    const attemptsLeft = (pendingTest.max_attempts ?? 1) - (results.filter((r: any) => r.test_id === pendingTest.id).length);
+    const reason = dueReason ? `${dueReason}${attemptsLeft > 0 ? ` · ${pendingTest.max_attempts ?? 1} attempt${(pendingTest.max_attempts ?? 1) !== 1 ? 's' : ''}` : ''}` : `${pendingTest.max_attempts ?? 1} attempt${(pendingTest.max_attempts ?? 1) !== 1 ? 's' : ''} · requires attention`;
+    return { type: 'pending_test' as const, id: pendingTest.id, title: pendingTest.title, reason } as any;
+  };
+
+  const makeContinueVideoAction = () => {
+    if (continueCardItem && continueCardItem.watchedSeconds > 0) {
+      const pct = continueCardItem.durationSeconds ? Math.round((continueCardItem.watchedSeconds / continueCardItem.durationSeconds) * 100) : undefined;
+      const reason = pct != null ? `${pct}% completed — pick up where you left off` : 'Continue where you left off';
+      return { type: 'continue_video' as const, id: continueCardItem.id, title: continueCardItem.title, pct, reason } as any;
+    }
+    if (notStarted[0]) return { type: 'continue_video' as const, id: notStarted[0].id, title: notStarted[0].title, reason: 'Start your next lesson' } as any;
+    if (lastResult) return { type: 'view_result' as const, id: 'latest', title: String((lastResult as any).test_title || 'View results'), pct: Number((lastResult as any).percentage || 0), reason: `You scored ${Number((lastResult as any).percentage || 0)}% — review your results` } as any;
+    return { type: 'start_learning' as const, title: 'Browse videos to start', reason: 'Your learning journey starts here' } as any;
+  };
+
+  if (earliestLive && earliestTest) {
+    if (liveTime <= testTime) {
+      const reason = derivedState === 'live' ? 'Live now — join immediately' : derivedState === 'starting_soon' ? 'Starting soon — join opens now (15 min window)' : undefined;
+      nextAction = { type: 'join_live', id: earliestLive.id, title: earliestLive.topic, status: (derivedState as string) ?? 'scheduled', reason, startTime: earliestLive.start_time } as any;
+    } else {
+      nextAction = makePendingTestAction(earliestTest);
+    }
+  } else if (earliestTest) {
+    nextAction = makePendingTestAction(earliestTest);
+  } else if (earliestLive) {
+    if (derivedState === 'live' || derivedState === 'starting_soon') {
+      const reason = derivedState === 'live' ? 'Live now — join immediately' : 'Starting soon — join opens now (15 min window)';
+      nextAction = { type: 'join_live', id: earliestLive.id, title: earliestLive.topic, status: derivedState as string, reason, startTime: earliestLive.start_time } as any;
+    } else {
+      const fallback = makeContinueVideoAction();
+      if (fallback.type !== 'start_learning') {
+        nextAction = fallback;
+      } else {
+        nextAction = { type: 'join_live', id: earliestLive.id, title: earliestLive.topic, status: (derivedState as string) ?? 'scheduled', startTime: earliestLive.start_time } as any;
+      }
+    }
+  } else {
+    nextAction = makeContinueVideoAction();
   }
 
   const isDuplicateContinue = nextAction.type === 'continue_video' && continueCardItem && (nextAction as any).id === continueCardItem.id;
