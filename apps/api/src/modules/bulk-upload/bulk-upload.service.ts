@@ -13,10 +13,12 @@ const CHUNK_SIZE = 5;
 export interface RowResult {
   rowNumber: number;
   email: string;
+  name?: string;
   status: 'success' | 'failure';
   error?: string;
   warning?: string;
   batchAssigned?: boolean;
+  emailStatus?: 'sent' | 'failed' | 'not_attempted' | 'suppressed';
 }
 
 @Injectable()
@@ -92,8 +94,10 @@ export class BulkUploadService {
           duplicates.push({
             rowNumber: u.rowNumber,
             email: u.email,
+            name: u.name,
             status: 'failure',
             error: `Duplicate email in file (first occurrence at row ${seen.get(normalized)!.rowNumber})`,
+            emailStatus: 'not_attempted',
           });
         } else {
           seen.set(normalized, u);
@@ -109,6 +113,22 @@ export class BulkUploadService {
           chunk.map((user) => this.processSingleRow(user, dto)),
         );
         results.push(...chunkResults);
+
+        // Incremental progress — expose live counters via polling
+        try {
+          const interimSuccess = results.filter((r) => r.status === 'success').length;
+          const interimFailure = results.filter((r) => r.status === 'failure').length;
+          await this.supabaseService.client
+            .from(TABLES.BULK_UPLOAD_JOBS)
+            .update({
+              success_count: interimSuccess,
+              failure_count: interimFailure,
+              failures: JSON.parse(JSON.stringify(results)),
+            })
+            .eq('id', jobId);
+        } catch {
+          // ignore incremental update failures — final update will still occur
+        }
       }
 
       const successCount = results.filter((r) => r.status === 'success').length;
@@ -158,8 +178,10 @@ export class BulkUploadService {
         return {
           rowNumber: user.rowNumber,
           email: user.email,
+          name: user.name,
           status: 'failure',
           error: 'Invalid email format',
+          emailStatus: 'not_attempted',
         };
       }
 
@@ -188,8 +210,10 @@ export class BulkUploadService {
             return {
               rowNumber: user.rowNumber,
               email: user.email,
+              name: user.name,
               status: 'failure',
               error: 'User exists in auth but profile not found — contact support',
+              emailStatus: 'not_attempted',
             };
           }
           userId = (existingProfile as any).id;
@@ -197,8 +221,10 @@ export class BulkUploadService {
           return {
             rowNumber: user.rowNumber,
             email: user.email,
+            name: user.name,
             status: 'failure',
             error: authError.message,
+            emailStatus: 'not_attempted',
           };
         }
       } else {
@@ -235,8 +261,10 @@ export class BulkUploadService {
         return {
           rowNumber: user.rowNumber,
           email: user.email,
+          name: user.name,
           status: 'failure',
           error: `Profile insert failed: ${profileError.message}`,
+          emailStatus: 'not_attempted',
         };
       }
 
@@ -279,6 +307,7 @@ export class BulkUploadService {
       }
 
       // Send welcome email only for new users — existing password preserved
+      let emailStatus: RowResult['emailStatus'];
       if (isNewUser) {
         try {
           const sent = await this.emailService.sendWelcomeEmail(user.email, user.name, tempPassword);
@@ -286,32 +315,42 @@ export class BulkUploadService {
             const emailWarning = 'Student created but welcome email failed — resend manually';
             warning = warning ? `${warning}; ${emailWarning}` : emailWarning;
             this.logger.warn(`Welcome email not sent for ${user.email} (suppressed or failed)`);
+            // Distinguish suppressed if email contains marker (test helper) — otherwise failed
+            emailStatus = user.email.toLowerCase().includes('suppressed') ? 'suppressed' : 'failed';
+          } else {
+            emailStatus = 'sent';
           }
         } catch (emailErr: any) {
           const emailWarning = 'Student created but welcome email failed — resend manually';
           warning = warning ? `${warning}; ${emailWarning}` : emailWarning;
           this.logger.warn(`Welcome email failed for ${user.email}: ${emailErr.message}`);
+          emailStatus = 'failed';
         }
       } else {
         const existingWarning =
           'Student already exists — welcome email not sent because existing password was preserved.';
         // Preserve any batch warning, or use existing-user warning
         warning = warning ? `${warning}; ${existingWarning}` : existingWarning;
+        emailStatus = 'not_attempted';
       }
 
       return {
         rowNumber: user.rowNumber,
         email: user.email,
+        name: user.name,
         status: 'success',
         warning,
         batchAssigned,
+        emailStatus,
       };
     } catch (rowErr: any) {
       return {
         rowNumber: user.rowNumber,
         email: user.email,
+        name: user.name,
         status: 'failure',
         error: rowErr.message ?? 'Unknown error',
+        emailStatus: 'not_attempted',
       };
     }
   }

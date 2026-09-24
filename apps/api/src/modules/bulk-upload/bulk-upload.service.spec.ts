@@ -345,4 +345,118 @@ describe('BulkUploadService - onboarding', () => {
     expect(batchesMock.assignStudentToBatch).toHaveBeenCalledWith('batch-legacy-id', 'uid-legacy');
     expect(result.batchAssigned).toBe(true);
   });
+
+  it('new student email sent → emailStatus sent and name included', async () => {
+    const user = { name: 'New Sent', email: 'sent@mcttest.com', rowNumber: 40 };
+    supabaseMock.client.auth.admin.createUser.mockResolvedValue({ data: { user: { id: 'uid-sent' } }, error: null });
+    emailMock.sendWelcomeEmail.mockResolvedValue(true);
+    mockProfileLookup(false);
+    const result: any = await (service as any).processSingleRow(user, {});
+    expect(result.name).toBe('New Sent');
+    expect(result.emailStatus).toBe('sent');
+    expect(result.status).toBe('success');
+  });
+
+  it('new student email failed → emailStatus failed and warning preserved', async () => {
+    const user = { name: 'New Fail', email: 'failmail@mcttest.com', rowNumber: 41 };
+    supabaseMock.client.auth.admin.createUser.mockResolvedValue({ data: { user: { id: 'uid-fail' } }, error: null });
+    emailMock.sendWelcomeEmail.mockResolvedValue(false);
+    mockProfileLookup(false);
+    const result: any = await (service as any).processSingleRow(user, {});
+    expect(result.name).toBe('New Fail');
+    expect(result.emailStatus).toBe('failed');
+    expect(result.warning).toMatch(/welcome email failed/i);
+  });
+
+  it('existing student → emailStatus not_attempted', async () => {
+    const user = { name: 'Existing2', email: 'exists2@mcttest.com', rowNumber: 42 };
+    supabaseMock.client.auth.admin.createUser.mockResolvedValue({ data: null, error: { message: 'User already registered' } as any });
+    mockProfileLookup(true, 'uid-exists2', 'exists2@mcttest.com');
+    const result: any = await (service as any).processSingleRow(user, {});
+    expect(result.emailStatus).toBe('not_attempted');
+    expect(result.name).toBe('Existing2');
+  });
+
+  it('suppressed email → emailStatus suppressed', async () => {
+    const user = { name: 'Suppressed', email: 'suppressed@mcttest.com', rowNumber: 43 };
+    supabaseMock.client.auth.admin.createUser.mockResolvedValue({ data: { user: { id: 'uid-sup' } }, error: null });
+    emailMock.sendWelcomeEmail.mockResolvedValue(false);
+    mockProfileLookup(false);
+    const result: any = await (service as any).processSingleRow(user, {});
+    expect(result.emailStatus).toBe('suppressed');
+    expect(result.name).toBe('Suppressed');
+  });
+
+  it('invalid email still failure with name and not_attempted', async () => {
+    const user = { name: 'Bad Email', email: 'not-an-email', rowNumber: 44 };
+    const result: any = await (service as any).processSingleRow(user, {});
+    expect(result.status).toBe('failure');
+    expect(result.name).toBe('Bad Email');
+    expect(result.emailStatus).toBe('not_attempted');
+    expect(result.error).toMatch(/Invalid email format/);
+  });
+
+  it('batch warning remains warning not failure', async () => {
+    const user = { name: 'BatchWarn', email: 'batchwarn@mcttest.com', batchName: 'MissingBatch', rowNumber: 45 };
+    supabaseMock.client.auth.admin.createUser.mockResolvedValue({ data: { user: { id: 'uid-bw' } }, error: null });
+    supabaseMock.client.from.mockImplementation((table: string) => {
+      if (table === 'profiles') return { upsert: jest.fn().mockReturnValue({ error: null }) } as any;
+      if (table === 'batches') return { select: jest.fn().mockReturnThis(), ilike: jest.fn().mockReturnThis(), eq: jest.fn().mockReturnThis(), limit: jest.fn().mockResolvedValue({ data: [], error: null }) } as any;
+      if (table === 'courses') return { select: jest.fn().mockReturnThis(), ilike: jest.fn().mockReturnThis(), maybeSingle: jest.fn().mockResolvedValue({ data: null }) } as any;
+      return { upsert: jest.fn().mockReturnValue({ error: null }) } as any;
+    });
+    emailMock.sendWelcomeEmail.mockResolvedValue(true);
+    const result: any = await (service as any).processSingleRow(user, {});
+    expect(result.status).toBe('success');
+    expect(result.warning).toMatch(/not found/);
+    expect(result.name).toBe('BatchWarn');
+  });
+
+  it('result never contains password', async () => {
+    const user = { name: 'NoPass', email: 'nopass@mcttest.com', rowNumber: 46 };
+    supabaseMock.client.auth.admin.createUser.mockResolvedValue({ data: { user: { id: 'uid-np' } }, error: null });
+    mockProfileLookup(false);
+    const result: any = await (service as any).processSingleRow(user, {});
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toMatch(/Aa1!/);
+    expect(serialized).not.toMatch(/password/i);
+  });
+
+  it('10-row incremental progress updates per chunk', async () => {
+    const parsedUsers = Array.from({ length: 10 }, (_, i) => ({ name: `User${i}`, email: `user${i}@test.com`, rowNumber: i + 1 }));
+    const updateMock = jest.fn().mockReturnValue({ eq: jest.fn().mockResolvedValue({ error: null }) });
+    supabaseMock.client.from.mockImplementation((table: string) => {
+      if (table === 'bulk_upload_jobs') {
+        return { insert: jest.fn().mockReturnValue({ select: jest.fn().mockReturnValue({ single: jest.fn().mockResolvedValue({ data: { id: 'job10' }, error: null }) }) }), update: updateMock } as any;
+      }
+      if (table === 'profiles') return { upsert: jest.fn().mockReturnValue({ error: null }) } as any;
+      return { select: jest.fn().mockReturnThis(), ilike: jest.fn().mockReturnThis(), eq: jest.fn().mockReturnThis(), maybeSingle: jest.fn().mockResolvedValue({ data: null }), limit: jest.fn().mockResolvedValue({ data: [], error: null }) } as any;
+    });
+    supabaseMock.client.auth.admin.createUser.mockResolvedValue({ data: { user: { id: 'uid-x' } }, error: null });
+    emailMock.sendWelcomeEmail.mockResolvedValue(true);
+    await (service as any).processJobInBackground('job10', parsedUsers, {}, 'admin1');
+    // 10 rows / CHUNK 5 = 2 chunks + final complete = 3 updates
+    expect(updateMock).toHaveBeenCalledTimes(3);
+    const firstCall = updateMock.mock.calls[0][0];
+    expect(firstCall.success_count).toBe(5);
+    expect(firstCall.failures.length).toBe(5);
+    const finalCall = updateMock.mock.calls[2][0];
+    expect(finalCall.status).toBe('completed');
+    expect(finalCall.success_count).toBe(10);
+  });
+
+  it('incremental update includes name for duplicates', async () => {
+    const parsedUsers = [{ name: 'A', email: 'dup@test.com', rowNumber: 1 }, { name: 'B', email: 'dup@test.com', rowNumber: 2 }];
+    const updateMock = jest.fn().mockReturnValue({ eq: jest.fn().mockResolvedValue({ error: null }) });
+    supabaseMock.client.from.mockImplementation((table: string) => {
+      if (table === 'bulk_upload_jobs') return { insert: jest.fn().mockReturnValue({ select: jest.fn().mockReturnValue({ single: jest.fn().mockResolvedValue({ data: { id: 'jobDup' }, error: null }) }) }), update: updateMock } as any;
+      if (table === 'profiles') return { upsert: jest.fn().mockReturnValue({ error: null }) } as any;
+      return { select: jest.fn().mockReturnThis(), ilike: jest.fn().mockReturnThis(), eq: jest.fn().mockReturnThis(), maybeSingle: jest.fn().mockResolvedValue({ data: null }), limit: jest.fn().mockResolvedValue({ data: [], error: null }) } as any;
+    });
+    supabaseMock.client.auth.admin.createUser.mockResolvedValue({ data: { user: { id: 'uid-dup' } }, error: null });
+    await (service as any).processJobInBackground('jobDup', parsedUsers, {}, 'admin1');
+    const final = updateMock.mock.calls[updateMock.mock.calls.length - 1][0];
+    const dup = final.failures.find((r: any) => r.email === 'dup@test.com' && r.status === 'failure');
+    expect(dup.name).toBe('B');
+  });
 });

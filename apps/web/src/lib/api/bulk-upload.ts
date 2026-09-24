@@ -4,10 +4,12 @@ import { API_ROUTES } from '@/lib/constants';
 export interface RowResult {
   rowNumber: number;
   email: string;
+  name?: string;
   status: 'success' | 'failure';
   error?: string;
   warning?: string;
   batchAssigned?: boolean;
+  emailStatus?: 'sent' | 'failed' | 'not_attempted' | 'suppressed';
 }
 
 export interface JobStatus {
