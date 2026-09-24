@@ -8,6 +8,11 @@ import { PdfGenerationService } from '../pdf/pdf-generation.service';
 import { ObservabilityService } from '../observability/observability.service';
 import { TABLES } from '../../common/constants/tables.constant';
 import { logEntityEvent } from '../../common/utils/observability-helper';
+import {
+  DEFAULT_CURRENCY,
+  DEFAULT_LOCALE,
+  DEFAULT_TIMEZONE,
+} from '../../common/config/defaults';
 
 @Injectable()
 export class AchievementsService {
@@ -308,12 +313,42 @@ export class AchievementsService {
         .maybeSingle();
       verifyToken = (existing as any)?.token ?? c.id;
     }
+    // Fetch BusinessConfig for presentation (locale/timezone/businessName)
+    let certBiz: any = null;
+    try {
+      const { data: bizData } = await this.supabaseService.client
+        .from(TABLES.BUSINESS_CONFIG)
+        .select('*')
+        .limit(1)
+        .maybeSingle();
+      certBiz = bizData ?? null;
+    } catch { /* fallback to defaults */ }
+    const certLocale = certBiz?.locale ?? DEFAULT_LOCALE;
+    const certTimezone = certBiz?.timezone ?? DEFAULT_TIMEZONE;
+    const certBusinessName = certBiz?.business_name ?? 'LMS Platform';
+    let issueDateStr: string;
+    try {
+      issueDateStr = new Date(c.issued_at).toLocaleDateString(certLocale, {
+        timeZone: certTimezone,
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+    } catch {
+      issueDateStr = new Date(c.issued_at).toLocaleDateString(DEFAULT_LOCALE, {
+        timeZone: DEFAULT_TIMEZONE,
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+    }
     const html = template({
       studentName: c.profiles?.name ?? 'Student',
       courseName: c.courses?.name ?? 'Course',
-      issueDate: new Date(c.issued_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' }),
+      issueDate: issueDateStr,
       certificateNumber: c.certificate_number,
       verifyUrl: `${this.getFrontendUrl()}/verify-certificate?token=${verifyToken}`,
+      businessName: certBusinessName,
     });
 
     try {

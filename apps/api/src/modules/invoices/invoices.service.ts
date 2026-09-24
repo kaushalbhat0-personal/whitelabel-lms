@@ -16,11 +16,14 @@ import { ObservabilityService } from '../observability/observability.service';
 import { TABLES } from '../../common/constants/tables.constant';
 import { logEntityEvent } from '../../common/utils/observability-helper';
 import {
+  DEFAULT_CURRENCY,
   DEFAULT_FINANCIAL_YEAR_START_MONTH,
   DEFAULT_INVOICE_PREFIX,
+  DEFAULT_LOCALE,
   DEFAULT_RECEIPT_PREFIX,
   DEFAULT_TAX_MODE,
   DEFAULT_TAX_RATE,
+  DEFAULT_TIMEZONE,
 } from '../../common/config/defaults';
 
 @Injectable()
@@ -96,7 +99,45 @@ export class InvoicesService {
       tax_mode: biz.tax_mode ?? biz.taxMode ?? DEFAULT_TAX_MODE,
       tax_rate: biz.tax_rate ?? biz.taxRate ?? DEFAULT_TAX_RATE,
       legal_footer: biz.legal_footer ?? biz.legalFooter ?? null,
+      currency: biz.currency ?? DEFAULT_CURRENCY,
+      locale: biz.locale ?? DEFAULT_LOCALE,
+      timezone: biz.timezone ?? DEFAULT_TIMEZONE,
     };
+  }
+
+  private getCurrencySymbol(currency: string, locale: string): string {
+    try {
+      const parts = new Intl.NumberFormat(locale, { style: 'currency', currency }).formatToParts(0);
+      return parts.find((p) => p.type === 'currency')?.value ?? currency;
+    } catch {
+      return currency;
+    }
+  }
+
+  private formatPresentationDate(timezone: string, locale: string, now: Date = new Date()): string {
+    try {
+      return now.toLocaleDateString(locale, {
+        timeZone: timezone,
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      });
+    } catch {
+      return now.toLocaleDateString(DEFAULT_LOCALE, {
+        timeZone: DEFAULT_TIMEZONE,
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      });
+    }
+  }
+
+  private formatCurrencyForEmail(amount: number, currency: string, locale: string): string {
+    try {
+      return new Intl.NumberFormat(locale, { style: 'currency', currency }).format(Number(amount));
+    } catch {
+      return `${currency} ${Number(amount).toFixed(2)}`;
+    }
   }
 
   // ──────────────────────────────────────────────────────────────
@@ -435,11 +476,12 @@ export class InvoicesService {
 
     const templateSource = this.readTemplate('receipt.template.hbs');
     const template = Handlebars.compile(templateSource);
-    const dateStr = new Date().toLocaleDateString('en-IN', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
+    const receiptCurrency = biz?.currency ?? DEFAULT_CURRENCY;
+    const receiptLocale = biz?.locale ?? DEFAULT_LOCALE;
+    const receiptTimezone = biz?.timezone ?? DEFAULT_TIMEZONE;
+    const dateStr = this.formatPresentationDate(receiptTimezone, receiptLocale);
+    const currencySymbol = this.getCurrencySymbol(receiptCurrency, receiptLocale);
+    const halfRate = (Number(taxRateReceipt) / 2).toFixed(2);
 
     const html = template({
       receiptNumber,
@@ -462,6 +504,9 @@ export class InvoicesService {
       legalFooter: legalFooterReceipt ?? 'GST Invoice / Receipt for Educational Services',
       taxRate: Number(taxRateReceipt).toFixed(2),
       hasTax: Number(taxRateReceipt) > 0 && taxModeReceipt.toLowerCase() !== 'zero',
+      currency: receiptCurrency,
+      currencySymbol,
+      halfRate,
     });
 
     const pdfBuffer = await this.generatePdf(html);
@@ -550,7 +595,13 @@ export class InvoicesService {
     }
 
     const studentName = student?.name ?? 'Student';
-    const html = `<p>Dear ${studentName},</p><p>Please find attached your payment receipt for <strong>${courseName}</strong>.</p><p>Receipt No: <strong>${r.receipt_number}</strong></p><p>Amount Paid: <strong>&#x20B9; ${Number(r.amount).toFixed(2)}</strong></p>`;
+    const receiptBiz = await this.getBusinessConfigWithDefaults();
+    const receiptEmailAmount = this.formatCurrencyForEmail(
+      Number(r.amount),
+      receiptBiz.currency ?? DEFAULT_CURRENCY,
+      receiptBiz.locale ?? DEFAULT_LOCALE,
+    );
+    const html = `<p>Dear ${studentName},</p><p>Please find attached your payment receipt for <strong>${courseName}</strong>.</p><p>Receipt No: <strong>${r.receipt_number}</strong></p><p>Amount Paid: <strong>${receiptEmailAmount}</strong></p>`;
 
     const sent = await this.emailService.sendEmail(recipient, `Payment Receipt — ${r.receipt_number}`, html, [{ filename, content: pdfBuffer.toString('base64'), contentType: 'application/pdf' }]);
 
@@ -631,11 +682,12 @@ export class InvoicesService {
 
     const templateSource = this.readTemplate('invoice.template.hbs');
     const template = Handlebars.compile(templateSource);
-    const dateStr = new Date().toLocaleDateString('en-IN', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
+    const invoiceCurrency = biz?.currency ?? DEFAULT_CURRENCY;
+    const invoiceLocale = biz?.locale ?? DEFAULT_LOCALE;
+    const invoiceTimezone = biz?.timezone ?? DEFAULT_TIMEZONE;
+    const dateStr = this.formatPresentationDate(invoiceTimezone, invoiceLocale);
+    const currencySymbol = this.getCurrencySymbol(invoiceCurrency, invoiceLocale);
+    const halfRate = (Number(taxRateInv) / 2).toFixed(2);
 
     const html = template({
       invoiceNumber,
@@ -657,6 +709,9 @@ export class InvoicesService {
       legalFooter: legalFooterInv ?? 'GST Invoice for Educational Services',
       taxRate: Number(taxRateInv).toFixed(2),
       hasTax: Number(taxRateInv) > 0 && taxModeInv.toLowerCase() !== 'zero',
+      currency: invoiceCurrency,
+      currencySymbol,
+      halfRate,
     });
 
     const pdfBuffer = await this.generatePdf(html);
@@ -767,7 +822,13 @@ export class InvoicesService {
     }
 
     const studentName = student?.name ?? 'Student';
-    const html = `<p>Dear ${studentName},</p><p>Please find attached your tax invoice for <strong>${courseName}</strong>.</p><p>Invoice No: <strong>${inv.invoice_number}</strong></p><p>Total Amount: <strong>&#x20B9; ${Number(inv.total_amount).toFixed(2)}</strong></p>`;
+    const invoiceBiz = await this.getBusinessConfigWithDefaults();
+    const invoiceEmailAmount = this.formatCurrencyForEmail(
+      Number(inv.total_amount),
+      invoiceBiz.currency ?? DEFAULT_CURRENCY,
+      invoiceBiz.locale ?? DEFAULT_LOCALE,
+    );
+    const html = `<p>Dear ${studentName},</p><p>Please find attached your tax invoice for <strong>${courseName}</strong>.</p><p>Invoice No: <strong>${inv.invoice_number}</strong></p><p>Total Amount: <strong>${invoiceEmailAmount}</strong></p>`;
 
     const sent = await this.emailService.sendEmail(recipient, `Tax Invoice — ${inv.invoice_number}`, html, [{ filename, content: pdfBuffer.toString('base64'), contentType: 'application/pdf' }]);
 
@@ -875,11 +936,12 @@ export class InvoicesService {
 
     const templateSource = this.readTemplate('invoice.template.hbs');
     const template = Handlebars.compile(templateSource);
-    const dateStr = new Date().toLocaleDateString('en-IN', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
+    const planCurrency = biz?.currency ?? DEFAULT_CURRENCY;
+    const planLocale = biz?.locale ?? DEFAULT_LOCALE;
+    const planTimezone = biz?.timezone ?? DEFAULT_TIMEZONE;
+    const dateStr = this.formatPresentationDate(planTimezone, planLocale);
+    const currencySymbol = this.getCurrencySymbol(planCurrency, planLocale);
+    const halfRate = (Number(taxRatePlan) / 2).toFixed(2);
 
     const html = template({
       invoiceNumber,
@@ -901,6 +963,9 @@ export class InvoicesService {
       legalFooter: legalFooterPlan ?? 'GST Invoice for Educational Services',
       taxRate: Number(taxRatePlan).toFixed(2),
       hasTax: Number(taxRatePlan) > 0 && taxModePlan.toLowerCase() !== 'zero',
+      currency: planCurrency,
+      currencySymbol,
+      halfRate,
     });
 
     const pdfBuffer = await this.generatePdf(html);
