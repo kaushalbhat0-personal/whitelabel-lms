@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { markInstallmentPaid } from '@/lib/api/payments';
+import { formatCurrency } from '@/lib/format-currency';
+import { useBusinessConfig } from '@/components/providers/BusinessConfigProvider';
 
 const PAYMENT_METHODS: { value: string; label: string }[] = [
   { value: 'cash', label: 'Cash' },
@@ -27,6 +29,7 @@ export function MarkPaidModal({
   onClose,
   onConfirm,
 }: MarkPaidModalProps) {
+  const { currency, locale } = useBusinessConfig();
   const [paymentMethod, setPaymentMethod] = useState('upi');
   const [transactionId, setTransactionId] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -55,7 +58,7 @@ export function MarkPaidModal({
       <div className="rounded-lg bg-gray-50 p-3 text-sm">
         <p>
           Installment <strong>#{installmentNumber}</strong> —{' '}
-          <strong>&#x20B9; {amount.toFixed(2)}</strong>
+          <strong>{formatCurrency(amount, currency, locale)}</strong>
         </p>
       </div>
 

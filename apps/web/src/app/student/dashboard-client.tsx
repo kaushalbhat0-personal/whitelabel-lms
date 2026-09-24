@@ -21,6 +21,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ROUTES } from '@/lib/constants';
+import { formatCurrency as fmtCurrencyLib } from '@/lib/format-currency';
+import { useBusinessConfig } from '@/components/providers/BusinessConfigProvider';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -71,15 +73,7 @@ function getGreeting() {
   return 'Good evening';
 }
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
-}
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-}
-function formatCurrency(amount: number) {
-  return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
-}
+
 function getGreetingEmoji() {
   const h = new Date().getHours();
   if (h < 12) return '☀️';
@@ -94,19 +88,31 @@ function timeUntil(startTime: string) {
   if (hours > 0) return `${hours}h ${minutes}m`;
   return `${minutes}m`;
 }
-function formatDueDate(iso: string | null) {
-  if (!iso) return null;
-  const d = new Date(iso);
-  const diff = d.getTime() - Date.now();
-  const days = Math.floor(diff / 86400000);
-  if (days < 0) return `Overdue — due ${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`;
-  if (days === 0) return 'Due today';
-  if (days === 1) return 'Due tomorrow';
-  if (days < 7) return `Due in ${days} days`;
-  return `Due ${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`;
-}
 
 export function DashboardClient({ name, nextClass, upcoming, courses, recordings, results, pastSessions, paymentPlans, grouped, myTestsTotal, myTests, errors }: DashboardClientProps) {
+  const { currency, locale, timezone } = useBusinessConfig();
+  const formatCurrency = (amount: number) => fmtCurrencyLib(amount, currency, locale, { maximumFractionDigits: 0 });
+  const formatDate = (iso: string) => {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString(locale, { timeZone: timezone, weekday: 'short', day: 'numeric', month: 'short' });
+  };
+  const formatTime = (iso: string) => {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleTimeString(locale, { timeZone: timezone, hour: '2-digit', minute: '2-digit' });
+  };
+  const formatDueDate = (iso: string | null) => {
+    if (!iso) return null;
+    const d = new Date(iso);
+    const diff = d.getTime() - Date.now();
+    const days = Math.floor(diff / 86400000);
+    if (days < 0) return `Overdue — due ${d.toLocaleDateString(locale, { timeZone: timezone, day: 'numeric', month: 'short' })}`;
+    if (days === 0) return 'Due today';
+    if (days === 1) return 'Due tomorrow';
+    if (days < 7) return `Due in ${days} days`;
+    return `Due ${d.toLocaleDateString(locale, { timeZone: timezone, day: 'numeric', month: 'short' })}`;
+  };
   const [greeting, setGreeting] = useState('');
   const [joining, setJoining] = useState(false);
   const [paymentsOpen, setPaymentsOpen] = useState(false);
@@ -278,7 +284,7 @@ export function DashboardClient({ name, nextClass, upcoming, courses, recordings
                     <p className="mt-1 text-sm text-brand-200">
                       {courseName ? `${courseName}${batchName ? ` · ${batchName}` : ''}` : 'Continue your learning journey'}
                     </p>
-                    <p className="text-xs text-brand-200/70">{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+                    <p className="text-xs text-brand-200/70">{new Date().toLocaleDateString(locale, { timeZone: timezone, weekday: 'long', day: 'numeric', month: 'long' })}</p>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -526,7 +532,7 @@ export function DashboardClient({ name, nextClass, upcoming, courses, recordings
                                   <span className="text-xs text-text-secondary">Next Due</span>
                                 </div>
                                 <p className="mt-1 text-sm font-bold text-text-primary">
-                                  {new Date(nextDueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                  {new Date(nextDueDate).toLocaleDateString(locale, { timeZone: timezone, day: 'numeric', month: 'short', year: 'numeric' })}
                                 </p>
                               </Card>
                             )}

@@ -5,6 +5,7 @@ import { Video, Calendar, Clock, ExternalLink, Loader2, CheckCircle, XCircle, Al
 import { type LiveSession, getSessionJoinUrl, requestJoinToken } from '@/lib/api/live-sessions';
 import { SessionStatusBadge } from '@/components/shared/SessionStatusBadge';
 import { deriveSessionState, getTimeLabel as sharedGetTimeLabel, getRelativeTime as sharedGetRelativeTime } from '@/lib/session-status';
+import { useBusinessConfig } from '@/components/providers/BusinessConfigProvider';
 
 interface Props {
   upcoming: LiveSession[];
@@ -12,20 +13,7 @@ interface Props {
   error?: boolean;
 }
 
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString('en-IN', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-IN', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-  });
-}
 
 function SessionCard({
   session,
@@ -34,6 +22,17 @@ function SessionCard({
   session: LiveSession & { attendanceStatus?: string };
   now: number;
 }) {
+  const { locale, timezone } = useBusinessConfig();
+  const formatTime = (iso: string) => {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleTimeString(locale, { timeZone: timezone, hour: '2-digit', minute: '2-digit' });
+  };
+  const formatDate = (iso: string) => {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString(locale, { timeZone: timezone, weekday: 'short', day: 'numeric', month: 'short' });
+  };
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
 

@@ -25,6 +25,8 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { ROUTES } from '@/lib/constants';
+import { formatCurrency } from '@/lib/format-currency';
+import { useBusinessConfig } from '@/components/providers/BusinessConfigProvider';
 import { AdminSection } from '@/components/shared/AdminSection';
 import { AdminStatCard } from '@/components/shared/AdminStatCard';
 import { Badge } from '@/components/ui/Badge';
@@ -40,28 +42,7 @@ interface AdminDashboardClientProps {
   totalEmails: number;
 }
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-IN', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-  });
-}
-
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString('en-IN', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 const quickActions = [
   { label: 'Create Course', href: ROUTES.ADMIN.COURSES, icon: BookOpen, color: 'bg-blue-50 text-blue-600' },
@@ -82,6 +63,18 @@ export function AdminDashboardClient({
   systemErrors,
   totalEmails,
 }: AdminDashboardClientProps) {
+  const { currency, locale, timezone } = useBusinessConfig();
+  const fmtCurrency = (amount: number) => formatCurrency(amount, currency, locale, { maximumFractionDigits: 0 });
+  const fmtDate = (iso: string) => {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString(locale, { timeZone: timezone, weekday: 'short', day: 'numeric', month: 'short' });
+  };
+  const fmtTime = (iso: string) => {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleTimeString(locale, { timeZone: timezone, hour: '2-digit', minute: '2-digit' });
+  };
   return (
     <div className="space-y-8">
       {/* Page header */}
@@ -95,7 +88,7 @@ export function AdminDashboardClient({
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <AdminStatCard
             label="Total Students"
-            value={studentCount.toLocaleString('en-IN')}
+            value={studentCount.toLocaleString(locale)}
             sublabel="Active enrolled learners"
             icon={Users}
             iconColor="bg-brand-50 text-brand-600"
@@ -109,7 +102,7 @@ export function AdminDashboardClient({
           />
           <AdminStatCard
             label="Total Revenue"
-            value={formatCurrency(totalRevenue)}
+            value={fmtCurrency(totalRevenue)}
             sublabel="Lifetime earnings"
             icon={IndianRupee}
             iconColor="bg-emerald-50 text-emerald-600"
@@ -182,11 +175,11 @@ export function AdminDashboardClient({
                   <div className="mt-0.5 flex items-center gap-3 text-2xs text-text-muted">
                     <span className="flex items-center gap-1">
                       <Calendar className="h-3 w-3" />
-                      {formatDate(session.start_time)}
+                      {fmtDate(session.start_time)}
                     </span>
                     <span className="flex items-center gap-1">
                       <Clock className="h-3 w-3" />
-                      {formatTime(session.start_time)}
+                      {fmtTime(session.start_time)}
                     </span>
                     <span>{session.duration_minutes} min</span>
                   </div>

@@ -2,17 +2,11 @@
 
 import { BookOpen, Users, IndianRupee, Calendar } from 'lucide-react';
 import { type AdminOverview } from '@/lib/api/analytics';
+import { formatCurrency } from '@/lib/format-currency';
+import { useBusinessConfig } from '@/components/providers/BusinessConfigProvider';
 
 interface StatsGridProps {
   data: AdminOverview;
-}
-
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(amount);
 }
 
 const cards = [
@@ -48,9 +42,18 @@ const cards = [
 ];
 
 export function StatsGrid({ data }: StatsGridProps) {
+  const { currency, locale } = useBusinessConfig();
+  const fmtCurrency = (amount: number) => formatCurrency(amount, currency, locale, { maximumFractionDigits: 0 });
+
+  const cardsWithConfig = cards.map((card) =>
+    card.key === 'totalRevenue'
+      ? { ...card, format: (v: number) => fmtCurrency(v) }
+      : card,
+  );
+
   return (
     <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-      {cards.map((card) => {
+      {cardsWithConfig.map((card) => {
         const Icon = card.icon;
         const raw = data[card.key];
         const value =

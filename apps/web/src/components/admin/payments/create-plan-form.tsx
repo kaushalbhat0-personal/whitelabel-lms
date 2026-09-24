@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { createPaymentPlan } from '@/lib/api/payments';
+import { formatCurrency } from '@/lib/format-currency';
+import { useBusinessConfig } from '@/components/providers/BusinessConfigProvider';
 
 interface CreatePlanFormProps {
   students: { id: string; name: string; email: string }[];
@@ -14,6 +16,8 @@ export function CreatePlanForm({
   courses,
   onSuccess,
 }: CreatePlanFormProps) {
+  const { currency, locale } = useBusinessConfig();
+  const fmt = (n: number) => formatCurrency(n, currency, locale);
   const [studentId, setStudentId] = useState('');
   const [courseId, setCourseId] = useState('');
   const [standardCourseFee, setStandardCourseFee] = useState('');
@@ -113,7 +117,7 @@ export function CreatePlanForm({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <label className="block text-sm font-medium text-gray-700">
-            Standard Course Fee (₹) <span className="text-gray-400 font-normal">optional</span>
+            Standard Course Fee ({currency}) <span className="text-gray-400 font-normal">optional</span>
           </label>
           <input
             type="number"
@@ -127,7 +131,7 @@ export function CreatePlanForm({
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700">
-            Discount Amount (₹) <span className="text-gray-400 font-normal">optional</span>
+            Discount Amount ({currency}) <span className="text-gray-400 font-normal">optional</span>
           </label>
           <input
             type="number"
@@ -154,7 +158,7 @@ export function CreatePlanForm({
 
       <div>
         <label className="block text-sm font-medium text-gray-700">
-          Final Agreed Fee (₹) <span className="text-red-500">*</span> <span className="text-gray-400 font-normal">GST inclusive</span>
+          Final Agreed Fee ({currency}) <span className="text-red-500">*</span> <span className="text-gray-400 font-normal">GST inclusive</span>
         </label>
         <input
           type="number"
@@ -169,15 +173,15 @@ export function CreatePlanForm({
         {hasStd && (
           <p className={`mt-1 text-xs ${mismatch ? 'text-red-600' : 'text-gray-500'}`}>
             {mismatch
-              ? `Standard (₹${std.toFixed(2)}) − Discount (₹${disc.toFixed(2)}) = ₹${expectedFinal!.toFixed(2)} — must equal Final Agreed Fee`
-              : `Standard ₹${std.toFixed(2)} − Discount ₹${disc.toFixed(2)} = Final ₹${expectedFinal!.toFixed(2)} ✓`}
+              ? `Standard (${fmt(std)}) − Discount (${fmt(disc)}) = ${fmt(expectedFinal!)} — must equal Final Agreed Fee`
+              : `Standard ${fmt(std)} − Discount ${fmt(disc)} = Final ${fmt(expectedFinal!)} ✓`}
           </p>
         )}
       </div>
 
       <div>
         <label className="block text-sm font-medium text-gray-700">
-          Booking Amount (₹) <span className="text-gray-400 font-normal">optional — independent, not EMI #1</span>
+          Booking Amount ({currency}) <span className="text-gray-400 font-normal">optional — independent, not EMI #1</span>
         </label>
         <input
           type="number"
@@ -190,7 +194,7 @@ export function CreatePlanForm({
         />
         {hasBooking && total > 0 && (
           <p className="mt-1 text-xs text-gray-500">
-            Final ₹{total.toFixed(2)} − Booking ₹{booking.toFixed(2)} = Remaining ₹{remaining.toFixed(2)} for EMIs
+            Final {fmt(total)} − Booking {fmt(booking)} = Remaining {fmt(remaining)} for EMIs
           </p>
         )}
         {hasBooking && parseFloat(bookingAmount) > total && total > 0 && (
@@ -213,7 +217,7 @@ export function CreatePlanForm({
         />
         {count > 0 && remaining > 0 && (
           <p className="mt-1 text-xs text-gray-500">
-            {count} EMIs from ₹{remaining.toFixed(2)} — last EMI absorbs rounding
+            {count} EMIs from {fmt(remaining)} — last EMI absorbs rounding
           </p>
         )}
       </div>

@@ -9,19 +9,7 @@ import { ROUTES } from '@/lib/constants';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { cn } from '@/lib/utils';
-
-function formatDate(iso: string | null) {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleString('en-IN', {
-    timeZone: 'Asia/Kolkata',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true,
-  });
-}
+import { useBusinessConfig } from '@/components/providers/BusinessConfigProvider';
 
 function getGlobalTestState(test: TestResponse, now: number): string {
   if (test.status === 'draft' || test.status === 'archived') return test.status;
@@ -98,6 +86,21 @@ interface TestCardProps {
 }
 
 function TestCard({ test, attempts, onStart, onViewResult, now }: TestCardProps & { now: number }) {
+  const { locale, timezone } = useBusinessConfig();
+  const formatDate = (iso: string | null) => {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleString(locale, {
+      timeZone: timezone,
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+  };
   const testAttempts = (attempts as any[]).filter((a: any) => a.testId === test.id);
   const completedAttempts = (testAttempts as any[]).filter((a: any) => isCompletedStatus(a.status));
   const completedAttempt = completedAttempts.length > 0 ? completedAttempts[completedAttempts.length - 1] : null;

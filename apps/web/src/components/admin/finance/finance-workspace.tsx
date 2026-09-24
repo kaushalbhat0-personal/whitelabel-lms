@@ -19,6 +19,9 @@ import {
   Send,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatCurrency } from '@/lib/format-currency';
+import { formatISTDateOnly } from '@/lib/date-utils';
+import { useBusinessConfig } from '@/components/providers/BusinessConfigProvider';
 import { AdminWorkspaceHeader } from '@/components/shared/AdminWorkspaceHeader';
 import { AdminSection } from '@/components/shared/AdminSection';
 import { AdminStatCard } from '@/components/shared/AdminStatCard';
@@ -59,13 +62,7 @@ const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   { key: 'email', label: 'Email & Delivery', icon: <Mail className="h-4 w-4" /> },
 ];
 
-function formatCurrency(amt: number): string {
-  return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amt);
-}
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-}
 
 export function FinanceWorkspace({
   totalRevenue,
@@ -73,6 +70,9 @@ export function FinanceWorkspace({
   initialStudents,
   initialEmailStats,
 }: FinanceWorkspaceProps) {
+  const { currency, locale, timezone } = useBusinessConfig();
+  const fmtCurrency = (amt: number) => formatCurrency(amt, currency, locale, { maximumFractionDigits: 0 });
+  const fmtDate = (iso: string) => formatISTDateOnly(iso, locale, timezone);
   const [activeTab, setActiveTab] = useState<Tab>('overview');
 
   // Collections state
@@ -181,8 +181,8 @@ export function FinanceWorkspace({
     )},
     { key: 'email', header: 'Email', render: (item: any) => <span className="text-xs text-text-muted">{item.email}</span> },
     { key: 'course', header: 'Course', render: (item: any) => <span className="text-xs">{item.course || '—'}</span> },
-    { key: 'amount', header: 'Due Amount', render: (item: any) => <span className="font-medium text-sm">{formatCurrency(item.amount)}</span> },
-    { key: 'dueDate', header: 'Due Date', render: (item: any) => <span className="text-xs">{item.dueDate ? formatDate(item.dueDate) : '—'}</span> },
+    { key: 'amount', header: 'Due Amount', render: (item: any) => <span className="font-medium text-sm">{fmtCurrency(item.amount)}</span> },
+    { key: 'dueDate', header: 'Due Date', render: (item: any) => <span className="text-xs">{item.dueDate ? fmtDate(item.dueDate) : '—'}</span> },
     { key: 'status', header: 'Status', render: (item: any) => (
       <span className={cn('inline-flex rounded-full border px-2 py-0.5 text-xs font-medium',
         item.status === 'overdue' ? 'bg-red-50 text-red-700 border-red-200' :
@@ -195,7 +195,7 @@ export function FinanceWorkspace({
         {item.status !== 'paid' && item.installmentId && (
           <button
             onClick={() => setConfirmPay({ id: item.installmentId, label: item.name || item.email || 'student', amount: item.amount || 0 })}
-            aria-label={`Mark paid — ${formatCurrency(item.amount || 0)} for ${item.name || item.email || 'student'}`}
+            aria-label={`Mark paid — ${fmtCurrency(item.amount || 0)} for ${item.name || item.email || 'student'}`}
             className="rounded-lg px-3 py-2 min-h-[40px] text-xs font-medium text-emerald-600 hover:bg-emerald-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
           >
             Mark Paid
@@ -213,7 +213,7 @@ export function FinanceWorkspace({
       <Link href={`/admin/students/${item.id}`} className="text-brand-600 hover:underline font-medium text-sm">{item.name}</Link>
     )},
     { key: 'email', header: 'Email', render: (item: any) => <span className="text-xs text-text-muted">{item.email}</span> },
-    { key: 'totalDue', header: 'Total Due', render: (item: any) => <span className="font-medium text-sm">{formatCurrency(item.totalDue)}</span> },
+    { key: 'totalDue', header: 'Total Due', render: (item: any) => <span className="font-medium text-sm">{fmtCurrency(item.totalDue)}</span> },
     { key: 'overdue', header: 'Overdue', render: (item: any) => <span className="text-xs text-red-600 font-medium">{item.overdue}</span> },
     { key: 'pending', header: 'Pending', render: (item: any) => <span className="text-xs">{item.pending}</span> },
     { key: 'risk', header: 'Risk', render: (item: any) => (
@@ -253,7 +253,7 @@ export function FinanceWorkspace({
         backHref="/admin"
         badges={[{ label: 'Finance', variant: 'info' }]}
         context={[
-          { label: 'Total Revenue', value: formatCurrency(totalRevenue) },
+          { label: 'Total Revenue', value: fmtCurrency(totalRevenue) },
           { label: 'Students', value: String(studentCount) },
         ]}
         actions={
@@ -283,10 +283,10 @@ export function FinanceWorkspace({
           <div className="space-y-8">
             <AdminSection title="Revenue KPIs">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <AdminStatCard label="Total Revenue" value={formatCurrency(totalRevenue)} icon={IndianRupee} iconColor="bg-brand-50 text-brand-600" />
-                <AdminStatCard label="Collected This Month" value={plansLoading ? '...' : formatCurrency(totalCollectedMonth)} icon={TrendingUp} iconColor="bg-emerald-50 text-emerald-600" />
-                <AdminStatCard label="Pending Amount" value={plansLoading ? '...' : formatCurrency(totalPending)} icon={Clock} iconColor="bg-amber-50 text-amber-600" />
-                <AdminStatCard label="Overdue Amount" value={plansLoading ? '...' : formatCurrency(totalOverdue)} icon={AlertTriangle} iconColor={totalOverdue > 0 ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'} />
+                <AdminStatCard label="Total Revenue" value={fmtCurrency(totalRevenue)} icon={IndianRupee} iconColor="bg-brand-50 text-brand-600" />
+                <AdminStatCard label="Collected This Month" value={plansLoading ? '...' : fmtCurrency(totalCollectedMonth)} icon={TrendingUp} iconColor="bg-emerald-50 text-emerald-600" />
+                <AdminStatCard label="Pending Amount" value={plansLoading ? '...' : fmtCurrency(totalPending)} icon={Clock} iconColor="bg-amber-50 text-amber-600" />
+                <AdminStatCard label="Overdue Amount" value={plansLoading ? '...' : fmtCurrency(totalOverdue)} icon={AlertTriangle} iconColor={totalOverdue > 0 ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'} />
               </div>
             </AdminSection>
 
@@ -414,7 +414,7 @@ export function FinanceWorkspace({
         loading={paying}
         variant="warning"
         title="Mark installment as paid?"
-        message={confirmPay ? `Mark ${formatCurrency(confirmPay.amount)} for ${confirmPay.label} as paid? This records a manual payment and will update collections totals. Installment ${confirmPay.id.slice(0, 8)}…` : ''}
+        message={confirmPay ? `Mark ${fmtCurrency(confirmPay.amount)} for ${confirmPay.label} as paid? This records a manual payment and will update collections totals. Installment ${confirmPay.id.slice(0, 8)}…` : ''}
         confirmLabel={paying ? 'Marking…' : 'Mark Paid'}
         cancelLabel="Cancel"
       />

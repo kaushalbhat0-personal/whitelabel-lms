@@ -18,6 +18,8 @@ import { AdminStatCard } from '@/components/shared/AdminStatCard';
 import { AdminErrorState } from '@/components/shared/AdminErrorState';
 import { CurriculumTab } from './curriculum-tab';
 import { cn } from '@/lib/utils';
+import { formatCurrency } from '@/lib/format-currency';
+import { useBusinessConfig } from '@/components/providers/BusinessConfigProvider';
 import { fetchApi } from '@/lib/api-client';
 import {
   type Batch,
@@ -76,6 +78,18 @@ const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
 ];
 
 export function BatchDetailView({ batch }: BatchDetailViewProps) {
+  const { currency, locale, timezone } = useBusinessConfig();
+  const fmtCurrency = (amt: number) => formatCurrency(amt, currency, locale, { maximumFractionDigits: 0 });
+  const fmtDate = (iso: string) => {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString(locale, { timeZone: timezone, day: 'numeric', month: 'short', year: 'numeric' });
+  };
+  const fmtTime = (iso: string) => {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleTimeString(locale, { timeZone: timezone, hour: '2-digit', minute: '2-digit' });
+  };
   const [activeTab, setActiveTab] = useState<Tab>('overview');
 
   // Students tab state
@@ -161,10 +175,7 @@ export function BatchDetailView({ batch }: BatchDetailViewProps) {
     finally { setAddingStudent(false); }
   };
 
-  const formatDate = (iso: string) =>
-    new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-  const formatTime = (iso: string) =>
-    new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+
 
   return (
     <div className="space-y-6">
@@ -222,7 +233,7 @@ export function BatchDetailView({ batch }: BatchDetailViewProps) {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <AdminStatCard label="Students" value={batch.studentCount ?? 0} icon={Users} iconColor="bg-brand-50 text-brand-600" />
                 <AdminStatCard label="Teachers" value={batch.teacherCount ?? 0} icon={BookOpen} iconColor="bg-blue-50 text-blue-600" />
-                <AdminStatCard label="Schedule" value={batch.schedule_type || 'Not set'} sublabel={batch.start_date ? `Started ${formatDate(batch.start_date)}` : undefined} icon={Calendar} iconColor="bg-purple-50 text-purple-600" />
+                <AdminStatCard label="Schedule" value={batch.schedule_type || 'Not set'} sublabel={batch.start_date ? `Started ${fmtDate(batch.start_date)}` : undefined} icon={Calendar} iconColor="bg-purple-50 text-purple-600" />
               </div>
             </AdminSection>
 
@@ -321,7 +332,7 @@ export function BatchDetailView({ batch }: BatchDetailViewProps) {
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-text-primary truncate">{s.topic || s.zoom_webinar_id || 'Session'}</p>
                       <p className="text-xs text-text-muted">
-                        {s.start_time ? formatDate(s.start_time) + ' ' + formatTime(s.start_time) : 'No time set'}
+                        {s.start_time ? fmtDate(s.start_time) + ' ' + fmtTime(s.start_time) : 'No time set'}
                         {s.duration_minutes ? ` · ${s.duration_minutes} min` : ''}
                       </p>
                     </div>
@@ -364,7 +375,7 @@ export function BatchDetailView({ batch }: BatchDetailViewProps) {
                       <tr key={p.id || i} className="hover:bg-surface-muted/50">
                         <td className="px-5 py-3.5 font-medium text-text-primary">{p.student_id || '—'}</td>
                         <td className="px-5 py-3.5 text-text-secondary text-xs">
-                          {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(p.total_amount || 0)}
+                          {fmtCurrency(p.total_amount || 0)}
                         </td>
                         <td className="px-5 py-3.5">
                           <span className={cn('rounded-full border px-2 py-0.5 text-xs font-medium', p.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : p.status === 'completed' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-gray-100 text-gray-500 border-gray-200')}>

@@ -27,6 +27,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { formatCurrency } from '@/lib/format-currency';
+import { useBusinessConfig } from '@/components/providers/BusinessConfigProvider';
 import { AdminWorkspaceHeader } from '@/components/shared/AdminWorkspaceHeader';
 import { AdminSection } from '@/components/shared/AdminSection';
 import { AdminStatCard } from '@/components/shared/AdminStatCard';
@@ -100,14 +102,18 @@ export function StudentWorkspace({
     avgScore: initialAnalytics?.average_percentage ?? null,
   };
 
-  const formatCurrency = (amt: number) =>
-    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amt);
-
-  const formatDate = (iso: string) =>
-    new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-
-  const formatTime = (iso: string) =>
-    new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' });
+  const { currency, locale, timezone } = useBusinessConfig();
+  const fmtCurrency = (amt: number) => formatCurrency(amt, currency, locale, { maximumFractionDigits: 0 });
+  const fmtDate = (iso: string) => {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString(locale, { timeZone: timezone, day: 'numeric', month: 'short', year: 'numeric' });
+  };
+  const fmtTime = (iso: string) => {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleString(locale, { timeZone: timezone, hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' });
+  };
 
   const handleRestore = async () => {
     setRestoring(true);
@@ -140,7 +146,7 @@ export function StudentWorkspace({
   };
 
   const activityColumns: AdminDataTableColumn<any>[] = [
-    { key: 'time', header: 'Time', render: (item) => <span className="text-xs whitespace-nowrap">{formatTime(item.createdAt)}</span> },
+    { key: 'time', header: 'Time', render: (item) => <span className="text-xs whitespace-nowrap">{fmtTime(item.createdAt)}</span> },
     { key: 'action', header: 'Action',
       render: (item) => (
         <span className={cn(
@@ -172,9 +178,9 @@ export function StudentWorkspace({
           { label: student.is_active ? 'Active' : 'Suspended', variant: student.is_active ? 'active' : 'warning' },
         ]}
         context={[
-          { label: 'Joined', value: formatDate(student.created_at) },
+          { label: 'Joined', value: fmtDate(student.created_at) },
           { label: 'Batches', value: String(totals.enrolledBatches) },
-          { label: 'Payments', value: formatCurrency(totals.totalPaid) },
+          { label: 'Payments', value: fmtCurrency(totals.totalPaid) },
         ]}
         actions={
           <div className="flex items-center gap-2">
@@ -222,7 +228,7 @@ export function StudentWorkspace({
               <div className="rounded-xl border border-surface-border bg-surface-card p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {[{ label: 'Email', value: student.email, icon: Mail },
                   { label: 'Phone', value: student.phone || '—', icon: Users },
-                  { label: 'Joined', value: formatDate(student.created_at), icon: Calendar },
+                  { label: 'Joined', value: fmtDate(student.created_at), icon: Calendar },
                   { label: 'Status', value: student.is_active ? 'Active' : 'Suspended', icon: CheckCircle2 }].map((field) => (
                   <div key={field.label}>
                     <p className="text-xs font-medium text-text-muted">{field.label}</p>
@@ -236,7 +242,7 @@ export function StudentWorkspace({
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <AdminStatCard label="Enrolled Batches" value={totals.enrolledBatches} icon={BookOpen} iconColor="bg-brand-50 text-brand-600" />
                 <AdminStatCard label="Tests Taken" value={totals.testsTaken} icon={ClipboardList} iconColor="bg-blue-50 text-blue-600" />
-                <AdminStatCard label="Total Paid" value={formatCurrency(totals.totalPaid)} icon={IndianRupee} iconColor="bg-emerald-50 text-emerald-600" />
+                <AdminStatCard label="Total Paid" value={fmtCurrency(totals.totalPaid)} icon={IndianRupee} iconColor="bg-emerald-50 text-emerald-600" />
                 <AdminStatCard label="Avg Score" value={totals.avgScore != null ? `${totals.avgScore}%` : '—'} sublabel={totals.testsTaken > 0 ? `${totals.testsTaken} tests` : undefined} icon={Trophy} iconColor="bg-purple-50 text-purple-600" />
               </div>
             </AdminSection>
@@ -248,7 +254,7 @@ export function StudentWorkspace({
                     <Clock className="h-5 w-5 text-amber-600" />
                   </div>
                   <div>
-                    <p className="font-semibold text-text-primary">{formatCurrency(totals.totalPending)} outstanding</p>
+                    <p className="font-semibold text-text-primary">{fmtCurrency(totals.totalPending)} outstanding</p>
                     <p className="text-sm text-text-secondary mt-0.5">This student has pending payments across {totals.paymentPlans} plans</p>
                   </div>
                 </div>
@@ -298,7 +304,7 @@ export function StudentWorkspace({
                       )}>{log.action}</span>
                       <span className="text-xs text-text-secondary">{log.entityType}</span>
                       <span className="flex-1" />
-                      <span className="text-xs text-text-muted whitespace-nowrap">{formatTime(log.createdAt)}</span>
+                      <span className="text-xs text-text-muted whitespace-nowrap">{fmtTime(log.createdAt)}</span>
                     </div>
                   ))}
                 </div>
@@ -359,7 +365,7 @@ export function StudentWorkspace({
                       <div key={plan.id} className="rounded-xl border border-surface-border bg-surface-card p-5">
                         <div className="flex items-center justify-between mb-3">
                           <div>
-                            <p className="font-semibold text-text-primary">{plan.course?.name || 'Course'} — {formatCurrency(plan.total_amount)}</p>
+                            <p className="font-semibold text-text-primary">{plan.course?.name || 'Course'} — {fmtCurrency(plan.total_amount)}</p>
                             <p className="text-xs text-text-muted">{paid}/{total} installments paid · {plan.status}</p>
                           </div>
                           <span className={cn('rounded-full border px-2.5 py-0.5 text-xs font-medium',
@@ -372,13 +378,13 @@ export function StudentWorkspace({
                           <div className="space-y-1.5">
                             {plan.installments.map((inst: any) => (
                               <div key={inst.id} className="flex items-center justify-between text-xs py-1.5 px-3 rounded-lg bg-surface-muted">
-                                <span>#{inst.installment_number} — {formatCurrency(inst.amount)}</span>
+                                <span>#{inst.installment_number} — {fmtCurrency(inst.amount)}</span>
                                 <span className={cn('font-medium',
                                   inst.status === 'paid' ? 'text-emerald-600' :
                                   inst.status === 'overdue' ? 'text-red-600' :
                                   'text-text-muted',
                                 )}>
-                                  {inst.status}{inst.paid_at ? ` · ${formatDate(inst.paid_at)}` : ''}
+                                  {inst.status}{inst.paid_at ? ` · ${fmtDate(inst.paid_at)}` : ''}
                                 </span>
                               </div>
                             ))}
@@ -412,7 +418,7 @@ export function StudentWorkspace({
                       </div>
                       <div>
                         <p className="text-sm font-medium text-text-primary">{item.test_name || `Test ${i + 1}`}</p>
-                        <p className="text-xs text-text-muted">{item.date ? formatDate(item.date) : '—'}</p>
+                        <p className="text-xs text-text-muted">{item.date ? fmtDate(item.date) : '—'}</p>
                       </div>
                     </div>
                   ))}

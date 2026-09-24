@@ -6,12 +6,28 @@ import { Modal } from '@/components/ui/Modal';
 import { MarkPaidModal } from './mark-paid-modal';
 import { getStudentPlans, type PaymentPlan } from '@/lib/api/payments';
 import { getReceipts, sendReceipt, getDownloadUrl, getInvoices, sendInvoice } from '@/lib/api/invoices';
+import { formatCurrency } from '@/lib/format-currency';
+import { useBusinessConfig } from '@/components/providers/BusinessConfigProvider';
 
 interface StudentLedgerProps {
   students: { id: string; name: string; email: string }[];
 }
 
 export function StudentLedger({ students }: StudentLedgerProps) {
+  const { currency, locale, timezone } = useBusinessConfig();
+  const fmtCurrency = (amt: number, opts?: { maximumFractionDigits?: number }) => formatCurrency(amt, currency, locale, opts);
+  const fmtDate = (iso: string | null | undefined) => {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString(locale, { timeZone: timezone, day: 'numeric', month: 'short', year: 'numeric' });
+  };
+  const fmtDateShort = (iso: string | null | undefined) => {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString(locale, { timeZone: timezone });
+  };
   const [selectedStudentId, setSelectedStudentId] = useState('');
   const [plans, setPlans] = useState<PaymentPlan[]>([]);
   const [loading, setLoading] = useState(false);
@@ -234,13 +250,13 @@ export function StudentLedger({ students }: StudentLedgerProps) {
                     </p>
                     <p className="text-xs text-gray-500">
                       {stdFee != null ? (
-                        <>Std ₹{Number(stdFee).toFixed(0)} − Disc ₹{Number(disc).toFixed(0)} = </>
+                        <>Std {fmtCurrency(Number(stdFee), { maximumFractionDigits: 0 })} − Disc {fmtCurrency(Number(disc), { maximumFractionDigits: 0 })} = </>
                       ) : null}
-                      Final ₹{plan.total_amount.toFixed(2)} —{' '}
+                      Final {fmtCurrency(plan.total_amount)} —{' '}
                       {hasBooking ? (
-                        <>Booking ₹{Number(booking).toFixed(2)} · Remaining ₹{remaining.toFixed(2)} · </>
+                        <>Booking {fmtCurrency(Number(booking))} · Remaining {fmtCurrency(remaining)} · </>
                       ) : null}
-                      {plan.installment_count} EMI(s) after booking — Paid EMIs: ₹{totalPaid.toFixed(2)}
+                      {plan.installment_count} EMI(s) after booking — Paid EMIs: {fmtCurrency(totalPaid)}
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
@@ -272,15 +288,15 @@ export function StudentLedger({ students }: StudentLedgerProps) {
                         <p className="text-xs font-medium text-gray-500">Booking Amount</p>
                         <p className="text-sm font-semibold text-gray-900">
                           {hasBooking
-                            ? `₹${Number(booking).toFixed(2)} ${Number(booking) === 0 ? '(No booking required)' : ''}`
+                            ? `${fmtCurrency(Number(booking))} ${Number(booking) === 0 ? '(No booking required)' : ''}`
                             : 'Not configured (legacy plan)'}
                         </p>
                         <p className="text-xs text-gray-400">
-                          Independent payment — not EMI #1 · {hasBooking ? `Remaining for EMIs: ₹${remaining.toFixed(2)}` : `Full fee in EMIs: ₹${plan.total_amount.toFixed(2)}`}
+                          Independent payment — not EMI #1 · {hasBooking ? `Remaining for EMIs: ${fmtCurrency(remaining)}` : `Full fee in EMIs: ${fmtCurrency(plan.total_amount)}`}
                         </p>
                         {hasBooking && bookingReceipt?.email_sent_at && (
                           <p className="mt-1 text-xs text-green-600">
-                            Sent {new Date(bookingReceipt.email_sent_at).toLocaleDateString()} to {bookingReceipt.email_sent_to}
+                            Sent {fmtDateShort(bookingReceipt.email_sent_at)} to {bookingReceipt.email_sent_to}
                           </p>
                         )}
                       </div>
@@ -301,7 +317,7 @@ export function StudentLedger({ students }: StudentLedgerProps) {
                               onClick={() => handleSendReceipt(bookingReceipt.id)}
                               disabled={sendingIds.has(bookingReceipt.id)}
                               className={`inline-flex min-h-[36px] min-w-[44px] items-center justify-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium text-white ${bookingReceipt.email_sent_at ? 'bg-blue-600 hover:bg-blue-700' : 'bg-brand-600 hover:bg-brand-700'} disabled:opacity-50`}
-                              title={bookingReceipt.email_sent_at ? `Sent ${new Date(bookingReceipt.email_sent_at).toLocaleDateString()} — click to resend` : 'Send booking receipt email'}
+                              title={bookingReceipt.email_sent_at ? `Sent ${fmtDateShort(bookingReceipt.email_sent_at)} — click to resend` : 'Send booking receipt email'}
                             >
                               {sendingIds.has(bookingReceipt.id) ? <Loader2 className="h-3 w-3 animate-spin" /> : <Mail className="h-3 w-3" />}
                               {sendingIds.has(bookingReceipt.id) ? 'Sending…' : bookingReceipt.email_sent_at ? 'Resend' : 'Send Email'}
@@ -338,17 +354,10 @@ export function StudentLedger({ students }: StudentLedgerProps) {
                               {inst.installment_number}
                             </td>
                             <td className="py-2 pr-4 text-gray-700">
-                              {new Date(inst.due_date).toLocaleDateString(
-                                'en-IN',
-                                {
-                                  day: 'numeric',
-                                  month: 'short',
-                                  year: 'numeric',
-                                },
-                              )}
+                              {fmtDate(inst.due_date)}
                             </td>
                             <td className="py-2 pr-4 font-medium text-gray-900">
-                              &#x20B9; {inst.amount.toFixed(2)}
+                              {fmtCurrency(inst.amount)}
                             </td>
                             <td className="py-2 pr-4">
                               {inst.status === 'paid' ? (
@@ -399,7 +408,7 @@ export function StudentLedger({ students }: StudentLedgerProps) {
                                         onClick={() => handleSendReceipt(receipt.id)}
                                         disabled={isSending}
                                         className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-white ${isSent ? 'bg-blue-600 hover:bg-blue-700' : 'bg-brand-600 hover:bg-brand-700'} disabled:opacity-50`}
-                                        title={isSent ? `Sent ${new Date(receipt.email_sent_at).toLocaleDateString()} — click to resend` : 'Send receipt email'}
+                                        title={isSent ? `Sent ${fmtDateShort(receipt.email_sent_at)} — click to resend` : 'Send receipt email'}
                                       >
                                         {isSending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Mail className="h-3 w-3" />}
                                         {isSending ? 'Sending…' : isSent ? 'Resend' : 'Send Email'}
@@ -422,7 +431,7 @@ export function StudentLedger({ students }: StudentLedgerProps) {
                           return (
                             <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
                               <p className="text-xs font-medium text-gray-500">Full-Course GST Invoice</p>
-                              <p className="text-xs text-gray-400">Invoice generating… (₹{Number(plan.total_amount).toFixed(2)} final agreed fee)</p>
+                              <p className="text-xs text-gray-400">Invoice generating… ({fmtCurrency(Number(plan.total_amount))} final agreed fee)</p>
                             </div>
                           );
                         }
@@ -433,11 +442,11 @@ export function StudentLedger({ students }: StudentLedgerProps) {
                             <div className="min-w-0">
                               <p className="text-xs font-medium text-gray-500">Full-Course GST Invoice</p>
                               <p className="text-sm font-semibold text-gray-900">
-                                {invoice.invoice_number} — ₹{Number(invoice.total_amount).toFixed(2)}
+                                {invoice.invoice_number} — {fmtCurrency(Number(invoice.total_amount))}
                               </p>
                               {isSent && (
                                 <p className="mt-1 text-xs text-green-600">
-                                  Sent {new Date(invoice.email_sent_at).toLocaleDateString()} to {invoice.email_sent_to}
+                                  Sent {fmtDateShort(invoice.email_sent_at)} to {invoice.email_sent_to}
                                 </p>
                               )}
                               {!isSent && <p className="text-xs text-gray-400">Not yet sent</p>}
@@ -455,7 +464,7 @@ export function StudentLedger({ students }: StudentLedgerProps) {
                                 onClick={() => handleSendInvoice(invoice.id)}
                                 disabled={isSending}
                                 className={`inline-flex min-h-[36px] min-w-[44px] items-center justify-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium text-white ${isSent ? 'bg-blue-600 hover:bg-blue-700' : 'bg-brand-600 hover:bg-brand-700'} disabled:opacity-50`}
-                                title={isSent ? `Sent ${new Date(invoice.email_sent_at).toLocaleDateString()} — click to resend` : 'Send invoice email'}
+                                title={isSent ? `Sent ${fmtDateShort(invoice.email_sent_at)} — click to resend` : 'Send invoice email'}
                               >
                                 {isSending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Mail className="h-3 w-3" />}
                                 {isSending ? 'Sending…' : isSent ? 'Resend' : 'Send Email'}
