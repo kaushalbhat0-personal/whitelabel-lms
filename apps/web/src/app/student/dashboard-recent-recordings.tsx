@@ -3,16 +3,10 @@
 import Link from 'next/link';
 import { PlayCircle, Clock } from 'lucide-react';
 import { type StudentVideo } from '@/lib/api/videos';
+import { useBusinessConfig } from '@/components/providers/BusinessConfigProvider';
 
 interface Props {
   recordings: StudentVideo[];
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-IN', {
-    day: 'numeric',
-    month: 'short',
-  });
 }
 
 function secondsToMinutes(seconds: number) {
@@ -21,6 +15,12 @@ function secondsToMinutes(seconds: number) {
 }
 
 export function DashboardRecentRecordings({ recordings }: Props) {
+  const { locale, timezone } = useBusinessConfig();
+  const formatDate = (iso: string) => {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString(locale, { timeZone: timezone, day: 'numeric', month: 'short' });
+  };
   const recent = recordings.slice(0, 4);
 
   if (recent.length === 0) return null;

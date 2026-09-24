@@ -3,20 +3,20 @@
 import Link from 'next/link';
 import { PlayCircle, Clock, Film } from 'lucide-react';
 import type { GroupedRecording } from '@/lib/api/videos';
+import { useBusinessConfig } from '@/components/providers/BusinessConfigProvider';
 
 interface Props {
   videos: GroupedRecording[];
   hideHeader?: boolean;
 }
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-IN', {
-    day: 'numeric',
-    month: 'short',
-  });
-}
-
 export function CourseDetailRecordings({ videos, hideHeader }: Props) {
+  const { locale, timezone } = useBusinessConfig();
+  const formatDate = (iso: string) => {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString(locale, { timeZone: timezone, day: 'numeric', month: 'short' });
+  };
   if (videos.length === 0) {
     if (hideHeader) {
       return (

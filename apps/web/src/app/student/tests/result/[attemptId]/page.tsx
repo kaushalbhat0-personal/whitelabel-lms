@@ -9,6 +9,7 @@ import {
 import { getStudentResult } from '@/lib/api/assessments';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { cn } from '@/lib/utils';
+import { useBusinessConfig } from '@/components/providers/BusinessConfigProvider';
 
 function formatTime(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -26,16 +27,6 @@ function safeParseAnswer(val: any): any {
   } catch {
     return val;
   }
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
 }
 
 interface ReviewQuestion {
@@ -96,6 +87,12 @@ function StatCard({ icon: Icon, label, value, color }: { icon: any; label: strin
 }
 
 export default function TestResultPage() {
+  const { locale, timezone } = useBusinessConfig();
+  const formatDate = (iso: string) => {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString(locale, { timeZone: timezone, day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
   const params = useParams();
   const router = useRouter();
   const attemptId = params.attemptId as string;

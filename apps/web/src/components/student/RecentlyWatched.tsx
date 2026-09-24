@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { Clock, Play } from 'lucide-react';
 import type { Watchable } from './ContinueWatching';
+import { useBusinessConfig } from '@/components/providers/BusinessConfigProvider';
 
 function formatDuration(seconds: number): string {
   if (!isFinite(seconds) || seconds < 0) return '0:00';
@@ -15,19 +16,6 @@ function formatDuration(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-function timeAgo(dateStr: string | null): string {
-  if (!dateStr) return '';
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(dateStr).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-}
-
 interface RecentlyItem extends Watchable {
   progress: Watchable['progress'] & {
     watchedSeconds?: number;
@@ -36,6 +24,19 @@ interface RecentlyItem extends Watchable {
 }
 
 export function RecentlyWatched({ recordings }: { recordings: Watchable[] }) {
+  const { locale, timezone } = useBusinessConfig();
+  const timeAgo = (dateStr: string | null): string => {
+    if (!dateStr) return '';
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'Just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days}d ago`;
+    return new Date(dateStr).toLocaleDateString(locale, { timeZone: timezone, day: 'numeric', month: 'short' });
+  };
   const items: RecentlyItem[] = [...recordings]
     .map((v) => ({
       id: v.id,

@@ -6,6 +6,7 @@ import { Calendar, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import Hls from 'hls.js';
 import { usePlaybackToken } from '@/hooks/usePlaybackToken';
 import { usePlayerPreferences } from '@/hooks/usePlayerPreferences';
+import { useBusinessConfig } from '@/components/providers/BusinessConfigProvider';
 import { updateVideoProgress, getMyVideosGrouped, type StudentBatchRecordings } from '@/lib/api/videos';
 import { WatermarkOverlay } from '@/components/shared/WatermarkOverlay';
 import { ScreenRecordingDetector } from '@/components/shared/ScreenRecordingDetector';
@@ -30,7 +31,8 @@ interface Props {
   recordingId: string;
   sessionId: string;
   title: string;
-  date: string;
+  date?: string;
+  createdAt?: string | null;
 }
 
 function formatLabel(height: number): string {
@@ -45,7 +47,17 @@ export function VideoPlayerClient({
   sessionId,
   title,
   date,
+  createdAt,
 }: Props) {
+  const { locale, timezone } = useBusinessConfig();
+  const formattedDate = (() => {
+    if (createdAt) {
+      const d = new Date(createdAt);
+      if (!isNaN(d.getTime())) return d.toLocaleDateString(locale, { timeZone: timezone, day: 'numeric', month: 'short', year: 'numeric' });
+    }
+    if (date) return date;
+    return null;
+  })();
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const lastReportRef = useRef(0);
@@ -731,10 +743,10 @@ export function VideoPlayerClient({
           <h2 className="text-base font-bold leading-tight text-text-primary line-clamp-2 break-words">
             {title || 'Recording'}
           </h2>
-          {date && (
+          {formattedDate && (
             <p className="mt-1.5 flex items-center gap-1.5 text-xs text-text-muted">
               <Calendar className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              {date}
+              {formattedDate}
             </p>
           )}
           <p className="mt-2 text-xs leading-relaxed text-text-secondary">

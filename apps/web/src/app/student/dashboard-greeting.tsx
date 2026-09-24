@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useBusinessConfig } from '@/components/providers/BusinessConfigProvider';
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -9,22 +10,17 @@ function getGreeting() {
   return 'Good evening';
 }
 
-function formatDate() {
-  return new Date().toLocaleDateString('en-IN', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'short',
-  });
-}
-
 export function DashboardGreeting() {
+  const { locale, timezone } = useBusinessConfig();
   const [greeting, setGreeting] = useState('');
   const [dateStr, setDateStr] = useState('');
 
   useEffect(() => {
     setGreeting(getGreeting());
-    setDateStr(formatDate());
-  }, []);
+    setDateStr(
+      new Date().toLocaleDateString(locale, { timeZone: timezone, weekday: 'long', day: 'numeric', month: 'short' }),
+    );
+  }, [locale, timezone]);
 
   return (
     <div className="rounded-card bg-brand-navy p-5 text-white">

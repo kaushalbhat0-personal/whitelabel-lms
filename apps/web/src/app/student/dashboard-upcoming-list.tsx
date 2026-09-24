@@ -2,27 +2,24 @@
 
 import { Calendar, Clock } from 'lucide-react';
 import { type LiveSession } from '@/lib/api/live-sessions';
+import { useBusinessConfig } from '@/components/providers/BusinessConfigProvider';
 
 interface Props {
   sessions: LiveSession[];
 }
 
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString('en-IN', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-IN', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-  });
-}
-
 export function DashboardUpcomingList({ sessions }: Props) {
+  const { locale, timezone } = useBusinessConfig();
+  const formatTime = (iso: string) => {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleTimeString(locale, { timeZone: timezone, hour: '2-digit', minute: '2-digit' });
+  };
+  const formatDate = (iso: string) => {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString(locale, { timeZone: timezone, weekday: 'short', day: 'numeric', month: 'short' });
+  };
   if (sessions.length === 0) return null;
 
   return (

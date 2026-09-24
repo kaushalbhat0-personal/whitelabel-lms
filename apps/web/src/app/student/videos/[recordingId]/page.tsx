@@ -10,17 +10,13 @@ interface Props {
 
 export default async function StudentVideoPlayerPage({ params }: Props) {
   let videoTitle = '';
-  let videoDate = '';
+  let videoCreatedAt: string | null = null;
 
   try {
     const video = await getVideoMeta(params.recordingId);
     if (video) {
       videoTitle = video.title;
-      videoDate = new Date(video.created_at).toLocaleDateString('en-IN', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-      });
+      videoCreatedAt = video.created_at ?? null;
     }
   } catch {
     // Metadata unavailable — player will still work
@@ -34,7 +30,7 @@ export default async function StudentVideoPlayerPage({ params }: Props) {
           recordingId={params.recordingId}
           sessionId=""
           title={videoTitle}
-          date={videoDate}
+          createdAt={videoCreatedAt}
         />
       </div>
     </div>

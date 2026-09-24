@@ -5,20 +5,19 @@ import { PlayCircle, Clock, Film } from 'lucide-react';
 import { type StudentVideo } from '@/lib/api/videos';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';
+import { useBusinessConfig } from '@/components/providers/BusinessConfigProvider';
 
 interface Props {
   recordings: StudentVideo[];
 }
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
-}
-
 export function RecordingsList({ recordings }: Props) {
+  const { locale, timezone } = useBusinessConfig();
+  const formatDate = (iso: string) => {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString(locale, { timeZone: timezone, day: 'numeric', month: 'short', year: 'numeric' });
+  };
   if (recordings.length === 0) {
     return (
       <EmptyState

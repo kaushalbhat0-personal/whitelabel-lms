@@ -4,21 +4,22 @@ import Link from 'next/link';
 import { Clock, Play } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import type { StudentVideo } from '@/lib/api/videos';
-
-function timeAgo(dateStr: string | null): string {
-  if (!dateStr) return '';
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(dateStr).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-}
+import { useBusinessConfig } from '@/components/providers/BusinessConfigProvider';
 
 export function RecentLearning({ recordings }: { recordings: StudentVideo[] }) {
+  const { locale, timezone } = useBusinessConfig();
+  const timeAgo = (dateStr: string | null): string => {
+    if (!dateStr) return '';
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'Just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days}d ago`;
+    return new Date(dateStr).toLocaleDateString(locale, { timeZone: timezone, day: 'numeric', month: 'short' });
+  };
   const items = [...recordings]
     .filter((r) => (r.progress.watched_seconds ?? 0) > 0)
     .sort((a, b) => {

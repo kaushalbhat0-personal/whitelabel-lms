@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { ExternalLink, Loader2, Users } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth.store';
+import { useBusinessConfig } from '@/components/providers/BusinessConfigProvider';
 import { ZoomWebinarPlayer } from '@/components/student/zoom-webinar-player';
 import { WatermarkOverlay } from '@/components/shared/WatermarkOverlay';
 import { ScreenRecordingDetector } from '@/components/shared/ScreenRecordingDetector';
@@ -78,6 +79,7 @@ export function LiveSessionClient({ session }: Props) {
 }
 
 function SessionJoinFallback({ session }: { session: LiveSessionWithDetails }) {
+  const { locale, timezone } = useBusinessConfig();
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [liveSessionId] = useState(() => crypto.randomUUID());
@@ -142,7 +144,7 @@ function SessionJoinFallback({ session }: { session: LiveSessionWithDetails }) {
       <div className="relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 py-16 text-gray-500">
         <p className="text-lg font-medium">{session.topic}</p>
         <p className="mt-1 text-sm">
-          {new Date(session.start_time).toLocaleString('en-IN')}
+          {new Date(session.start_time).toLocaleString(locale, { timeZone: timezone, day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
         </p>
         {session.matchingBatches && session.matchingBatches.length > 0 && (
           <p

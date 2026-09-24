@@ -6,16 +6,15 @@ import { BarChart3, FileText, Eye } from 'lucide-react';
 import { getMyResults } from '@/lib/api/assessments';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { cn } from '@/lib/utils';
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
-}
+import { useBusinessConfig } from '@/components/providers/BusinessConfigProvider';
 
 export default function ResultsPage() {
+  const { locale, timezone } = useBusinessConfig();
+  const formatDate = (iso: string) => {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString(locale, { timeZone: timezone, day: 'numeric', month: 'short', year: 'numeric' });
+  };
   const router = useRouter();
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
