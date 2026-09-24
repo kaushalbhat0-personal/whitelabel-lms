@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { LiveSessionsService } from './live-sessions.service';
 import { SupabaseService } from '../../common/services/supabase.service';
 import { BatchesService } from '../batches/batches.service';
-import { ZoomService } from '../zoom/zoom.service';
+import { LIVE_PROVIDER } from '../live-provider/live-provider.types';
 import { ObservabilityService } from '../observability/observability.service';
 import { ConfigService } from '@nestjs/config';
 import { RedisService } from '@liaoliaots/nestjs-redis';
@@ -41,7 +41,7 @@ function createService(client: any) {
       LiveSessionsService,
       { provide: SupabaseService, useValue: { client } },
       { provide: BatchesService, useValue: { findById: jest.fn().mockResolvedValue({ id: 'b1' }) } },
-      { provide: ZoomService, useValue: { createWebinar: jest.fn(), registerAttendee: jest.fn(), deleteWebinar: jest.fn() } },
+      { provide: LIVE_PROVIDER, useValue: { createWebinar: jest.fn(), registerAttendee: jest.fn(), deleteWebinar: jest.fn() } },
       { provide: ObservabilityService, useValue: { logEvent: jest.fn() } },
       { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue(null) } },
       { provide: RedisService, useValue: { getOrThrow: () => ({ get: jest.fn(), setex: jest.fn(), del: jest.fn(), scan: jest.fn().mockResolvedValue(['0', []]) }) } },

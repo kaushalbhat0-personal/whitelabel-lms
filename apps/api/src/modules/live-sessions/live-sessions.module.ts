@@ -15,11 +15,11 @@ import { Module } from '@nestjs/common';
 import { LiveSessionsController } from './live-sessions.controller';
 import { LiveSessionsService } from './live-sessions.service';
 import { BatchesModule } from '../batches/batches.module';
-import { ZoomModule } from '../zoom/zoom.module';
+import { LiveProviderModule } from '../live-provider/live-provider.module';
 import { ObservabilityModule } from '../observability/observability.module';
 
 @Module({
-  imports: [BatchesModule, ZoomModule, ObservabilityModule],
+  imports: [BatchesModule, LiveProviderModule, ObservabilityModule],
   controllers: [LiveSessionsController],
   providers: [LiveSessionsService],
   exports: [LiveSessionsService],

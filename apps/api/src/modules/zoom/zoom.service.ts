@@ -29,6 +29,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import * as crypto from 'crypto';
+import { DEFAULT_TIMEZONE } from '../../common/config/defaults';
 
 export interface CreateWebinarDto {
   /** Display title of the webinar */
@@ -208,7 +209,7 @@ export class ZoomService {
       type: 5,
       start_time: startTime,
       duration: dto.durationMinutes,
-      timezone: 'Asia/Kolkata',
+      timezone: DEFAULT_TIMEZONE,
       settings: {
         hd_video: false, // Explicit OFF to avoid inheriting account default ON for screen-share HD
         practice_session: false,

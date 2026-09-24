@@ -3,7 +3,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { LiveSessionsService } from './live-sessions.service';
 import { SupabaseService } from '../../common/services/supabase.service';
 import { BatchesService } from '../batches/batches.service';
-import { ZoomService } from '../zoom/zoom.service';
+import { LIVE_PROVIDER } from '../live-provider/live-provider.types';
 import { ObservabilityService } from '../observability/observability.service';
 import { ConfigService } from '@nestjs/config';
 import { RedisService } from '@liaoliaots/nestjs-redis';
@@ -62,7 +62,7 @@ describe('LiveSessionsService', () => {
         LiveSessionsService,
         { provide: SupabaseService, useValue: { client } },
         { provide: BatchesService, useValue: { findById: jest.fn().mockResolvedValue({ id: 'b1' }) } },
-        { provide: ZoomService, useValue: zoom },
+        { provide: LIVE_PROVIDER, useValue: zoom },
         { provide: ObservabilityService, useValue: { logEvent: jest.fn().mockResolvedValue(undefined) } },
         { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('df981417-5356-4c64-8a2b-66ef7720162c') } },
         { provide: RedisService, useValue: { getOrThrow: () => redis } },
@@ -124,7 +124,7 @@ describe('LiveSessionsService', () => {
           LiveSessionsService,
           { provide: SupabaseService, useValue: { client: { from: jest.fn() } } },
           { provide: BatchesService, useValue: { findById: jest.fn() } },
-          { provide: ZoomService, useValue: zoom },
+          { provide: LIVE_PROVIDER, useValue: zoom },
           { provide: ObservabilityService, useValue: { logEvent: jest.fn() } },
           { provide: ConfigService, useValue: config },
           { provide: RedisService, useValue: { getOrThrow: () => redis } },

@@ -30,7 +30,6 @@ import Redis from 'ioredis';
 import * as crypto from 'crypto';
 import { SupabaseService } from '../../common/services/supabase.service';
 import { BatchesService } from '../batches/batches.service';
-import { ZoomService } from '../zoom/zoom.service';
 import { ObservabilityService } from '../observability/observability.service';
 import { RedisCacheService } from '../../common/services/redis-cache.service';
 import { TABLES } from '../../common/constants/tables.constant';
@@ -38,6 +37,9 @@ import { REDIS_KEYS, REDIS_TTL } from '../../common/constants/redis-keys.constan
 import { Transaction } from '../../common/utils/transaction.util';
 import { logEntityEvent } from '../../common/utils/observability-helper';
 import { CreateSessionDto } from './dto/create-session.dto';
+import { Inject } from '@nestjs/common';
+import { LIVE_PROVIDER, LiveProvider } from '../live-provider/live-provider.types';
+import { DEFAULT_TIMEZONE } from '../../common/config/defaults';
 
 type JoinOutcome =
   | 'granted'
@@ -55,7 +57,7 @@ export class LiveSessionsService {
   constructor(
     private readonly supabaseService: SupabaseService,
     private readonly batchesService: BatchesService,
-    private readonly zoomService: ZoomService,
+    @Inject(LIVE_PROVIDER) private readonly liveProvider: LiveProvider,
     private readonly observabilityService: ObservabilityService,
     private readonly configService: ConfigService,
     redisService: RedisService,
@@ -106,12 +108,15 @@ export class LiveSessionsService {
       await this.batchesService.findById(batchId);
     }
 
-    // ── Step 3: Create Zoom webinar ────────────────────────────
-    const webinar = await this.zoomService.createWebinar({
+    // ── Step 3: Create live webinar via LiveProvider ─────────
+    // Phase 1: timezone comes from DEFAULT_TIMEZONE; Phase 2 will wire
+    // BusinessConfig.timezone ?? DEFAULT_TIMEZONE here.
+    const webinar = await this.liveProvider.createWebinar({
       topic: dto.topic,
       agenda: dto.agenda,
       startTime: dto.startTime,
       durationMinutes: dto.durationMinutes,
+      timezone: DEFAULT_TIMEZONE,
     });
 
     // ── Step 4: Insert session into database ───────────────────
@@ -133,7 +138,7 @@ export class LiveSessionsService {
     if (sessionError) {
       this.logger.error(`Failed to create session: ${sessionError.message}`);
       try {
-        await this.zoomService.deleteWebinar(webinar.webinarId);
+        await this.liveProvider.deleteWebinar(webinar.webinarId);
       } catch (e) {
         this.logger.warn(`Failed to clean up orphan webinar ${webinar.webinarId}: ${(e as Error).message}`);
       }
@@ -180,11 +185,11 @@ export class LiveSessionsService {
     const students = Array.from(studentMap.values());
     let registrantCount = 0;
 
-    // ── Step 7: Register each student with Zoom ────────────────
+    // ── Step 7: Register each student via LiveProvider ─────────
     const registrantRecords: any[] = [];
     for (const student of students) {
       try {
-        const joinUrl = await this.zoomService.registerAttendee(
+        const joinUrl = await this.liveProvider.registerAttendee(
           webinar.webinarId,
           { name: student.name, email: student.email },
         );
@@ -887,7 +892,7 @@ export class LiveSessionsService {
           .eq('id', userId)
           .single();
         if (profile?.email) {
-          personalJoinUrl = await this.zoomService.registerAttendee(session.zoom_webinar_id, {
+          personalJoinUrl = await this.liveProvider.registerAttendee(session.zoom_webinar_id, {
             name: profile.name ?? 'Student',
             email: profile.email,
           });
@@ -1154,7 +1159,7 @@ export class LiveSessionsService {
         .single();
       if (existing?.zoom_webinar_id) {
         try {
-          await this.zoomService.deleteWebinar(existing.zoom_webinar_id);
+          await this.liveProvider.deleteWebinar(existing.zoom_webinar_id);
         } catch (e) {
           this.logger.warn(`Failed to delete Zoom webinar on cancel ${existing.zoom_webinar_id}: ${(e as Error).message}`);
         }
@@ -1210,10 +1215,10 @@ export class LiveSessionsService {
       throw new NotFoundException(`Session ${id} not found`);
     }
 
-    // Cancel the Zoom webinar best-effort; proceed with DB cleanup regardless.
+    // Cancel the live webinar best-effort; proceed with DB cleanup regardless.
     if (session.zoom_webinar_id) {
       try {
-        await this.zoomService.deleteWebinar(session.zoom_webinar_id);
+        await this.liveProvider.deleteWebinar(session.zoom_webinar_id);
       } catch (err) {
         this.logger.warn(
           `Failed to delete Zoom webinar ${session.zoom_webinar_id}: ${(err as Error).message}`,
