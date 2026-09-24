@@ -33,6 +33,14 @@ export interface BusinessConfig {
   legal_footer?: string;
 }
 
+export interface ThemeJson {
+  primary: string;
+  sidebarBg: string;
+  accent: string;
+}
+
+export type ThemeJsonPartial = Partial<ThemeJson>;
+
 export interface BusinessConfigPublic {
   business_name: string;
   logo_url?: string;
@@ -40,6 +48,7 @@ export interface BusinessConfigPublic {
   currency: string;
   locale: string;
   timezone: string;
+  theme_json: ThemeJson;
 }
 
 export async function getBusinessConfig() {

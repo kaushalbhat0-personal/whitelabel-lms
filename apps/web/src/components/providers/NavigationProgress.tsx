@@ -16,8 +16,8 @@ export function NavigationProgress() {
       <div
         className="h-full w-full origin-left bg-brand-600 motion-safe:animate-pulse"
         style={{
-          // Indeterminate bar — subtle shimmer without layout shift
-          background: 'linear-gradient(90deg, #059669 0%, #10b981 50%, #059669 100%)',
+          // Runtime brand primary — validated hex via CSS var; fallback matches DEFAULT_THEME_PRIMARY
+          background: 'linear-gradient(90deg, var(--brand-primary) 0%, var(--brand-primary) 50%, var(--brand-primary) 100%)',
           backgroundSize: '200% 100%',
         }}
       />

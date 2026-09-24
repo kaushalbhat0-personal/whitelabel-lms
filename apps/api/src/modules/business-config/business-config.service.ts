@@ -25,7 +25,11 @@ import {
   DEFAULT_CURRENCY,
   DEFAULT_LOCALE,
   DEFAULT_TIMEZONE,
+  DEFAULT_THEME_PRIMARY,
+  DEFAULT_THEME_SIDEBAR_BG,
+  DEFAULT_THEME_ACCENT,
 } from '../../common/config/defaults';
+import { isValidHex6 } from './dto/theme-json.dto';
 
 @Injectable()
 export class BusinessConfigService {
@@ -54,9 +58,28 @@ export class BusinessConfigService {
     return data;
   }
 
+  private resolveTheme(raw: unknown): {
+    primary: string;
+    sidebarBg: string;
+    accent: string;
+  } {
+    const fallback = {
+      primary: DEFAULT_THEME_PRIMARY,
+      sidebarBg: DEFAULT_THEME_SIDEBAR_BG,
+      accent: DEFAULT_THEME_ACCENT,
+    };
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return fallback;
+    const r = raw as Record<string, unknown>;
+    return {
+      primary: isValidHex6(r.primary) ? (r.primary as string) : fallback.primary,
+      sidebarBg: isValidHex6(r.sidebarBg) ? (r.sidebarBg as string) : fallback.sidebarBg,
+      accent: isValidHex6(r.accent) ? (r.accent as string) : fallback.accent,
+    };
+  }
+
   /**
    * Public presentation-safe subset — no sensitive financial/legal fields.
-   * Returns business_name, logo_url, favicon_url, currency, locale, timezone with DEFAULT_* fallbacks.
+   * Returns business_name, logo_url, favicon_url, currency, locale, timezone, theme_json with DEFAULT_* fallbacks.
    * Used by authenticated admin/student shell and browser metadata; never exposes gstin/pan/address/tax/etc.
    */
   async getPublicConfig(): Promise<{
@@ -66,6 +89,7 @@ export class BusinessConfigService {
     currency: string;
     locale: string;
     timezone: string;
+    theme_json: { primary: string; sidebarBg: string; accent: string };
   }> {
     const row = await this.getConfig();
     const r: any = row;
@@ -76,6 +100,7 @@ export class BusinessConfigService {
       currency: r.currency ?? DEFAULT_CURRENCY,
       locale: r.locale ?? DEFAULT_LOCALE,
       timezone: r.timezone ?? DEFAULT_TIMEZONE,
+      theme_json: this.resolveTheme(r.theme_json),
     };
   }
 
@@ -86,6 +111,12 @@ export class BusinessConfigService {
    */
   async updateConfig(dto: UpdateBusinessConfigDto) {
     const updateData: Record<string, any> = {};
+    // Fetch once for id + theme merge (avoid double query)
+    let cachedRow: any | null = null;
+    const getCachedRow = async () => {
+      if (!cachedRow) cachedRow = await this.getConfig();
+      return cachedRow;
+    };
 
     // Map camelCase DTO fields to snake_case DB columns
     if (dto.businessName !== undefined) updateData.business_name = dto.businessName;
@@ -115,13 +146,26 @@ export class BusinessConfigService {
     if (dto.supportPhone !== undefined) updateData.support_phone = dto.supportPhone;
     if (dto.website !== undefined) updateData.website = dto.website;
     if (dto.legalFooter !== undefined) updateData.legal_footer = dto.legalFooter;
+    if (dto.themeJson !== undefined) {
+      // DTO has already validated each field is ^#[0-9A-Fa-f]{6}$ and rejected unknown keys.
+      // Merge partial update onto existing theme_json so missing fields are preserved, not deleted.
+      const currentRaw = ((await getCachedRow()) as any).theme_json ?? {};
+      const current = typeof currentRaw === 'object' && currentRaw !== null && !Array.isArray(currentRaw) ? (currentRaw as Record<string, unknown>) : {};
+      const next: Record<string, string> = { ...current } as any;
+      // Only copy allowlisted validated keys
+      for (const k of ['primary', 'sidebarBg', 'accent'] as const) {
+        const v = (dto.themeJson as any)[k];
+        if (v !== undefined) next[k] = v;
+      }
+      updateData.theme_json = next;
+    }
 
     updateData.updated_at = new Date().toISOString();
 
     const { data, error } = await this.supabaseService.client
       .from(TABLES.BUSINESS_CONFIG)
       .update(updateData)
-      .eq('id', (await this.getConfig()).id)
+      .eq('id', (await getCachedRow()).id)
       .select()
       .single();
 

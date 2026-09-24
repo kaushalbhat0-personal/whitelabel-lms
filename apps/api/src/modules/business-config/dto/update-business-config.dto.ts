@@ -11,7 +11,9 @@
  *   - The business_config table has a UNIQUE index on TRUE to enforce single-row.
  *   - See shared-types BusinessConfig interface for the full shape.
  */
-import { IsOptional, IsString, MinLength, IsEmail, IsUrl, IsInt, Min, Max, IsNumber, IsIn } from 'class-validator';
+import { IsOptional, IsString, MinLength, IsEmail, IsUrl, IsInt, Min, Max, IsNumber, IsIn, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+import { ThemeJsonDto } from './theme-json.dto';
 
 export class UpdateBusinessConfigDto {
   @IsOptional()
@@ -134,4 +136,9 @@ export class UpdateBusinessConfigDto {
   @IsOptional()
   @IsString()
   legalFooter?: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ThemeJsonDto)
+  themeJson?: ThemeJsonDto;
 }

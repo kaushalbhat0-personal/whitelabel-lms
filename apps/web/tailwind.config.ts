@@ -15,15 +15,16 @@ const config: Config = {
           200: '#a7f3d0',
           300: '#6ee7b7',
           400: '#34d399',
-          500: '#10b981', // primary brand
-          600: '#059669',
-          700: '#047857',
-          800: '#065f46',
-          900: '#064e3b',
-          950: '#022c22',
-          deep: '#064e3b', // canonical — use this (same value as navy for visual stability)
-          navy: '#064e3b', // DEPRECATED alias → use brand.deep / brand-900
-          navyDark: '#022c22', // DEPRECATED alias → use brand-950
+          500: 'rgb(var(--brand-primary-rgb) / <alpha-value>)',
+          600: 'rgb(var(--brand-primary-rgb) / <alpha-value>)',
+          700: 'rgb(var(--brand-primary-rgb) / <alpha-value>)',
+          800: 'rgb(var(--brand-primary-rgb) / <alpha-value>)',
+          900: 'rgb(var(--brand-sidebar-rgb) / <alpha-value>)',
+          950: 'rgb(var(--brand-sidebar-rgb) / <alpha-value>)',
+          deep: 'rgb(var(--brand-sidebar-rgb) / <alpha-value>)',
+          navy: 'rgb(var(--brand-sidebar-rgb) / <alpha-value>)',
+          navyDark: 'rgb(var(--brand-sidebar-rgb) / <alpha-value>)',
+          accent: 'rgb(var(--brand-accent-rgb) / <alpha-value>)',
         },
         // ── Surface / Container colors ────────────────────────
         // UX-1A: surface.elevated duplicates surface.card (both #fff) — kept as alias for compat, prefer surface.card.
@@ -44,7 +45,7 @@ const config: Config = {
           secondary: '#4b5563',
           muted: '#5b687d', // was #6b7280 — darkened for AA on #f3f4f6 (P0)
           inverse: '#ffffff',
-          link: '#059669',
+          link: 'rgb(var(--brand-primary-rgb) / <alpha-value>)',
         },
         // ── Status indicators ──────────────────────────────────
         status: {
@@ -58,11 +59,11 @@ const config: Config = {
         },
         // ── Sidebar ────────────────────────────────────────────
         sidebar: {
-          bg: '#064e3b',
+          bg: 'rgb(var(--brand-sidebar-rgb) / <alpha-value>)',
           text: '#a7f3d0',
-          active: '#10b981',
-          hover: '#065f46',
-          divider: '#047857',
+          active: 'rgb(var(--brand-primary-rgb) / <alpha-value>)',
+          hover: 'rgb(var(--brand-sidebar-rgb) / <alpha-value>)',
+          divider: 'rgb(var(--brand-sidebar-rgb) / <alpha-value>)',
         },
       },
       fontFamily: {

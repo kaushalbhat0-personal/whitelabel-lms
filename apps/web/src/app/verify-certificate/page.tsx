@@ -88,7 +88,7 @@ function VerifyCertificateContent() {
 
           {view.kind === 'loading' && (
             <div className="flex flex-col items-center gap-4 py-8">
-              <Loader2 className="h-10 w-10 animate-spin" style={{ color: '#1e3a5f' }} />
+              <Loader2 className="h-10 w-10 animate-spin" style={{ color: 'var(--brand-sidebar)' }} />
               <p className="text-sm text-text-secondary">Verifying certificate...</p>
             </div>
           )}
@@ -157,7 +157,7 @@ function VerifyCertificateContent() {
           <div className="mt-6 pt-5 border-t border-surface-border">
             <p className="text-xs text-text-muted">
               Powered by{' '}
-              <span className="font-semibold" style={{ color: '#1e3a5f' }}>
+              <span className="font-semibold" style={{ color: 'var(--brand-sidebar)' }}>
                 {businessName}
               </span>
             </p>
@@ -185,7 +185,7 @@ export default function VerifyCertificatePage() {
           <div className="w-full max-w-md">
             <div className="rounded-card border border-surface-border bg-surface-card p-8 shadow-card text-center">
               <div className="flex flex-col items-center gap-4 py-8">
-                <Loader2 className="h-10 w-10 animate-spin" style={{ color: '#1e3a5f' }} />
+                <Loader2 className="h-10 w-10 animate-spin" style={{ color: 'var(--brand-sidebar)' }} />
                 <p className="text-sm text-text-secondary">Loading...</p>
               </div>
             </div>
