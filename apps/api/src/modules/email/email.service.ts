@@ -7,7 +7,12 @@ import { ObservabilityService } from '../observability/observability.service';
 import { EmailWebhookService } from './email-webhook.service';
 import { SupabaseService } from '../../common/services/supabase.service';
 import { TABLES } from '../../common/constants/tables.constant';
-import { DEFAULT_BUSINESS_NAME } from '../../common/config/defaults';
+import {
+  DEFAULT_BUSINESS_NAME,
+  DEFAULT_THEME_PRIMARY,
+  DEFAULT_THEME_SIDEBAR_BG,
+  DEFAULT_THEME_ACCENT,
+} from '../../common/config/defaults';
 import { EMAIL_TEMPLATES } from '../../common/constants/email-templates.constant';
 
 export interface EmailAttachment {
@@ -67,6 +72,51 @@ export class EmailService implements OnModuleInit {
       if (name && typeof name === 'string' && name.trim()) return name.trim();
     } catch {}
     return DEFAULT_BUSINESS_NAME;
+  }
+
+  private isValidHex6(v: unknown): boolean {
+    return typeof v === 'string' && /^#[0-9A-Fa-f]{6}$/.test(v as string);
+  }
+
+  private resolveTheme(raw: unknown): { primary: string; sidebarBg: string; accent: string } {
+    const fallback = {
+      primary: DEFAULT_THEME_PRIMARY,
+      sidebarBg: DEFAULT_THEME_SIDEBAR_BG,
+      accent: DEFAULT_THEME_ACCENT,
+    };
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return fallback;
+    const r = raw as Record<string, unknown>;
+    return {
+      primary: this.isValidHex6(r.primary) ? (r.primary as string) : fallback.primary,
+      sidebarBg: this.isValidHex6(r.sidebarBg) ? (r.sidebarBg as string) : fallback.sidebarBg,
+      accent: this.isValidHex6(r.accent) ? (r.accent as string) : fallback.accent,
+    };
+  }
+
+  private async getEmailBranding(): Promise<{
+    businessName: string;
+    theme: { primary: string; sidebarBg: string; accent: string };
+  }> {
+    try {
+      if (!this.supabaseService) {
+        return {
+          businessName: DEFAULT_BUSINESS_NAME,
+          theme: this.resolveTheme(null),
+        };
+      }
+      const { data } = await this.supabaseService.client
+        .from(TABLES.BUSINESS_CONFIG)
+        .select('business_name, theme_json')
+        .limit(1)
+        .maybeSingle();
+      const raw = data as any;
+      const name = raw?.business_name;
+      const businessName = name && typeof name === 'string' && name.trim() ? name.trim() : DEFAULT_BUSINESS_NAME;
+      const theme = this.resolveTheme(raw?.theme_json);
+      return { businessName, theme };
+    } catch {
+      return { businessName: DEFAULT_BUSINESS_NAME, theme: this.resolveTheme(null) };
+    }
   }
 
   async onModuleInit(): Promise<void> {
@@ -186,12 +236,12 @@ export class EmailService implements OnModuleInit {
     }
 
     try {
-      const businessName = await this.getBusinessName();
+      const { businessName, theme } = await this.getEmailBranding();
       const { data, error } = await this.resend.emails.send({
         from: this.fromAddress,
         to: toEmail,
         subject: 'Your LMS account is ready',
-        html: this.buildWelcomeEmailHtml(studentName, toEmail, tempPassword, this.frontendUrl, businessName),
+        html: this.buildWelcomeEmailHtml(studentName, toEmail, tempPassword, this.frontendUrl, businessName, theme),
         ...(this.replyToAddress ? { replyTo: this.replyToAddress } : {}),
       });
 
@@ -252,12 +302,12 @@ export class EmailService implements OnModuleInit {
     }
 
     try {
-      const businessName = await this.getBusinessName();
+      const { businessName, theme } = await this.getEmailBranding();
       const { data, error } = await this.resend.emails.send({
         from: this.fromAddress,
         to: toEmail,
         subject: 'New login to your LMS account',
-        html: this.buildLoginAlertHtml(userName, browser, os, ipAddress, frontendUrl, businessName),
+        html: this.buildLoginAlertHtml(userName, browser, os, ipAddress, frontendUrl, businessName, theme),
         ...(this.replyToAddress ? { replyTo: this.replyToAddress } : {}),
       });
 
@@ -331,8 +381,15 @@ export class EmailService implements OnModuleInit {
     password: string,
     loginUrl: string,
     businessName: string = DEFAULT_BUSINESS_NAME,
+    theme: { primary: string; sidebarBg: string; accent: string } = {
+      primary: DEFAULT_THEME_PRIMARY,
+      sidebarBg: DEFAULT_THEME_SIDEBAR_BG,
+      accent: DEFAULT_THEME_ACCENT,
+    },
   ): string {
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333;"><div style="background:#1e3a5f;padding:24px;border-radius:8px 8px 0 0;"><h1 style="color:white;margin:0;font-size:24px;">${businessName}</h1></div><div style="background:#f9f9f9;padding:32px;border-radius:0 0 8px 8px;border:1px solid #e0e0e0;"><h2 style="color:#1e3a5f;margin-top:0;">Welcome, ${name}!</h2><p>Your student account has been created. Here are your login details:</p><div style="background:white;border:1px solid #ddd;border-radius:6px;padding:20px;margin:20px 0;"><table style="width:100%;border-collapse:collapse;"><tr><td style="padding:8px 0;color:#666;width:140px;"><strong>Login URL</strong></td><td style="padding:8px 0;"><a href="${loginUrl}/login" style="color:#1e3a5f;">${loginUrl}/login</a></td></tr><tr style="border-top:1px solid #eee;"><td style="padding:8px 0;color:#666;"><strong>Email (User ID)</strong></td><td style="padding:8px 0;font-family:monospace;">${email}</td></tr><tr style="border-top:1px solid #eee;"><td style="padding:8px 0;color:#666;"><strong>Temporary Password</strong></td><td style="padding:8px 0;font-family:monospace;font-size:16px;letter-spacing:1px;"><strong>${password}</strong></td></tr></table></div><div style="background:#fff8e1;border-left:4px solid #f59e0b;padding:12px 16px;border-radius:4px;margin:16px 0;"><strong>Please change your password after first login</strong></div><p style="margin-top:24px;"><a href="${loginUrl}/login" style="background:#1e3a5f;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;">Login to ${businessName} &rarr;</a></p><p style="color:#888;font-size:13px;margin-top:32px;border-top:1px solid #eee;padding-top:16px;">If you did not expect this email, please ignore it or contact your administrator.<br>${businessName} &mdash; ${businessName}</p></div></body></html>`;
+    const sidebarBg = this.isValidHex6(theme.sidebarBg) ? theme.sidebarBg : DEFAULT_THEME_SIDEBAR_BG;
+    const accent = this.isValidHex6(theme.accent) ? theme.accent : DEFAULT_THEME_ACCENT;
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333;"><div style="background:${sidebarBg};padding:24px;border-radius:8px 8px 0 0;"><h1 style="color:white;margin:0;font-size:24px;">${businessName}</h1></div><div style="background:#f9f9f9;padding:32px;border-radius:0 0 8px 8px;border:1px solid #e0e0e0;"><h2 style="color:${sidebarBg};margin-top:0;">Welcome, ${name}!</h2><p>Your student account has been created. Here are your login details:</p><div style="background:white;border:1px solid #ddd;border-radius:6px;padding:20px;margin:20px 0;"><table style="width:100%;border-collapse:collapse;"><tr><td style="padding:8px 0;color:#666;width:140px;"><strong>Login URL</strong></td><td style="padding:8px 0;"><a href="${loginUrl}/login" style="color:${sidebarBg};">${loginUrl}/login</a></td></tr><tr style="border-top:1px solid #eee;"><td style="padding:8px 0;color:#666;"><strong>Email (User ID)</strong></td><td style="padding:8px 0;font-family:monospace;">${email}</td></tr><tr style="border-top:1px solid #eee;"><td style="padding:8px 0;color:#666;"><strong>Temporary Password</strong></td><td style="padding:8px 0;font-family:monospace;font-size:16px;letter-spacing:1px;"><strong>${password}</strong></td></tr></table></div><div style="background:#fff8e1;border-left:4px solid ${accent};padding:12px 16px;border-radius:4px;margin:16px 0;"><strong>Please change your password after first login</strong></div><p style="margin-top:24px;"><a href="${loginUrl}/login" style="background:${sidebarBg};color:white;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;">Login to ${businessName} &rarr;</a></p><p style="color:#888;font-size:13px;margin-top:32px;border-top:1px solid #eee;padding-top:16px;">If you did not expect this email, please ignore it or contact your administrator.<br>${businessName} &mdash; ${businessName}</p></div></body></html>`;
   }
 
   private buildLoginAlertHtml(
@@ -342,7 +399,13 @@ export class EmailService implements OnModuleInit {
     ipAddress: string,
     frontendUrl: string,
     businessName: string = DEFAULT_BUSINESS_NAME,
+    theme: { primary: string; sidebarBg: string; accent: string } = {
+      primary: DEFAULT_THEME_PRIMARY,
+      sidebarBg: DEFAULT_THEME_SIDEBAR_BG,
+      accent: DEFAULT_THEME_ACCENT,
+    },
   ): string {
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333;"><div style="background:#1e3a5f;padding:24px;border-radius:8px 8px 0 0;"><h1 style="color:white;margin:0;font-size:24px;">${businessName}</h1></div><div style="background:#f9f9f9;padding:32px;border-radius:0 0 8px 8px;border:1px solid #e0e0e0;"><h2 style="color:#1e3a5f;margin-top:0;">New sign-in detected</h2><p>Hi ${userName},</p><p>A new device just signed in to your ${businessName} account:</p><div style="background:white;border:1px solid #ddd;border-radius:6px;padding:20px;margin:20px 0;"><table style="width:100%;border-collapse:collapse;"><tr><td style="padding:8px 0;color:#666;width:100px;"><strong>Browser</strong></td><td style="padding:8px 0;">${browser}</td></tr><tr style="border-top:1px solid #eee;"><td style="padding:8px 0;color:#666;"><strong>OS</strong></td><td style="padding:8px 0;">${os}</td></tr><tr style="border-top:1px solid #eee;"><td style="padding:8px 0;color:#666;"><strong>IP Address</strong></td><td style="padding:8px 0;font-family:monospace;">${ipAddress}</td></tr></table></div><p>If this was you, you can ignore this email.</p><p style="margin-top:24px;"><a href="${frontendUrl}/login" style="background:#1e3a5f;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;">Review Account &rarr;</a></p><p style="color:#888;font-size:13px;margin-top:32px;border-top:1px solid #eee;padding-top:16px;">If you did not sign in, please change your password immediately and contact support.<br>${businessName} &mdash; ${businessName}</p></div></body></html>`;
+    const sidebarBg = this.isValidHex6(theme.sidebarBg) ? theme.sidebarBg : DEFAULT_THEME_SIDEBAR_BG;
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333;"><div style="background:${sidebarBg};padding:24px;border-radius:8px 8px 0 0;"><h1 style="color:white;margin:0;font-size:24px;">${businessName}</h1></div><div style="background:#f9f9f9;padding:32px;border-radius:0 0 8px 8px;border:1px solid #e0e0e0;"><h2 style="color:${sidebarBg};margin-top:0;">New sign-in detected</h2><p>Hi ${userName},</p><p>A new device just signed in to your ${businessName} account:</p><div style="background:white;border:1px solid #ddd;border-radius:6px;padding:20px;margin:20px 0;"><table style="width:100%;border-collapse:collapse;"><tr><td style="padding:8px 0;color:#666;width:100px;"><strong>Browser</strong></td><td style="padding:8px 0;">${browser}</td></tr><tr style="border-top:1px solid #eee;"><td style="padding:8px 0;color:#666;"><strong>OS</strong></td><td style="padding:8px 0;">${os}</td></tr><tr style="border-top:1px solid #eee;"><td style="padding:8px 0;color:#666;"><strong>IP Address</strong></td><td style="padding:8px 0;font-family:monospace;">${ipAddress}</td></tr></table></div><p>If this was you, you can ignore this email.</p><p style="margin-top:24px;"><a href="${frontendUrl}/login" style="background:${sidebarBg};color:white;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;">Review Account &rarr;</a></p><p style="color:#888;font-size:13px;margin-top:32px;border-top:1px solid #eee;padding-top:16px;">If you did not sign in, please change your password immediately and contact support.<br>${businessName} &mdash; ${businessName}</p></div></body></html>`;
   }
 }
