@@ -9,9 +9,13 @@ import { ObservabilityService } from '../observability/observability.service';
 import { TABLES } from '../../common/constants/tables.constant';
 import { logEntityEvent } from '../../common/utils/observability-helper';
 import {
+  DEFAULT_BUSINESS_NAME,
   DEFAULT_CURRENCY,
   DEFAULT_LOCALE,
   DEFAULT_TIMEZONE,
+  DEFAULT_THEME_PRIMARY,
+  DEFAULT_THEME_SIDEBAR_BG,
+  DEFAULT_THEME_ACCENT,
 } from '../../common/config/defaults';
 
 @Injectable()
@@ -313,7 +317,7 @@ export class AchievementsService {
         .maybeSingle();
       verifyToken = (existing as any)?.token ?? c.id;
     }
-    // Fetch BusinessConfig for presentation (locale/timezone/businessName)
+    // Fetch BusinessConfig for presentation (locale/timezone/businessName + theme)
     let certBiz: any = null;
     try {
       const { data: bizData } = await this.supabaseService.client
@@ -325,7 +329,9 @@ export class AchievementsService {
     } catch { /* fallback to defaults */ }
     const certLocale = certBiz?.locale ?? DEFAULT_LOCALE;
     const certTimezone = certBiz?.timezone ?? DEFAULT_TIMEZONE;
-    const certBusinessName = certBiz?.business_name ?? 'LMS Platform';
+    const certBusinessName = certBiz?.business_name ?? DEFAULT_BUSINESS_NAME;
+    const certTheme = this.resolveTheme(certBiz?.theme_json);
+    const certSealText = this.deriveSealText(certBusinessName);
     let issueDateStr: string;
     try {
       issueDateStr = new Date(c.issued_at).toLocaleDateString(certLocale, {
@@ -349,6 +355,10 @@ export class AchievementsService {
       certificateNumber: c.certificate_number,
       verifyUrl: `${this.getFrontendUrl()}/verify-certificate?token=${verifyToken}`,
       businessName: certBusinessName,
+      sealText: certSealText,
+      primary: certTheme.primary,
+      sidebarBg: certTheme.sidebarBg,
+      accent: certTheme.accent,
     });
 
     try {
@@ -370,7 +380,7 @@ export class AchievementsService {
             <p>Congratulations on completing <strong>${c.courses?.name ?? 'Course'}</strong>!</p>
             <p>Your certificate (${c.certificate_number}) is attached to this email.</p>
             <p>You can also verify your certificate at any time: <a href="${this.getFrontendUrl()}/verify-certificate?token=${verifyToken}">Verify Certificate</a></p>
-            <p>— MCT Learn Team</p>`,
+            <p>— LMS Team</p>`,
           [{ filename: `Certificate-${c.certificate_number}.pdf`, content: pdfBuffer }],
         );
       }
@@ -428,6 +438,37 @@ export class AchievementsService {
 
   private getFrontendUrl(): string {
     return process.env.FRONTEND_URL ?? 'http://localhost:3000';
+  }
+
+  private isValidHex6(v: unknown): boolean {
+    return typeof v === 'string' && /^#[0-9A-Fa-f]{6}$/.test(v as string);
+  }
+
+  private resolveTheme(raw: unknown): { primary: string; sidebarBg: string; accent: string } {
+    const fallback = {
+      primary: DEFAULT_THEME_PRIMARY,
+      sidebarBg: DEFAULT_THEME_SIDEBAR_BG,
+      accent: DEFAULT_THEME_ACCENT,
+    };
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return fallback;
+    const r = raw as Record<string, unknown>;
+    return {
+      primary: this.isValidHex6(r.primary) ? (r.primary as string) : fallback.primary,
+      sidebarBg: this.isValidHex6(r.sidebarBg) ? (r.sidebarBg as string) : fallback.sidebarBg,
+      accent: this.isValidHex6(r.accent) ? (r.accent as string) : fallback.accent,
+    };
+  }
+
+  private deriveSealText(businessName: string): string {
+    const trimmed = (businessName ?? '').trim();
+    if (!trimmed) return 'LMS';
+    if (trimmed === DEFAULT_BUSINESS_NAME) return 'LMS';
+    const words = trimmed.split(/[\s\-_]+/).filter(Boolean);
+    if (words.length === 1) {
+      return words[0].slice(0, 3).toUpperCase();
+    }
+    const initials = words.map((w) => w[0].toUpperCase()).join('').slice(0, 4);
+    return initials || 'LMS';
   }
 
   private async countCompletedRecordings(userId: string): Promise<number> {
