@@ -192,7 +192,8 @@ export class AchievementsService {
     const v = verification as any;
 
     if (v.verified_at) {
-      return { status: 'already_verified', verifiedAt: v.verified_at };
+      const cert = await this.fetchVerifyCertificate(v.certificate_id);
+      return { status: 'already_verified', verifiedAt: v.verified_at, certificate: cert };
     }
 
     if (v.expires_at && new Date(v.expires_at) < new Date()) {
@@ -206,15 +207,30 @@ export class AchievementsService {
       .eq('id', v.id);
 
     // Fetch certificate details
-    const { data: cert } = await this.supabaseService.client
-      .from(TABLES.CERTIFICATES)
-      .select('*, courses(name), profiles(name, email)')
-      .eq('id', v.certificate_id)
-      .single();
+    const cert = await this.fetchVerifyCertificate(v.certificate_id);
 
     return {
       status: 'verified',
       certificate: cert,
+    };
+  }
+
+  // Normalized shape consumed by the web verify page
+  // (number/studentName/courseName/issueDate).
+  private async fetchVerifyCertificate(certificateId: string) {
+    const { data: cert } = await this.supabaseService.client
+      .from(TABLES.CERTIFICATES)
+      .select('id, certificate_number, issued_at, courses(name), profiles(name, email)')
+      .eq('id', certificateId)
+      .single();
+    const c = cert as any;
+    if (!c) return null;
+    return {
+      id: c.id,
+      number: c.certificate_number,
+      studentName: c.profiles?.name ?? null,
+      courseName: c.courses?.name ?? null,
+      issueDate: c.issued_at,
     };
   }
 
