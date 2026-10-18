@@ -47,3 +47,6 @@ create-e2e-users.js
 playwright-report/
 test-results/
 playwright/.cache/
+
+# Puppeteer Chrome binary (Render cache dir lives in-project)
+.puppeteer-cache/
