@@ -24,9 +24,9 @@ pnpm --filter @lms/web build
 
 ## Fresh Client Database (Supabase)
 
-**Source of truth:** `scripts/migrations/001_initial_schema.sql → 039_theme_json.sql` (canonical, `IF NOT EXISTS` idempotent).
+**Source of truth:** `scripts/migrations/001_initial_schema.sql → 040_security_rls_hardening.sql` (canonical, `IF NOT EXISTS` idempotent).
 
-**Generated artifact (do not edit):** `scripts/generated/fresh-supabase-init.sql` — deterministic concatenation of `001`→`039` in numeric order.
+**Generated artifact (do not edit):** `scripts/generated/fresh-supabase-init.sql` — deterministic concatenation of `001`→`040` in numeric order.
 
 **Ownership rule:**
 
@@ -44,12 +44,12 @@ scripts/generated/fresh-supabase-init.sql  GENERATED DEPLOYMENT ARTIFACT — DO 
    ```
    Verify determinism: `sha256sum scripts/generated/fresh-supabase-init.sql` (run twice → identical).
 3. Open Supabase Dashboard → SQL Editor → New Query.
-4. Copy the **complete** `scripts/generated/fresh-supabase-init.sql` (≈120 KB, 39 migrations, `001_initial_schema.sql` → `039_theme_json.sql`).
+4. Copy the **complete** `scripts/generated/fresh-supabase-init.sql` (≈129 KB, 40 migrations, `001_initial_schema.sql` → `040_security_rls_hardening.sql`).
 5. Paste and **Run**. The SQL is safe for a fresh empty database (`IF NOT EXISTS`, no `DROP`).
 6. Verify: run the verification queries in the `DATABASE VERIFICATION (runbook)` section below (expected: ~67 public tables, `business_config` 0 rows, `theme_json` column exists, `achievement_definitions` 5 rows).
 7. The database is now initialized (0 application rows; `achievement_definitions` 5 reference rows from `017`).
 
-**Future schema change:** Add `040_some_change.sql` to `scripts/migrations/`, then `pnpm db:generate` regenerates `fresh-supabase-init.sql` to `001→040`. Existing client DBs run only the new `040` via SQL Editor; new clients run the full `001→040` artifact.
+**Future schema change:** Add `041_some_change.sql` to `scripts/migrations/`, bump `EXPECTED_COUNT`/`EXPECTED_LAST` in `scripts/generate-fresh-sql.ts`, then `pnpm db:generate` regenerates `fresh-supabase-init.sql` to `001→041`. Existing client DBs run only the new `041` via SQL Editor (see §14 Migration Operating Convention — backup first); new clients run the full `001→041` artifact.
 
 **Drift check (CI/local):**
 ```bash
@@ -58,7 +58,7 @@ git diff --exit-code -- scripts/generated/fresh-supabase-init.sql
 ```
 Fails if migrations changed but artifact not regenerated.
 
-**Destructive helper:** `scripts/dev/reset-sessions.sql` (`DELETE FROM sessions`) is **not** part of `001→039` and must never be pasted into a client database.
+**Destructive helper:** `scripts/dev/reset-sessions.sql` (`DELETE FROM sessions`) is **not** part of `001→040` and must never be pasted into a client database.
 
 ---
 
@@ -68,6 +68,8 @@ Fails if migrations changed but artifact not regenerated.
 > Client #1, #2, #3 are the same process; only infrastructure credentials and BusinessConfig change.
 > NO source-code fork, NO `tenant_id`, NO source-code branding edits, NO shared database, NO provisioning system.
 > Do NOT commit `.env`. Never paste secrets into GitHub. Never put secrets in generated SQL or docs.
+
+> **Label legend used throughout:** **[REQUIRED]** = the deployment does not work without it. **[OPTIONAL]** = enable only if the client buys the feature; absence degrades loudly. **[PLAN-DEPENDENT]** = depends on the client's infra/provider plan. **[DEFERRED]** = intentionally out of scope. **[FUTURE]** = known improvement, not implemented (see §16).
 
 ## 0. PRE-FLIGHT (operator machine)
 
@@ -84,10 +86,10 @@ Fails if migrations changed but artifact not regenerated.
 |---|---|---|---|
 | 1 | Supabase dashboard → New project (client-owned). Note project URL + anon key + service-role key (dashboard → Project Settings → API). Keep the **admin access token** in local admin tooling only | project `ACTIVE_HEALTHY` | — |
 | 2 | Confirm `public` schema is empty (SQL Editor: `SELECT count(*) FROM information_schema.tables WHERE table_schema='public'` → small Supabase-managed count, **no** `business_config/profiles/courses`) | fresh DB | LMS tables already present → STOP, do not overwrite; escalate |
-| 3 | `pnpm db:generate` (body: `tsx scripts/generate-fresh-sql.ts`) | `scripts/generated/fresh-supabase-init.sql`, 39 migrations `001→039`, ~120 KB | count mismatch → migration added/removed; fix chain first |
-| 4 | SQL Editor → New Query → paste **complete** `fresh-supabase-init.sql` → Run | success, no errors | first error aborts: capture exact message + statement; known fixed defects: `ADD CONSTRAINT IF NOT EXISTS` (001), duplicate trigger (002) — must already be fixed in repo |
+| 3 | `pnpm db:generate` (body: `tsx scripts/generate-fresh-sql.ts`) | `scripts/generated/fresh-supabase-init.sql`, 40 migrations `001→040`, ~129 KB | count mismatch → migration added/removed; fix chain first |
+| 4 | SQL Editor → New Query → paste **complete** `fresh-supabase-init.sql` → Run | success, no errors | first error aborts: capture exact message + statement; known fixed defects: `ADD CONSTRAINT IF NOT EXISTS` (001), duplicate trigger (002) — must already be fixed in repo. If the editor rejects the ~129 KB paste, split strictly on `-- Migration: NNN_` header boundaries and run in order, then re-run §1 verification |
 | 5 | Run `DATABASE VERIFICATION` queries below | all expectations match | any mismatch → STOP, diagnose before proceeding |
-| 6 | Storage → confirm `uploads` bucket exists, private | `uploads`, `public=false` | re-run 013/034/036 only |
+| 6 | Storage → confirm `uploads` bucket exists, private; confirm `invoices` bucket exists, private (created canonically by migration 040, idempotent) | `uploads`, `invoices`, both `public=false` | bucket missing → apply migration 040 section only; never hand-create with public access |
 
 ### DATABASE VERIFICATION (runbook queries — Supabase SQL Editor)
 
@@ -112,6 +114,20 @@ SELECT (SELECT count(*) FROM business_config) AS business_config,   -- expect 0
 SELECT column_name, data_type, is_nullable FROM information_schema.columns
  WHERE table_schema='public' AND table_name='business_config' AND column_name='theme_json';
 -- expect: theme_json | jsonb | YES
+-- RLS default-deny (migration 040): all app tables must report rowsecurity=true
+SELECT count(*) AS rls_off_tables FROM pg_tables
+ WHERE schemaname='public' AND tablename NOT LIKE 'pg_%' AND NOT rowsecurity;
+-- expect: 0
+-- no permissive policies on app tables:
+SELECT count(*) AS open_policies FROM pg_policies
+ WHERE schemaname='public' AND (qual LIKE '%true%' OR with_check LIKE '%true%');
+-- expect: 0
+-- invoices bucket (private, canonical since 040):
+SELECT id, public FROM storage.buckets WHERE id IN ('uploads','invoices');
+-- expect: uploads|false, invoices|false
+-- fresh-state rows (invoices/receipts must also be 0):
+SELECT (SELECT count(*) FROM invoices) AS invoices,   -- expect 0
+       (SELECT count(*) FROM receipts) AS receipts;    -- expect 0
 ```
 
 ## 2. REDIS
@@ -133,6 +149,7 @@ Redis is **not** required for API boot or `/health`; it **is** required for logi
 | Start command | `node dist/apps/api/src/main.js` |
 | Health check | `GET /health` → 200 (canonical). `GET /` → 200 (compatibility, also used by e2e harness) |
 | Port | `PORT` (default `3001`) |
+| Puppeteer Chrome cache **[REQUIRED on Render]** | `PUPPETEER_CACHE_DIR=/opt/render/project/src/apps/api/.puppeteer-cache` — Render discards the default user cache (`~/.cache/puppeteer`) between build and runtime, so the Chrome downloaded by the build-time `postbuild` step would be missing at runtime and all PDF generation would 500. Pointing the cache inside the project directory makes the binary persist into the deployed image. `PUPPETEER_EXECUTABLE_PATH` is only needed for custom hosts with their own Chromium (optional). |
 
 Do NOT use `node dist/main` (stale — that file is never emitted). Do NOT invent `render.yaml`; configure the above in the Render dashboard.
 
@@ -152,8 +169,8 @@ Do NOT use `node dist/main` (stale — that file is never emitted). Do NOT inven
 | Key | Evidence |
 |---|---|
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY` | `apps/api/src/common/services/supabase.service.ts:32-40` throws if any missing |
-| `JWT_SECRET` | `app.module.ts:88` — no default; auth unusable without it |
-| `FRONTEND_URL` | `main.ts:31` CORS origin — **must equal the deployed Vercel origin** (never leave as `https://example.com`) |
+| `JWT_SECRET` | `app.module.ts:88` — no default; auth unusable without it. **[REQUIRED — verify, do not assume]** A missing/incorrect `JWT_SECRET` does NOT crash boot; it fails at login/token-verify time, which looks like an application bug. Treat JWT as deployment-blocking: the verification checklist (§9) requires a successful admin login before handoff. (Future hardening: fail-fast boot check — see §16.) |
+| `FRONTEND_URL` | `main.ts:31` CORS origin — **must equal the deployed Vercel origin** (never leave as `https://example.com`). Must be scheme+host with **no trailing slash** (`https://x` + `/` never matches `Origin: https://x`) |
 | `REDIS_HOST`/`REDIS_PORT`/`REDIS_PASSWORD` | `app.module.ts:101-104` — required for sessions (defaults: `127.0.0.1`/`6379`/none) |
 
 ### Render API — OPTIONAL (safe defaults)
@@ -190,32 +207,177 @@ Empty `business_config` (0 rows) is the correct fresh state: API returns clean 4
 
 ## 8. PROVIDER MATRIX
 
-| Provider | Core boot | Optional / paid | Demo behavior (nothing purchased) |
+Labels: **[REQUIRED]** = deployment fails or core flows break without it. **[OPTIONAL]** = enable only if the client buys the feature; absence degrades loudly, never silently. **[PLAN-DEPENDENT]** = depends on the client's infrastructure/provider plan. **[DEFERRED]** = intentionally out of scope for this deployment.
+
+| Provider | Label | Core boot | Absent behavior |
 |---|---|---|---|
-| Supabase (Postgres+Auth+Storage) | **REQUIRED** — only hard infra dependency besides Redis | free-tier project suffices for demo | full schema, 0 app rows |
-| Redis | required for login/sessions; boot+health OK without | `docker compose up -d` local; managed in prod | anonymous/public paths work |
-| Resend | no | paid/scale-gated | STUB MODE: logged, not sent |
-| Zoom | no | client Zoom account | endpoints throw `...must be set...` only when called |
-| Bunny | no (`BUNNY_ENABLED` unset = off) | client Bunny account | uploads 503 fail-visible; deletes treated as already-gone |
-| Mux | no (dormant rollback) | client Mux account | lazy getters throw only if rollback enabled |
-| Puppeteer | bundled Chromium launches at boot | `PUPPETEER_EXECUTABLE_PATH` for custom host | available; invoices/receipts PDFs work |
+| Supabase (Postgres+Auth+Storage) | **[REQUIRED]** — only hard infra dependency besides Redis | free-tier project suffices; run `001→040`, copy 3 keys | full schema, 0 app rows |
+| Redis | **[REQUIRED]** for login/sessions; boot+health OK without | client-managed Redis (any host) or Upstash; `REDIS_HOST/PORT/PASSWORD` (password enables TLS) | anonymous/public paths work; login + all authenticated routes fail closed |
+| Resend | **[OPTIONAL — DEFERRED if no domain]** | client-owned account + verified sender domain; without `RESEND_API_KEY` the app runs in STUB MODE (emails logged, not sent; user creation never blocked) | stubbed; do NOT make purchasing a domain a baseline requirement |
+| Zoom | **[OPTIONAL]** | client Zoom account; call-time `...must be set...` errors only | endpoints throw only when called |
+| Bunny (default video path) | **[OPTIONAL]** (`BUNNY_ENABLED` unset = off) | client Bunny account | uploads 503 fail-visible; deletes treated as already-gone |
+| Mux | **[OPTIONAL]** (dormant rollback) | client Mux account | lazy getters throw only if rollback enabled (`VIDEO_UPLOAD_PROVIDER=mux`) |
+| Puppeteer | Bundled **[REQUIRED]** for invoice/receipt/cert PDFs | zero-install (build `postbuild`) + `PUPPETEER_CACHE_DIR` on Render (see §3); `PUPPETEER_EXECUTABLE_PATH` only for custom hosts | available; without Chrome, PDF endpoints 500 but money state stays safe with retry |
 
 Zero-cost demo = Supabase free tier + local/Upstash-free Redis + stubbed email + no video-provider keys. Paid features degrade loudly, never silently.
 
-## 9. VERIFICATION (post-deploy, per client)
+## 9. VERIFICATION CHECKLIST (post-deploy, per client — all must pass)
 
-| ACTION | EXPECTED RESULT | FAILURE SIGNAL |
-|---|---|---|
-| `GET https://<render-host>/health` | 200 `{"status":"ok","service":"lms-api",...}` | 502/504 → waking (free tier ~60s); persistent → check Render logs/start command/CWD |
-| `GET https://<render-host>/` | 200 same contract | — |
-| `GET https://<render-host>/business-config/public` (no token) | 401 envelope (guard working) | 500 → investigate; 200 → guard broken |
-| Browser → Vercel URL | renders with default branding (no crash, no BusinessConfig row needed) | CORS error → fix `FRONTEND_URL`; API unreachable → check `NEXT_PUBLIC_API_URL` + redeploy web |
-| Re-run §1 verification queries | same fresh-state expectations | drift → investigate before handover |
+### Infrastructure
+- [ ] Supabase reachable; `GET https://<render-host>/health` → 200 `{"status":"ok",...}` (liveness only — a green health check does NOT prove DB/Redis)
+- [ ] Redis reachable (login works — §3; Redis outage fails all authenticated routes closed while `/health` stays green)
+- [ ] Render service healthy; Vercel deployment renders
+- [ ] `FRONTEND_URL` exactly equals the Vercel origin (no trailing slash); `NEXT_PUBLIC_API_URL` equals the Render URL (web redeployed after any change — build-time baked)
+- [ ] RLS verification queries (§1) return: 0 RLS-off tables, 0 open policies, `uploads`+`invoices` private, 0 app rows (except reference data)
 
-## 10. HANDOVER (per client)
+### Authentication
+- [ ] First admin can log in (see §12); invalid credentials rejected (401, not 500)
+- [ ] Authenticated admin route works (`GET /business-config` 200); unauthenticated protected route → 401
+- [ ] Session survives refresh; second-device login triggers the documented 409-then-retry single-session flow
 
-Record (secret store, never git): Supabase project URL + keys location, Render service URL, Vercel URL, Redis endpoint, enabled providers, BusinessConfig values set, verification outputs. Confirm operator can repeat §0–§9 for the next client with only new credentials.
+### Business configuration
+- [ ] `PUT /business-config` sets: business name, logo, favicon, theme, currency, locale, timezone, FY start month, tax mode/rate, invoice/receipt prefixes, support contacts, website, legal footer
+- [ ] Logged-out pages render the brand (title/metadata via public `GET /business-config/public`)
+
+### LMS flows (as admin, then as a test student)
+- [ ] Create user → create course → create batch → enroll student → create session
+- [ ] Recording exists and is Ready; student playback authorizes (200) and plays (only if a video provider is configured; otherwise direct upload is expected to 503 loudly)
+- [ ] Create test with questions → publish → student attempt → result → review queue (for manual-review types) → publish result
+- [ ] Certificate issued on curriculum completion; public `/verify-certificate?token=…` shows name/course/date/number
+- [ ] Announcements published → visible in student notifications
+
+### Billing
+- [ ] Payment plan → booking → installment payment(s)
+- [ ] Invoice PDF generated and stored (`invoices` bucket); receipt PDFs generated and stored
+- [ ] `GET /invoices/:id/download` returns a signed URL serving a valid PDF (`%PDF-` magic bytes)
+- [ ] Invoice/receipt download requires admin auth (direct anonymous object access denied)
+
+### Storage & security
+- [ ] Question-image upload works through the API; anonymous `storage.from('uploads').list(...)` denied
+- [ ] Anonymous `storage.from('invoices').list(...)` denied
+- [ ] Anonymous direct table reads denied (spot-check `profiles`, `payments`, `invoices` via anon key → empty/42501)
+- [ ] No demo/client data present beyond what this verification created (test rows must be removed or be the client's own seed users)
+
+### Email (only if Resend configured)
+- [ ] `RESEND_API_KEY` set + `EMAIL_FROM` on a verified domain; welcome/test email delivers. If deferred: confirm stub-mode log lines and move on — do NOT treat as failure.
+
+## 10. HANDOVER (per client — all must hold before sign-off)
+
+- [ ] Client domain configured (DNS → Vercel; API subdomain → Render); `FRONTEND_URL` / `NEXT_PUBLIC_API_URL` match exactly
+- [ ] All client credentials transferred to client-owned secret storage (Supabase keys, Redis, JWT_SECRET, provider keys); nothing remains only with MicroNest
+- [ ] Client owns external provider accounts (Supabase project, Redis, Zoom/Mux/Bunny/Resend as applicable)
+- [ ] First admin confirmed (login works; credentials rotated to client-chosen values)
+- [ ] Backup strategy acknowledged by client (§13 delivered)
+- [ ] BusinessConfig completed (brand, locale, tax, FY, contacts)
+- [ ] Provider configuration completed (video provider selected; email sender verified or explicitly deferred)
+- [ ] §9 verification checklist fully passed and outputs recorded (secret store, never git)
+- [ ] Demo dependency confirmed absent (no demo DB URLs/keys in client env; canonical chain only)
+- [ ] No MicroNest credentials required for runtime (see §15 ownership matrix)
+- [ ] Operator can repeat §0–§9 for the next client with only new credentials (deployment procedure is credential-parameterized, §11 simulation holds)
 
 ## 11. CLIENT #2 SIMULATION (conceptual — no infra created)
 
-Client #2 = new Supabase project + new Redis + new Render service + new Vercel deployment + new ENV + new BusinessConfig row, same codebase, same `001→039` artifact, same build/start/health contract. **No source fork, no `tenant_id`, no branding edits, no shared database.** The only per-client variables are credentials, `FRONTEND_URL`/`NEXT_PUBLIC_API_URL` origins, provider keys, and BusinessConfig content.
+Client #2 = new Supabase project + new Redis + new Render service + new Vercel deployment + new ENV + new BusinessConfig row, same codebase, same `001→040` artifact, same build/start/health contract. **No source fork, no `tenant_id`, no branding edits, no shared database.** The only per-client variables are credentials, `FRONTEND_URL`/`NEXT_PUBLIC_API_URL` origins, provider keys, and BusinessConfig content.
+
+---
+
+## 12. FIRST ADMIN RUNBOOK (bootstrap on an empty deployment) **[REQUIRED]**
+
+There is no public signup endpoint and no bootstrap endpoint by design (`POST /users` requires an existing admin). The first administrator is created in two steps: Supabase Auth user, then the matching `profiles` row. Afterwards everything else goes through the LMS itself.
+
+### A. Create the Auth user (Supabase dashboard, client project)
+
+1. Open the client Supabase project → Authentication → Users → Add user → Create new user.
+2. Enter the admin email + a strong temporary password. Leave "Auto Confirm User" ON (or confirm the email immediately).
+3. Save. Copy the new user's UID (the `id` column, a UUID).
+
+### B. Insert the matching `profiles` row (Supabase dashboard → SQL Editor)
+
+The `id` **must equal** the Auth user's UID (it is both PK and FK to `auth.users(id)`). Required columns (from `001_initial_schema.sql`):
+
+```sql
+INSERT INTO public.profiles (id, name, email, role, is_active, must_change_password)
+VALUES (
+  '<PASTE-AUTH-USER-UUID>',
+  'Client Admin',
+  'admin@client-domain.example',
+  'admin',      -- must be exactly: admin | teacher | student
+  true,
+  false         -- true forces a password change on first login; false skips it
+);
+```
+
+Do NOT invent columns. `phone` and `zoom_user_id` are optional (leave NULL). Never insert demo/fictional users into a client database.
+
+### C. First login (LMS web URL, e.g. the Vercel deployment `/login`)
+
+Log in with the admin email + temporary password. Expected: redirect to the admin dashboard. If login fails with 500s, re-check `JWT_SECRET` + Redis before anything else (§9 auth checklist). Rotate to a client-chosen password immediately (change-password flow or a second Auth-UI password reset).
+
+### D. Initial BusinessConfig (as the admin)
+
+`PUT /business-config` (admin UI form or API) — the endpoint upserts, so no seed row is required. Set at minimum: `businessName`, `logoUrl`, `faviconUrl`, `supportEmail`, `supportPhone`, `website`, `locale`, `timezone`, `currency`, `fyStartMonth` (0=January…11=December), `taxMode` (`inclusive`|`exclusive`|`zero`), `taxRate`, `invoicePrefix`, `receiptPrefix`, `currentFinancialYear`, `themeJson {primary, sidebarBg, accent}`, `legalFooter`. Verify via the public `GET /business-config/public` (no auth required) and the logged-out login page branding.
+
+### E. Create remaining users
+
+As the admin: `POST /users` (or the admin Students UI / bulk-upload CSV) for teachers and students. Every subsequent account is created inside the product — the Auth-dashboard step is a one-time bootstrap only.
+
+## 13. BACKUP & RECOVERY **[REQUIRED] minimum**
+
+### Supabase (Postgres + Auth + Storage)
+- **[REQUIRED]** Acknowledge a backup story before handoff: Supabase **PITR** (plan-dependent — verify availability on the client's plan) and/or scheduled `pg_dump` to client-owned storage. The canonical chain is re-runnable, but it recreates *schema*, never *data*.
+- **[REQUIRED]** Take a manual backup (dashboard → Database → Backups, or `pg_dump`) **before applying any migration to a live client DB** and before any bulk operation (bulk upload, batch deletes).
+- Restoration = client-owned action: restore the dump/PITR snapshot into the client project, then re-run §9 verification. Rollback of a single migration = restore + re-apply subsequent migrations as needed (there is no automated down-migration system — see §14).
+- Distinguish **database recovery** (rows, RLS, functions) from **object-storage recovery** (`uploads`/`invoices` buckets are NOT covered by a Postgres dump; Supabase bucket versioning/replication is plan/ops-dependent — confirm with the client's plan).
+
+### Redis
+- Redis holds **ephemeral operational state**: sessions (`user_session:*`), rate-limit counters, caches. No Redis content needs backup.
+- Outage impact: login + all authenticated routes fail closed; public pages and `/health` keep working. Recovery = restore Redis connectivity; users simply log in again (sliding sessions are re-created on login). Document the client's Redis durability choice (managed/Upstash persistence vs ephemeral) without inventing guarantees.
+
+### Storage
+- `uploads` (question images) and `invoices` (generated PDFs) live in the client's Supabase project. PDFs are regenerable from payment rows via the outbox retry path, but treat stored objects as production data: confirm the client's bucket backup/versioning story per plan.
+
+### Render / Vercel
+- Nothing persistent: deployments are reproducible from source + env + the procedures in this runbook. Redeploys, restarts, and rollbacks (previous Render deploy / Vercel deployment) lose no application data. Cron jobs (`outbox`, upload, cleanup) are DB-driven and resume after restart.
+
+## 14. MIGRATION OPERATING CONVENTION (future `041+`) — operational convention, not automation
+
+There is no migration runner, no ledger table, and no atomic multi-statement applier: the operator pastes SQL into the Supabase SQL Editor. The safety of this process rests on conventions the repo already enforces for authors (contiguous `NNN_` numbering, generator validation, idempotent statements) plus this operator procedure:
+
+1. **Backup first** (§13) — non-negotiable on a live client DB.
+2. **Review the migration file** — confirm it touches only intended objects, is re-runnable (`IF NOT EXISTS` / `ON CONFLICT DO NOTHING` / `DROP ... IF EXISTS`), and contains no demo/client data.
+3. **Bump the generator** (`EXPECTED_COUNT`, `EXPECTED_LAST` in `scripts/generate-fresh-sql.ts`), run `pnpm db:generate` twice, compare SHA-256, commit the regenerated artifact.
+4. **Apply ONLY the new migration file** to the live client DB (new clients get the full regenerated artifact instead).
+5. **Verify affected objects** (tables/policies/buckets per the migration header) + re-run the §1 verification queries.
+6. **Run application regression** (§9 auth + core flows) before sign-off.
+7. **Record the applied migration operationally** (client run-log: migration number, date, hash, verification output) — the database does not track this itself.
+
+## 15. OWNERSHIP MATRIX (operational, not legal)
+
+| Asset | Client owns | MicroNest owns |
+|---|---|---|
+| Domain + DNS | YES | NO |
+| Vercel account/project | YES | NO |
+| Render account/service | YES | NO |
+| Supabase project (DB/Auth/Storage) | YES | NO |
+| Redis instance | YES | NO |
+| Mux / Bunny account (if used) | YES | NO |
+| Resend account + sender domain (if used) | YES | NO |
+| Production data + backups | YES | NO |
+| All runtime secrets/credentials | YES | NO |
+| Deployment procedure (this runbook) | shared copy | YES (maintainer) |
+| Source code / product IP | only if licensed/transferred | YES unless explicitly transferred |
+
+No MicroNest-hosted service, credential, or database is required at client runtime. The demo environment is never involved.
+
+## 16. FUTURE HARDENING (explicitly NOT implemented in this checkpoint)
+
+1. **Fail-fast `JWT_SECRET` boot check** — currently a missing/incorrect secret fails at login time, not boot. Treat as deployment-blocking operationally (§5/§9); code change deferred.
+2. **Readiness component for `/health`** — currently liveness-only (green without DB/Redis). Synthetic login + RLS spot-checks are the current substitute (§9).
+3. **Migration ledger/runner** — currently manual SQL-Editor application with idempotency-by-convention (§14).
+4. **Automated backup scheduling** — currently operator-driven per §13.
+5. **`ALLOWED_ORIGINS`-style multi-origin CORS** — currently single-origin by design (correct for one-deployment-per-client; a change would only matter if the model changes).
+6. **Resend webhook secret enforcement default** — currently warn-and-accept when unset; set `RESEND_WEBHOOK_SECRET` per deployment meanwhile.
+7. **India-coupled display literals** — ~15 admin views hardcode `en-IN` rendering and GST-flavored labels; server-computed documents already use DB config. Cosmetic for non-IN clients; no totals impact.
+8. **Node version pin** (`.nvmrc`/engines) for reproducible builds.
+9. **Retire deprecated `scripts/seed.sql` / `scripts/setup-db.sql`** (demo/deprecated traps; never part of `001→040`).
+10. **Bulk-upload template course name** (`Dhanlabh With Shubh` in `bulk-upload.controller.ts`) — genericize to keep deployments content-neutral.
