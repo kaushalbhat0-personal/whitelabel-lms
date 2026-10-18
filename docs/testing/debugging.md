@@ -42,7 +42,7 @@ npx playwright test -g "Test 8"
 |----------|----------|-------------|
 | `SUPABASE_URL` | Yes | Supabase project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Service-role key (bypasses RLS) |
-| `E2E_ADMIN_EMAIL` | No (default: `admin@mct.com`) | Admin login email |
+| `E2E_ADMIN_EMAIL` | No (default: `admin@example.com`) | Admin login email |
 | `E2E_ADMIN_PASSWORD` | No (default: `Admin1234!`) | Admin login password |
 | `E2E_STUDENT_A_EMAIL` | No | Student A login email |
 | `E2E_STUDENT_A_PASSWORD` | No | Student A login password |

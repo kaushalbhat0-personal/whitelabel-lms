@@ -1,7 +1,7 @@
-# MCT Learn — LMS Platform
+# LMS Platform — White-Label LMS
 
 ## Project Overview
-Trading education platform (Money Craft Trader). Students are retail traders / working professionals in India, primarily on mobile. Monorepo with NestJS backend + Next.js frontend.
+White-label Learning Management System. Monorepo with NestJS backend + Next.js frontend. Supports multiple client deployments with independent branding and configuration.
 
 ## Commands
 - `pnpm dev` — Run both API + web in parallel

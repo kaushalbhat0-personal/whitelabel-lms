@@ -22,17 +22,17 @@ INSERT INTO business_config (
   next_invoice_number,
   next_receipt_number
 ) VALUES (
-  'Money Craft Trader',
+  'Demo Organization',
   '123, Business Centre',
   'Mumbai',
   'Maharashtra',
   '400001',
   'India',
-  'hello@moneycrafttrader.com',
+  'hello@example.com',
   '+91-9876543210',
   '2026-2027',
-  'MCT-INV',
-  'MCT-RCP',
+  'INV',
+  'RCP',
   1,
   1
 );
@@ -49,6 +49,6 @@ INSERT INTO business_config (
 --   VALUES (
 --     '<auth-users-uuid>',
 --     'Admin Name',
---     'admin@moneycrafttrader.com',
+--     'admin@example.com',
 --     'admin'
 --   );

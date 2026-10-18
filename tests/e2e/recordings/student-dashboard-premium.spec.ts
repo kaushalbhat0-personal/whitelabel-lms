@@ -4,7 +4,7 @@ import { loginAs } from '../utils/login-helpers';
 test.describe('Student Dashboard Premium — Real Browser', () => {
   test('dashboard renders hierarchy and journey interacts at 390 and 1440', async ({ page, request }) => {
     await page.goto('http://localhost:3000/login');
-    await page.fill('#email', process.env.E2E_STUDENT_A_EMAIL || 'student-a@mct.com');
+    await page.fill('#email', process.env.E2E_STUDENT_A_EMAIL || 'student-a@example.com');
     await page.fill('#password', process.env.E2E_STUDENT_A_PASSWORD || 'Student1234!');
     await page.click('button[type="submit"]');
     // Wait for redirect to /student
@@ -71,7 +71,7 @@ test.describe('Student Dashboard Premium — Real Browser', () => {
 
   test('dashboard handles empty progress gracefully', async ({ request }) => {
     // API-level check: ensure dashboard APIs return arrays not 500 even for new student
-    const { token } = await loginAs(request, process.env.E2E_STUDENT_A_EMAIL || 'student-a@mct.com', process.env.E2E_STUDENT_A_PASSWORD || 'Student1234!');
+    const { token } = await loginAs(request, process.env.E2E_STUDENT_A_EMAIL || 'student-a@example.com', process.env.E2E_STUDENT_A_PASSWORD || 'Student1234!');
     const headers = { Authorization: `Bearer ${token}` };
     const vids = await request.get('/recordings/my', { headers });
     expect([200, 304].includes(vids.status())).toBe(true);

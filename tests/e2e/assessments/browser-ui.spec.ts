@@ -24,7 +24,7 @@ test.describe('Assessment Browser UI', () => {
     page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text().slice(0, 150)); });
     await page.addInitScript((c) => {
       try { localStorage.setItem('session_persistence', JSON.stringify(c)); } catch (e) {}
-    }, { version: 1, user: { id: '663bd2e9-a864-4776-97c6-681008ed287e', name: 'Student A', email: 'student-a@mct.com', role: 'student' }, token, mustChangePassword: false, sessionCount: 1 });
+    }, { version: 1, user: { id: '663bd2e9-a864-4776-97c6-681008ed287e', name: 'Student A', email: 'student-a@example.com', role: 'student' }, token, mustChangePassword: false, sessionCount: 1 });
     await page.context().addCookies([{ name: 'access_token', value: token, url: WEB }, { name: 'must_change_password', value: 'false', url: WEB }]);
 
     // Tests list shows the test
@@ -93,7 +93,7 @@ test.describe('Assessment Browser UI', () => {
     page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text().slice(0, 150)); });
     await page.addInitScript((c) => {
       try { localStorage.setItem('session_persistence', JSON.stringify(c)); } catch (e) {}
-    }, { version: 1, user: { id: 'df981417-5356-4c64-8a2b-66ef7720162c', name: 'Admin', email: 'admin@mct.com', role: 'admin' }, token, mustChangePassword: false, sessionCount: 1 });
+    }, { version: 1, user: { id: 'df981417-5356-4c64-8a2b-66ef7720162c', name: 'Admin', email: 'admin@example.com', role: 'admin' }, token, mustChangePassword: false, sessionCount: 1 });
     await page.context().addCookies([{ name: 'access_token', value: token, url: WEB }, { name: 'must_change_password', value: 'false', url: WEB }]);
 
     // Review queue page renders + expands without crash

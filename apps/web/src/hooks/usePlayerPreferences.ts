@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 
-const STORAGE_PREFIX = 'mctlms_player_';
+const STORAGE_PREFIX = 'lms_player_';
 
 interface PlayerPreferences {
   speed: number;

@@ -104,7 +104,7 @@ describe('AchievementsService — COMM-01B-B1 Certificate Branding', () => {
     });
 
     it('derives initials for multi-word', () => {
-      expect((service as any).deriveSealText('Money Craft Trader')).toBe('MCT');
+      expect((service as any).deriveSealText('Acme Trading Co')).toBe('ATC');
     });
   });
 

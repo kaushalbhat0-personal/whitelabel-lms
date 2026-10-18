@@ -10,7 +10,7 @@ describe('BulkUploadService - onboarding', () => {
   let emailMock: any;
   let batchesMock: any;
 
-  const mockProfileLookup = (found: boolean, id = 'uid-exists', email = 'exists@mcttest.com') => {
+  const mockProfileLookup = (found: boolean, id = 'uid-exists', email = 'exists@example.com') => {
     supabaseMock.client.from.mockImplementation((table: string) => {
       if (table === 'profiles') {
         return {
@@ -72,23 +72,23 @@ describe('BulkUploadService - onboarding', () => {
   });
 
   it('new student gets generated password and welcome email with same password', async () => {
-    const user = { name: 'New Bulk', email: 'newbulk@mcttest.com', rowNumber: 1 };
+    const user = { name: 'New Bulk', email: 'newbulk@example.com', rowNumber: 1 };
     supabaseMock.client.auth.admin.createUser.mockResolvedValue({ data: { user: { id: 'uid-new' } }, error: null });
 
     const result: any = await (service as any).processSingleRow(user, {});
 
-    expect(supabaseMock.client.auth.admin.createUser).toHaveBeenCalledWith(expect.objectContaining({ email: 'newbulk@mcttest.com' }));
+    expect(supabaseMock.client.auth.admin.createUser).toHaveBeenCalledWith(expect.objectContaining({ email: 'newbulk@example.com' }));
     const sentPassword = supabaseMock.client.auth.admin.createUser.mock.calls[0][0].password;
     expect(sentPassword).toMatch(/.{10}Aa1!/);
-    expect(emailMock.sendWelcomeEmail).toHaveBeenCalledWith('newbulk@mcttest.com', 'New Bulk', sentPassword);
+    expect(emailMock.sendWelcomeEmail).toHaveBeenCalledWith('newbulk@example.com', 'New Bulk', sentPassword);
     expect(result.status).toBe('success');
     expect(result.warning).toBeUndefined();
   });
 
   it('existing user preserves password, no fabricated email (profiles lookup)', async () => {
-    const user = { name: 'Existing', email: 'exists@mcttest.com', rowNumber: 2 };
+    const user = { name: 'Existing', email: 'exists@example.com', rowNumber: 2 };
     supabaseMock.client.auth.admin.createUser.mockResolvedValue({ data: null, error: { message: 'User already registered' } as any });
-    mockProfileLookup(true, 'uid-exists', 'exists@mcttest.com');
+    mockProfileLookup(true, 'uid-exists', 'exists@example.com');
     // upsert still succeeds
     const result: any = await (service as any).processSingleRow(user, {});
     expect(result.status).toBe('success');
@@ -98,7 +98,7 @@ describe('BulkUploadService - onboarding', () => {
   });
 
   it('email failure still success with warning, no password in warning', async () => {
-    const user = { name: 'Email Fail', email: 'emailfail@mcttest.com', rowNumber: 3 };
+    const user = { name: 'Email Fail', email: 'emailfail@example.com', rowNumber: 3 };
     supabaseMock.client.auth.admin.createUser.mockResolvedValue({ data: { user: { id: 'uid-3' } }, error: null });
     emailMock.sendWelcomeEmail.mockResolvedValue(false); // suppressed/failed
 
@@ -109,7 +109,7 @@ describe('BulkUploadService - onboarding', () => {
   });
 
   it('NEW USER + PROFILE FAILURE compensates auth user', async () => {
-    const user = { name: 'Fail Profile', email: 'failprofile@mcttest.com', rowNumber: 4 };
+    const user = { name: 'Fail Profile', email: 'failprofile@example.com', rowNumber: 4 };
     supabaseMock.client.auth.admin.createUser.mockResolvedValue({ data: { user: { id: 'u1' } }, error: null });
     // profile upsert fails
     supabaseMock.client.from.mockImplementation((table: string) => {
@@ -138,7 +138,7 @@ describe('BulkUploadService - onboarding', () => {
   });
 
   it('EXISTING USER + PROFILE FAILURE does NOT delete', async () => {
-    const user = { name: 'Exists Fail', email: 'existsfail@mcttest.com', rowNumber: 5 };
+    const user = { name: 'Exists Fail', email: 'existsfail@example.com', rowNumber: 5 };
     supabaseMock.client.auth.admin.createUser.mockResolvedValue({ data: null, error: { message: 'already registered' } as any });
     // existing profile found
     supabaseMock.client.from.mockImplementation((table: string) => {
@@ -148,7 +148,7 @@ describe('BulkUploadService - onboarding', () => {
           select: jest.fn().mockReturnThis(),
           ilike: jest.fn().mockReturnThis(),
           eq: jest.fn().mockReturnThis(),
-          maybeSingle: jest.fn().mockResolvedValue({ data: { id: 'uid-exists', email: 'existsfail@mcttest.com' } }),
+          maybeSingle: jest.fn().mockResolvedValue({ data: { id: 'uid-exists', email: 'existsfail@example.com' } }),
         } as any;
       }
       return {
@@ -165,7 +165,7 @@ describe('BulkUploadService - onboarding', () => {
   });
 
   it('AUTH EXISTS BUT PROFILE MISSING controlled failure no delete', async () => {
-    const user = { name: 'Orphan', email: 'orphan@mcttest.com', rowNumber: 6 };
+    const user = { name: 'Orphan', email: 'orphan@example.com', rowNumber: 6 };
     supabaseMock.client.auth.admin.createUser.mockResolvedValue({ data: null, error: { message: 'User already registered' } as any });
     mockProfileLookup(false);
     const result: any = await (service as any).processSingleRow(user, {});
@@ -225,9 +225,9 @@ describe('BulkUploadService - onboarding', () => {
   });
 
   it('EXISTING USER beyond first 50 found via profiles ilike', async () => {
-    const user = { name: 'Far User', email: 'far@mcttest.com', rowNumber: 7 };
+    const user = { name: 'Far User', email: 'far@example.com', rowNumber: 7 };
     supabaseMock.client.auth.admin.createUser.mockResolvedValue({ data: null, error: { message: 'User already registered' } as any });
-    mockProfileLookup(true, 'uid-far', 'far@mcttest.com');
+    mockProfileLookup(true, 'uid-far', 'far@example.com');
     const result: any = await (service as any).processSingleRow(user, {});
     expect(result.status).toBe('success');
     expect(supabaseMock.client.auth.admin.listUsers).not.toHaveBeenCalled();
@@ -235,7 +235,7 @@ describe('BulkUploadService - onboarding', () => {
   });
 
   it('dto.batchId is authoritative — CSV batchName ignored', async () => {
-    const user = { name: 'Wrong Batch User', email: 'wrongbatch@mcttest.com', batchName: 'Wrong Batch', courseName: 'Wrong Course', rowNumber: 10 };
+    const user = { name: 'Wrong Batch User', email: 'wrongbatch@example.com', batchName: 'Wrong Batch', courseName: 'Wrong Course', rowNumber: 10 };
     const dto = { batchId: '11111111-1111-4111-a111-111111111111' };
     supabaseMock.client.auth.admin.createUser.mockResolvedValue({ data: { user: { id: 'uid-wrong' } }, error: null });
     // track if batches table is queried (would indicate lookupBatchByName called)
@@ -279,7 +279,7 @@ describe('BulkUploadService - onboarding', () => {
   });
 
   it('dto.batchId with empty CSV batchName still assigns', async () => {
-    const user = { name: 'Empty Batch', email: 'emptybatch@mcttest.com', rowNumber: 11 };
+    const user = { name: 'Empty Batch', email: 'emptybatch@example.com', rowNumber: 11 };
     const dto = { batchId: '22222222-2222-4222-b222-222222222222' };
     supabaseMock.client.auth.admin.createUser.mockResolvedValue({ data: { user: { id: 'uid-empty' } }, error: null });
     supabaseMock.client.from.mockImplementation((table: string) => {
@@ -296,8 +296,8 @@ describe('BulkUploadService - onboarding', () => {
   it('dto.batchId overrides different CSV batchName across rows', async () => {
     const dto = { batchId: '33333333-3333-4333-c333-333333333333' };
     const users = [
-      { name: 'A', email: 'a-override@mcttest.com', batchName: 'Batch A', rowNumber: 20 },
-      { name: 'B', email: 'b-override@mcttest.com', batchName: 'Batch B', rowNumber: 21 },
+      { name: 'A', email: 'a-override@example.com', batchName: 'Batch A', rowNumber: 20 },
+      { name: 'B', email: 'b-override@example.com', batchName: 'Batch B', rowNumber: 21 },
     ];
     supabaseMock.client.auth.admin.createUser.mockResolvedValue({ data: { user: { id: 'uid-override' } }, error: null });
     supabaseMock.client.from.mockImplementation((table: string) => {
@@ -315,7 +315,7 @@ describe('BulkUploadService - onboarding', () => {
   });
 
   it('legacy: no dto.batchId falls back to CSV batchName lookup', async () => {
-    const user = { name: 'Legacy', email: 'legacy@mcttest.com', batchName: 'Real Batch', courseName: 'Real Course', rowNumber: 30 };
+    const user = { name: 'Legacy', email: 'legacy@example.com', batchName: 'Real Batch', courseName: 'Real Course', rowNumber: 30 };
     supabaseMock.client.auth.admin.createUser.mockResolvedValue({ data: { user: { id: 'uid-legacy' } }, error: null });
     // Mock lookup to return a batch
     supabaseMock.client.from.mockImplementation((table: string) => {
@@ -347,7 +347,7 @@ describe('BulkUploadService - onboarding', () => {
   });
 
   it('new student email sent → emailStatus sent and name included', async () => {
-    const user = { name: 'New Sent', email: 'sent@mcttest.com', rowNumber: 40 };
+    const user = { name: 'New Sent', email: 'sent@example.com', rowNumber: 40 };
     supabaseMock.client.auth.admin.createUser.mockResolvedValue({ data: { user: { id: 'uid-sent' } }, error: null });
     emailMock.sendWelcomeEmail.mockResolvedValue(true);
     mockProfileLookup(false);
@@ -358,7 +358,7 @@ describe('BulkUploadService - onboarding', () => {
   });
 
   it('new student email failed → emailStatus failed and warning preserved', async () => {
-    const user = { name: 'New Fail', email: 'failmail@mcttest.com', rowNumber: 41 };
+    const user = { name: 'New Fail', email: 'failmail@example.com', rowNumber: 41 };
     supabaseMock.client.auth.admin.createUser.mockResolvedValue({ data: { user: { id: 'uid-fail' } }, error: null });
     emailMock.sendWelcomeEmail.mockResolvedValue(false);
     mockProfileLookup(false);
@@ -369,16 +369,16 @@ describe('BulkUploadService - onboarding', () => {
   });
 
   it('existing student → emailStatus not_attempted', async () => {
-    const user = { name: 'Existing2', email: 'exists2@mcttest.com', rowNumber: 42 };
+    const user = { name: 'Existing2', email: 'exists2@example.com', rowNumber: 42 };
     supabaseMock.client.auth.admin.createUser.mockResolvedValue({ data: null, error: { message: 'User already registered' } as any });
-    mockProfileLookup(true, 'uid-exists2', 'exists2@mcttest.com');
+    mockProfileLookup(true, 'uid-exists2', 'exists2@example.com');
     const result: any = await (service as any).processSingleRow(user, {});
     expect(result.emailStatus).toBe('not_attempted');
     expect(result.name).toBe('Existing2');
   });
 
   it('suppressed email → emailStatus suppressed', async () => {
-    const user = { name: 'Suppressed', email: 'suppressed@mcttest.com', rowNumber: 43 };
+    const user = { name: 'Suppressed', email: 'suppressed@example.com', rowNumber: 43 };
     supabaseMock.client.auth.admin.createUser.mockResolvedValue({ data: { user: { id: 'uid-sup' } }, error: null });
     emailMock.sendWelcomeEmail.mockResolvedValue(false);
     mockProfileLookup(false);
@@ -397,7 +397,7 @@ describe('BulkUploadService - onboarding', () => {
   });
 
   it('batch warning remains warning not failure', async () => {
-    const user = { name: 'BatchWarn', email: 'batchwarn@mcttest.com', batchName: 'MissingBatch', rowNumber: 45 };
+    const user = { name: 'BatchWarn', email: 'batchwarn@example.com', batchName: 'MissingBatch', rowNumber: 45 };
     supabaseMock.client.auth.admin.createUser.mockResolvedValue({ data: { user: { id: 'uid-bw' } }, error: null });
     supabaseMock.client.from.mockImplementation((table: string) => {
       if (table === 'profiles') return { upsert: jest.fn().mockReturnValue({ error: null }) } as any;
@@ -413,7 +413,7 @@ describe('BulkUploadService - onboarding', () => {
   });
 
   it('result never contains password', async () => {
-    const user = { name: 'NoPass', email: 'nopass@mcttest.com', rowNumber: 46 };
+    const user = { name: 'NoPass', email: 'nopass@example.com', rowNumber: 46 };
     supabaseMock.client.auth.admin.createUser.mockResolvedValue({ data: { user: { id: 'uid-np' } }, error: null });
     mockProfileLookup(false);
     const result: any = await (service as any).processSingleRow(user, {});

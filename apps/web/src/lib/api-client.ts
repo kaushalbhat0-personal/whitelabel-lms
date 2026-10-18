@@ -167,7 +167,7 @@ export async function fetchApi<T = unknown>(
             broadcastExpired();
           } catch {
             try {
-              const bc = new BroadcastChannel('mct-auth-channel');
+              const bc = new BroadcastChannel('lms-auth-channel');
               bc.postMessage({ type: 'auth:expired' });
               bc.close();
             } catch {}

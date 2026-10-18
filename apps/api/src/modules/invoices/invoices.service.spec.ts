@@ -61,7 +61,7 @@ describe('InvoicesService — P3 document creation vs email separation', () => {
       ],
     }).compile();
     service = module.get(InvoicesService);
-    jest.spyOn(service as any, 'getNextDocumentNumber').mockResolvedValue({ formatted: 'MCT-RCP-2025-26-000001', rawNumber: 1 });
+    jest.spyOn(service as any, 'getNextDocumentNumber').mockResolvedValue({ formatted: 'RCP-2025-26-000001', rawNumber: 1 });
     jest.spyOn(service as any, 'readTemplate').mockReturnValue('<html>{{receiptNumber}}</html>');
   });
 
@@ -78,19 +78,19 @@ describe('InvoicesService — P3 document creation vs email separation', () => {
               // insert
               return {
                 insert: jest.fn(() => ({
-                  select: jest.fn(() => ({ single: jest.fn().mockResolvedValue({ data: { id: RECEIPT_ID, receipt_number: 'MCT-RCP-2025-26-000001', storage_path: 'receipts/xxx/MCT-RCP.pdf' }, error: null }) })),
+                  select: jest.fn(() => ({ single: jest.fn().mockResolvedValue({ data: { id: RECEIPT_ID, receipt_number: 'RCP-2025-26-000001', storage_path: 'receipts/xxx/RCP.pdf' }, error: null }) })),
                 })),
               } as any;
             }
             if (t === 'payments') return chainMock({ data: { id: PAYMENT_ID, amount: 5163, payment_method: 'upi', transaction_id: null, installment_id: null, student_id: STUDENT_ID, course_id: 'course1', recorded_by: ADMIN_ID, student: { id: STUDENT_ID, name: 'Rahul', email: 'rahul@example.com' }, course: { name: 'Course' } }, error: null });
-            if (t === 'business_config') return chainMock({ data: { business_name: 'MCT', address_line_1: 'A', city: 'C', state: 'S', pincode: '0', gstin: 'GST', pan: 'PAN' }, error: null });
+            if (t === 'business_config') return chainMock({ data: { business_name: 'LMS', address_line_1: 'A', city: 'C', state: 'S', pincode: '0', gstin: 'GST', pan: 'PAN' }, error: null });
             return chainMock({ data: null, error: null }) as any;
           };
           return fn(table);
         }
         if (table === 'receipts') return chainMock({ data: null, error: null });
         if (table === 'payments') return chainMock({ data: { id: PAYMENT_ID, amount: 5163, payment_method: 'upi', transaction_id: null, installment_id: null, student_id: STUDENT_ID, course_id: 'course1', recorded_by: ADMIN_ID, student: { id: STUDENT_ID, name: 'Rahul', email: 'rahul@example.com' }, course: { name: 'Course' } }, error: null });
-        if (table === 'business_config') return chainMock({ data: { business_name: 'MCT', address_line_1: 'A', city: 'C', state: 'S', pincode: '0', gstin: 'GST', pan: 'PAN' }, error: null });
+        if (table === 'business_config') return chainMock({ data: { business_name: 'LMS', address_line_1: 'A', city: 'C', state: 'S', pincode: '0', gstin: 'GST', pan: 'PAN' }, error: null });
         return chainMock({ data: null, error: null }) as any;
       });
       // simpler: mock per table
@@ -104,12 +104,12 @@ describe('InvoicesService — P3 document creation vs email separation', () => {
           }
           return {
             insert: jest.fn(() => ({
-              select: jest.fn(() => ({ single: jest.fn().mockResolvedValue({ data: { id: RECEIPT_ID, receipt_number: 'MCT-RCP-2025-26-000001' }, error: null }) })),
+              select: jest.fn(() => ({ single: jest.fn().mockResolvedValue({ data: { id: RECEIPT_ID, receipt_number: 'RCP-2025-26-000001' }, error: null }) })),
             })),
           } as any;
         }
         if (table === 'payments') return chainMock({ data: { id: PAYMENT_ID, amount: 5163, payment_method: 'upi', transaction_id: null, installment_id: null, student_id: STUDENT_ID, course_id: 'course1', recorded_by: ADMIN_ID, student: { id: STUDENT_ID, name: 'Rahul', email: 'rahul@example.com' }, course: { name: 'Course' } }, error: null });
-        if (table === 'business_config') return chainMock({ data: { business_name: 'MCT', address_line_1: 'A', city: 'C', state: 'S', pincode: '0' }, error: null });
+        if (table === 'business_config') return chainMock({ data: { business_name: 'LMS', address_line_1: 'A', city: 'C', state: 'S', pincode: '0' }, error: null });
         return chainMock({ data: null, error: null }) as any;
       });
       client.from['called'] = false;
@@ -141,7 +141,7 @@ describe('InvoicesService — P3 document creation vs email separation', () => {
 
   describe('sendReceiptEmail', () => {
     it('sends stored PDF without regenerating', async () => {
-      const receipt = { id: RECEIPT_ID, receipt_number: 'MCT-RCP-000001', payment_id: PAYMENT_ID, amount: 5163, student_id: STUDENT_ID, storage_path: 'receipts/xxx/MCT-RCP-000001.pdf', pdf_url: 'https://signed.old', email_sent_at: null };
+      const receipt = { id: RECEIPT_ID, receipt_number: 'RCP-000001', payment_id: PAYMENT_ID, amount: 5163, student_id: STUDENT_ID, storage_path: 'receipts/xxx/RCP-000001.pdf', pdf_url: 'https://signed.old', email_sent_at: null };
       const payment = { id: PAYMENT_ID, amount: 5163, student: { id: STUDENT_ID, name: 'Rahul', email: 'rahul@example.com' }, course: { name: 'Course' } };
       client.from.mockImplementation((table: string) => {
         if (table === 'receipts') return chainMock({ data: receipt, error: null });
@@ -151,12 +151,12 @@ describe('InvoicesService — P3 document creation vs email separation', () => {
       // storage download mock already returns pdf-bytes
       const res = await service.sendReceiptEmail(RECEIPT_ID, ADMIN_ID);
       expect(res.email_sent_to).toBe('rahul@example.com');
-      expect(emailService.sendEmail).toHaveBeenCalledWith(expect.any(String), expect.stringContaining('MCT-RCP-000001'), expect.any(String), expect.arrayContaining([expect.objectContaining({ filename: 'MCT-RCP-000001.pdf' })]));
+      expect(emailService.sendEmail).toHaveBeenCalledWith(expect.any(String), expect.stringContaining('RCP-000001'), expect.any(String), expect.arrayContaining([expect.objectContaining({ filename: 'RCP-000001.pdf' })]));
       expect(pdfService.generatePdf).not.toHaveBeenCalled();
     });
 
     it('successful send updates email_sent_at', async () => {
-      const receipt = { id: RECEIPT_ID, receipt_number: 'MCT-RCP-000001', payment_id: PAYMENT_ID, amount: 5163, student_id: STUDENT_ID, storage_path: 'receipts/xxx/MCT-RCP-000001.pdf' };
+      const receipt = { id: RECEIPT_ID, receipt_number: 'RCP-000001', payment_id: PAYMENT_ID, amount: 5163, student_id: STUDENT_ID, storage_path: 'receipts/xxx/RCP-000001.pdf' };
       const payment = { id: PAYMENT_ID, student: { name: 'Rahul', email: 'rahul@example.com' }, course: { name: 'Course' } };
       const updateMock = jest.fn(() => ({ eq: jest.fn().mockResolvedValue({}) }));
       client.from.mockImplementation((table: string) => {
@@ -191,7 +191,7 @@ describe('InvoicesService — P3 document creation vs email separation', () => {
 
     it('suppressed email throws ConflictException and does not mark sent', async () => {
       emailService.sendEmail.mockResolvedValue(false);
-      const receipt = { id: RECEIPT_ID, receipt_number: 'MCT-RCP-000001', payment_id: PAYMENT_ID, amount: 5163, storage_path: 'receipts/xxx.pdf' };
+      const receipt = { id: RECEIPT_ID, receipt_number: 'RCP-000001', payment_id: PAYMENT_ID, amount: 5163, storage_path: 'receipts/xxx.pdf' };
       const payment = { id: PAYMENT_ID, student: { name: 'Rahul', email: 'suppressed@example.com' }, course: { name: 'Course' } };
       client.from.mockImplementation((table: string) => {
         if (table === 'receipts') return chainMock({ data: receipt, error: null });
@@ -203,7 +203,7 @@ describe('InvoicesService — P3 document creation vs email separation', () => {
     });
 
     it('legacy storage_path NULL with expired pdf_url throws controlled error', async () => {
-      const receipt = { id: RECEIPT_ID, receipt_number: 'MCT-RCP-000001', payment_id: PAYMENT_ID, amount: 5163, storage_path: null, pdf_url: 'https://expired.example/signed?expired' };
+      const receipt = { id: RECEIPT_ID, receipt_number: 'RCP-000001', payment_id: PAYMENT_ID, amount: 5163, storage_path: null, pdf_url: 'https://expired.example/signed?expired' };
       const payment = { id: PAYMENT_ID, student: { name: 'Rahul', email: 'rahul@example.com' }, course: { name: 'Course' } };
       client.from.mockImplementation((table: string) => {
         if (table === 'receipts') return chainMock({ data: receipt, error: null });
@@ -229,11 +229,11 @@ describe('InvoicesService — P3 document creation vs email separation', () => {
           return { insert: jest.fn(() => ({ select: jest.fn(() => ({ single: jest.fn().mockResolvedValue({ data: { id: 'inv1' }, error: null }) })) })) } as any;
         }
         if (table === 'payments') return chainMock({ data: { id: PAYMENT_ID, amount: 62705, payment_method: 'upi', student: { id: STUDENT_ID, name: 'Rahul', email: 'rahul@example.com' }, course: { name: 'Course' }, recorded_by: ADMIN_ID }, error: null });
-        if (table === 'business_config') return chainMock({ data: { business_name: 'MCT' }, error: null });
+        if (table === 'business_config') return chainMock({ data: { business_name: 'LMS' }, error: null });
         return chainMock({ data: null, error: null }) as any;
       });
       client.from['invCalled'] = false;
-      jest.spyOn(service as any, 'getNextDocumentNumber').mockResolvedValue({ formatted: 'MCT-INV-2025-26-000001', rawNumber: 1 });
+      jest.spyOn(service as any, 'getNextDocumentNumber').mockResolvedValue({ formatted: 'INV-2025-26-000001', rawNumber: 1 });
       const res = await service.createInvoice(PAYMENT_ID);
       expect(res).toBeDefined();
       expect(emailService.sendEmail).not.toHaveBeenCalled();
@@ -242,7 +242,7 @@ describe('InvoicesService — P3 document creation vs email separation', () => {
 
   describe('getDownloadUrl fresh signed URL', () => {
     it('prefers storage_path and mints fresh signed URL', async () => {
-      const receipt = { id: RECEIPT_ID, receipt_number: 'MCT-RCP-000001', storage_path: 'receipts/xxx/MCT-RCP-000001.pdf', pdf_url: 'https://old.signed' };
+      const receipt = { id: RECEIPT_ID, receipt_number: 'RCP-000001', storage_path: 'receipts/xxx/RCP-000001.pdf', pdf_url: 'https://old.signed' };
       client.from.mockImplementation((table: string) => {
         if (table === 'invoices') return chainMock({ data: null, error: { message: 'not found' } } as any);
         if (table === 'receipts') return chainMock({ data: receipt, error: null });
@@ -251,7 +251,7 @@ describe('InvoicesService — P3 document creation vs email separation', () => {
       // storage mock already returns fresh signedUrl
       const res = await service.getDownloadUrl(RECEIPT_ID);
       expect(res.url).toBe('https://signed.example/receipt.pdf');
-      expect(res.fileName).toBe('MCT-RCP-000001.pdf');
+      expect(res.fileName).toBe('RCP-000001.pdf');
     });
   });
 
@@ -280,17 +280,17 @@ describe('InvoicesService — P3 document creation vs email separation', () => {
               expect(row.payment_id).toBeNull();
               expect(row.payment_plan_id).toBe(PLAN_ID);
               expect(row.total_amount).toBe(62705);
-              return { select: jest.fn(() => ({ single: jest.fn().mockResolvedValue({ data: { id: 'inv-plan', invoice_number: 'MCT-INV-000002' }, error: null }) })) };
+              return { select: jest.fn(() => ({ single: jest.fn().mockResolvedValue({ data: { id: 'inv-plan', invoice_number: 'INV-000002' }, error: null }) })) };
             }),
           } as any;
         }
         if (table === 'payment_plans') return chainMock({ data: PLAN, error: null });
         if (table === 'payments') return chainMock({ data: [{ amount: 62705 }], error: null });
-        if (table === 'business_config') return chainMock({ data: { business_name: 'MCT' }, error: null });
+        if (table === 'business_config') return chainMock({ data: { business_name: 'LMS' }, error: null });
         return chainMock({ data: null, error: null }) as any;
       });
       client.from['planInvCheck'] = false;
-      jest.spyOn(service as any, 'getNextDocumentNumber').mockResolvedValue({ formatted: 'MCT-INV-2025-26-000002', rawNumber: 2 });
+      jest.spyOn(service as any, 'getNextDocumentNumber').mockResolvedValue({ formatted: 'INV-2025-26-000002', rawNumber: 2 });
       const res = await service.createInvoiceForPlan(PLAN_ID);
       expect(res).toBeDefined();
       expect(res.id).toBe('inv-plan');
@@ -316,17 +316,17 @@ describe('InvoicesService — P3 document creation vs email separation', () => {
         }
         if (table === 'payment_plans') return chainMock({ data: PLAN, error: null });
         if (table === 'payments') return chainMock({ data: [{ amount: 50000 }], error: null }); // mismatch 50000 vs 62705
-        if (table === 'business_config') return chainMock({ data: { business_name: 'MCT' }, error: null });
+        if (table === 'business_config') return chainMock({ data: { business_name: 'LMS' }, error: null });
         return chainMock({ data: null, error: null }) as any;
       });
       client.from['mismatchCheck'] = false;
-      jest.spyOn(service as any, 'getNextDocumentNumber').mockResolvedValue({ formatted: 'MCT-INV-2025-26-000003', rawNumber: 3 });
+      jest.spyOn(service as any, 'getNextDocumentNumber').mockResolvedValue({ formatted: 'INV-2025-26-000003', rawNumber: 3 });
       const res = await service.createInvoiceForPlan(PLAN_ID);
       expect(res.id).toBe('inv-mismatch');
     });
 
     it('sendInvoiceEmail for plan-level derives recipient via plan', async () => {
-      const invoice = { id: 'inv-plan', invoice_number: 'MCT-INV-000002', payment_plan_id: PLAN_ID, payment_id: null, total_amount: 62705, storage_path: 'invoices/xxx/MCT-INV-000002.pdf' };
+      const invoice = { id: 'inv-plan', invoice_number: 'INV-000002', payment_plan_id: PLAN_ID, payment_id: null, total_amount: 62705, storage_path: 'invoices/xxx/INV-000002.pdf' };
       const planWithStudent = { id: PLAN_ID, student: { name: 'Rahul', email: 'rahul@example.com' }, course: { name: 'Course' } };
       client.from.mockImplementation((table: string) => {
         if (table === 'invoices') return chainMock({ data: invoice, error: null });
@@ -335,7 +335,7 @@ describe('InvoicesService — P3 document creation vs email separation', () => {
       });
       const res = await service.sendInvoiceEmail('inv-plan', ADMIN_ID);
       expect(res.email_sent_to).toBe('rahul@example.com');
-      expect(emailService.sendEmail).toHaveBeenCalledWith(expect.any(String), expect.stringContaining('MCT-INV-000002'), expect.any(String), expect.any(Array));
+      expect(emailService.sendEmail).toHaveBeenCalledWith(expect.any(String), expect.stringContaining('INV-000002'), expect.any(String), expect.any(Array));
     });
   });
 });

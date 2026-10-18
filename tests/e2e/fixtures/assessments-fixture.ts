@@ -7,11 +7,11 @@ import { nextSeq } from '../utils/counter';
 
 export { expect } from '@playwright/test';
 
-const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL || 'admin@mct.com';
+const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL || 'admin@example.com';
 const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD || 'Admin1234!';
-const STUDENT_A_EMAIL = process.env.E2E_STUDENT_A_EMAIL || 'student-a@mct.com';
+const STUDENT_A_EMAIL = process.env.E2E_STUDENT_A_EMAIL || 'student-a@example.com';
 const STUDENT_A_PASSWORD = process.env.E2E_STUDENT_A_PASSWORD || 'Student1234!';
-const STUDENT_B_EMAIL = process.env.E2E_STUDENT_B_EMAIL || 'student-b@mct.com';
+const STUDENT_B_EMAIL = process.env.E2E_STUDENT_B_EMAIL || 'student-b@example.com';
 const STUDENT_B_PASSWORD = process.env.E2E_STUDENT_B_PASSWORD || 'Student1234!';
 
 export interface AssessmentSeed extends SeedContext {

@@ -5,7 +5,7 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // ── MCT Brand: Green / White / Black ──────────────────
+        // ── Brand: Green / White / Black ──────────────────
         // UX-1A: brand.deep is the semantically honest alias for the dark sidebar green.
         // brand.navy / navyDark are DEPRECATED aliases — preserved for backward compat only.
         // New code MUST use brand.deep / brand-900/950. Do NOT use brand.navy in new code.

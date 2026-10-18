@@ -37,7 +37,7 @@ async function checkSession(): Promise<'valid' | 'invalid' | 'error'> {
 function handleTakeover(): void {
   sharedHandleTakeover();
   try {
-    const bc = new BroadcastChannel('mct-auth-channel');
+    const bc = new BroadcastChannel('lms-auth-channel');
     bc.postMessage({ type: 'auth:takeover' });
     bc.close();
   } catch {}

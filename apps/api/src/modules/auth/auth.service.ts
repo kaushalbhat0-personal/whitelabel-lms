@@ -350,7 +350,7 @@ export class AuthService {
   async forgotPassword(email: string): Promise<{ message: string }> {
     const frontendUrl = this.configService.get<string>(
       'FRONTEND_URL',
-      'https://mctlms-web.vercel.app',
+      'http://localhost:3000',
     );
 
     const { error } =

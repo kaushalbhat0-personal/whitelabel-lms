@@ -313,7 +313,7 @@ test.describe('Phase C1 — Logout Pending & Race Hardening', () => {
     }, olderCount);
     expect(kept).toBe(true);
     await page.evaluate(async (older) => {
-      const bc = new BroadcastChannel('mct-auth-channel');
+      const bc = new BroadcastChannel('lms-auth-channel');
       bc.postMessage({ type: 'auth:logout', sessionCount: older });
       bc.close();
       await new Promise(r => setTimeout(r, 400));

@@ -1,76 +1,17 @@
 -- ============================================================================
--- DEPRECATED — REFERENCE ONLY
--- ============================================================================
--- LMS Platform — Full Schema Snapshot (Pre-production rebuild)
---
--- AUTHORITY: scripts/migrations/ is the authoritative database history.
--- This file is NOT authoritative and is NOT kept in sync with migrations.
--- It exists for local reference / emergency rebuild only and is intentionally
--- destructive (DROP ... CASCADE) — do NOT run against a production database
--- that contains data.
---
--- For production and staging, apply migrations in order:
---   scripts/migrations/004-*.sql → ... → 039-*.sql, 999-*.sql
--- via your Supabase migration runner or manual SQL Editor execution.
---
--- To verify a live database, use:
---   node scripts/check-supabase-schema.js
--- which checks live columns against expected migration state.
---
--- This snapshot was last accurate at the pre-039 era and is now stale
--- (missing outbox, batch_curriculum, certificates/achievements,
--- observability, notifications, audit, email delivery, and later hardening).
--- It will be regenerated or removed in a future phase.
+-- Migration 001: Initial Schema (Canonical Base)
+-- Derived from scripts/schema.sql §2 (authoritative base before 004)
+-- This is the single authoritative base for fresh Supabase provisioning.
+-- Run this first, then 002_sessions.sql → 039_theme_json.sql
+-- Idempotent: all CREATEs are IF NOT EXISTS, safe to re-run
 -- ============================================================================
 
--- ────────────────────────────────────────────────────────────────────────────
--- Migration (run against existing DB, NOT for fresh schema below):
---
--- ALTER TABLE profiles
---   ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT false;
--- ────────────────────────────────────────────────────────────────────────────
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- ────────────────────────────────────────────────────────────────────────────
--- 1. Drop all existing tables (CASCADE) in reverse dependency order
+-- Core: business_config (single-row, singleton index)
 -- ────────────────────────────────────────────────────────────────────────────
-
-DROP TABLE IF EXISTS upload_queue CASCADE;
-DROP TABLE IF EXISTS bulk_upload_jobs CASCADE;
-DROP TABLE IF EXISTS video_views CASCADE;
-DROP TABLE IF EXISTS video_progress CASCADE;
-DROP TABLE IF EXISTS video_batches CASCADE;
-DROP TABLE IF EXISTS videos CASCADE;
-DROP TABLE IF EXISTS topics CASCADE;
-DROP TABLE IF EXISTS recording_batches CASCADE;
-DROP TABLE IF EXISTS recordings CASCADE;
-DROP TABLE IF EXISTS test_attempts CASCADE;
-DROP TABLE IF EXISTS test_questions CASCADE;
-DROP TABLE IF EXISTS tests CASCADE;
-DROP TABLE IF EXISTS session_batch_mappings CASCADE;
-DROP TABLE IF EXISTS webinar_attendance CASCADE;
-DROP TABLE IF EXISTS sessions CASCADE;
-DROP TABLE IF EXISTS attendance CASCADE;
-DROP TABLE IF EXISTS session_registrants CASCADE;
-DROP TABLE IF EXISTS session_batches CASCADE;
-DROP TABLE IF EXISTS live_sessions CASCADE;
-DROP TABLE IF EXISTS receipts CASCADE;
-DROP TABLE IF EXISTS invoices CASCADE;
-DROP TABLE IF EXISTS payments CASCADE;
-DROP TABLE IF EXISTS payment_installments CASCADE;
-DROP TABLE IF EXISTS payment_plans CASCADE;
-DROP TABLE IF EXISTS batch_students CASCADE;
-DROP TABLE IF EXISTS batch_teachers CASCADE;
-DROP TABLE IF EXISTS batches CASCADE;
-DROP TABLE IF EXISTS courses CASCADE;
-DROP TABLE IF EXISTS business_config CASCADE;
-DROP TABLE IF EXISTS profiles CASCADE;
-
--- ────────────────────────────────────────────────────────────────────────────
--- 2. Create tables in dependency order
--- ────────────────────────────────────────────────────────────────────────────
-
--- 2.1 business_config (single-row table, used in PDFs)
-CREATE TABLE business_config (
+CREATE TABLE IF NOT EXISTS business_config (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   business_name TEXT NOT NULL,
   address_line_1 TEXT NOT NULL,
@@ -93,11 +34,12 @@ CREATE TABLE business_config (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
 CREATE UNIQUE INDEX IF NOT EXISTS business_config_singleton ON business_config ((TRUE));
 
--- 2.2 profiles (links to Supabase auth.users)
-CREATE TABLE profiles (
+-- ────────────────────────────────────────────────────────────────────────────
+-- Auth: profiles (linked to Supabase auth.users)
+-- ────────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   email TEXT NOT NULL UNIQUE,
@@ -109,12 +51,13 @@ CREATE TABLE profiles (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
 CREATE INDEX IF NOT EXISTS idx_profiles_role ON profiles(role);
 CREATE INDEX IF NOT EXISTS idx_profiles_email ON profiles(email);
 
--- 2.3 courses (NEW — parent of batches)
-CREATE TABLE courses (
+-- ────────────────────────────────────────────────────────────────────────────
+-- Courses & Batches
+-- ────────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS courses (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   description TEXT,
@@ -124,11 +67,9 @@ CREATE TABLE courses (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
 CREATE INDEX IF NOT EXISTS idx_courses_active ON courses(is_active);
 
--- 2.4 batches (UPDATED — now has course_id FK)
-CREATE TABLE batches (
+CREATE TABLE IF NOT EXISTS batches (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   course_id UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
@@ -140,30 +81,28 @@ CREATE TABLE batches (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
 CREATE INDEX IF NOT EXISTS idx_batches_course ON batches(course_id);
 CREATE INDEX IF NOT EXISTS idx_batches_active ON batches(is_active);
 
--- 2.5 batch_students and batch_teachers (junction tables)
-CREATE TABLE batch_students (
+CREATE TABLE IF NOT EXISTS batch_students (
   batch_id UUID NOT NULL REFERENCES batches(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   enrolled_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (batch_id, user_id)
 );
-
-CREATE TABLE batch_teachers (
+CREATE TABLE IF NOT EXISTS batch_teachers (
   batch_id UUID NOT NULL REFERENCES batches(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (batch_id, user_id)
 );
-
 CREATE INDEX IF NOT EXISTS idx_batch_students_user ON batch_students(user_id);
 CREATE INDEX IF NOT EXISTS idx_batch_teachers_user ON batch_teachers(user_id);
 
--- 2.6 sessions and webinar_attendance (live trading sessions)
-CREATE TABLE sessions (
+-- ────────────────────────────────────────────────────────────────────────────
+-- Legacy sessions (pre-canonical live_sessions) + webinar_attendance
+-- ────────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   batch_id UUID REFERENCES batches(id) ON DELETE CASCADE,
   zoom_meeting_id TEXT NOT NULL,
@@ -173,21 +112,19 @@ CREATE TABLE sessions (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
 CREATE INDEX IF NOT EXISTS idx_sessions_batch ON sessions(batch_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_start ON sessions(start_time);
 CREATE INDEX IF NOT EXISTS idx_sessions_live ON sessions(is_live) WHERE is_live = TRUE;
 
-CREATE TABLE session_batch_mappings (
+CREATE TABLE IF NOT EXISTS session_batch_mappings (
   session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
   batch_id UUID NOT NULL REFERENCES batches(id) ON DELETE CASCADE,
   PRIMARY KEY (session_id, batch_id)
 );
-
 CREATE INDEX IF NOT EXISTS idx_sbm_session ON session_batch_mappings(session_id);
 CREATE INDEX IF NOT EXISTS idx_sbm_batch ON session_batch_mappings(batch_id);
 
-CREATE TABLE webinar_attendance (
+CREATE TABLE IF NOT EXISTS webinar_attendance (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -196,17 +133,13 @@ CREATE TABLE webinar_attendance (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (session_id, user_id)
 );
-
 CREATE INDEX IF NOT EXISTS idx_webinar_attendance_session ON webinar_attendance(session_id);
 CREATE INDEX IF NOT EXISTS idx_webinar_attendance_user ON webinar_attendance(user_id);
 
-CREATE TRIGGER set_updated_at_sessions
-  BEFORE UPDATE ON sessions
-  FOR EACH ROW
-  EXECUTE FUNCTION update_updated_at_column();
-
--- 2.7 payment_plans and payment_installments (EMI system)
-CREATE TABLE payment_plans (
+-- ────────────────────────────────────────────────────────────────────────────
+-- Finance: payment_plans, payment_installments, payments
+-- ────────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS payment_plans (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   student_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   course_id UUID NOT NULL REFERENCES courses(id) ON DELETE RESTRICT,
@@ -218,11 +151,10 @@ CREATE TABLE payment_plans (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
 CREATE INDEX IF NOT EXISTS idx_payment_plans_student ON payment_plans(student_id);
 CREATE INDEX IF NOT EXISTS idx_payment_plans_course ON payment_plans(course_id);
 
-CREATE TABLE payment_installments (
+CREATE TABLE IF NOT EXISTS payment_installments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   payment_plan_id UUID NOT NULL REFERENCES payment_plans(id) ON DELETE CASCADE,
   installment_number INTEGER NOT NULL,
@@ -234,13 +166,11 @@ CREATE TABLE payment_installments (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (payment_plan_id, installment_number)
 );
-
 CREATE INDEX IF NOT EXISTS idx_installments_plan ON payment_installments(payment_plan_id);
 CREATE INDEX IF NOT EXISTS idx_installments_status ON payment_installments(status);
 CREATE INDEX IF NOT EXISTS idx_installments_due ON payment_installments(due_date);
 
--- 2.7 payments
-CREATE TABLE payments (
+CREATE TABLE IF NOT EXISTS payments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   student_id UUID NOT NULL REFERENCES profiles(id) ON DELETE RESTRICT,
   course_id UUID NOT NULL REFERENCES courses(id) ON DELETE RESTRICT,
@@ -255,19 +185,20 @@ CREATE TABLE payments (
   recorded_by UUID NOT NULL REFERENCES profiles(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
 CREATE INDEX IF NOT EXISTS idx_payments_student ON payments(student_id);
 CREATE INDEX IF NOT EXISTS idx_payments_course ON payments(course_id);
 CREATE INDEX IF NOT EXISTS idx_payments_plan ON payments(payment_plan_id);
 CREATE INDEX IF NOT EXISTS idx_payments_date ON payments(paid_on);
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_installment_payment') THEN
+    ALTER TABLE payment_installments ADD CONSTRAINT fk_installment_payment FOREIGN KEY (payment_id) REFERENCES payments(id) ON DELETE SET NULL;
+  END IF;
+END $$;
 
--- Now add the FK from installments back to payments
-ALTER TABLE payment_installments
-  ADD CONSTRAINT fk_installment_payment
-  FOREIGN KEY (payment_id) REFERENCES payments(id) ON DELETE SET NULL;
-
--- 2.8 invoices and receipts
-CREATE TABLE invoices (
+-- ────────────────────────────────────────────────────────────────────────────
+-- Invoices & Receipts
+-- ────────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS invoices (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   invoice_number TEXT NOT NULL UNIQUE,
   student_id UUID NOT NULL REFERENCES profiles(id) ON DELETE RESTRICT,
@@ -286,11 +217,10 @@ CREATE TABLE invoices (
   generated_by UUID NOT NULL REFERENCES profiles(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
 CREATE INDEX IF NOT EXISTS idx_invoices_student ON invoices(student_id);
 CREATE INDEX IF NOT EXISTS idx_invoices_number ON invoices(invoice_number);
 
-CREATE TABLE receipts (
+CREATE TABLE IF NOT EXISTS receipts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   receipt_number TEXT NOT NULL UNIQUE,
   student_id UUID NOT NULL REFERENCES profiles(id) ON DELETE RESTRICT,
@@ -305,13 +235,14 @@ CREATE TABLE receipts (
   generated_by UUID NOT NULL REFERENCES profiles(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
 CREATE INDEX IF NOT EXISTS idx_receipts_student ON receipts(student_id);
 CREATE INDEX IF NOT EXISTS idx_receipts_payment ON receipts(payment_id);
 CREATE INDEX IF NOT EXISTS idx_receipts_number ON receipts(receipt_number);
 
--- 2.9 live_sessions, session_batches, session_registrants, attendance
-CREATE TABLE live_sessions (
+-- ────────────────────────────────────────────────────────────────────────────
+-- Live Sessions (canonical) + registrants + attendance
+-- ────────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS live_sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   topic TEXT NOT NULL,
   agenda TEXT,
@@ -324,26 +255,23 @@ CREATE TABLE live_sessions (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
 CREATE INDEX IF NOT EXISTS idx_live_sessions_teacher ON live_sessions(teacher_id);
 CREATE INDEX IF NOT EXISTS idx_live_sessions_start ON live_sessions(start_time);
 CREATE INDEX IF NOT EXISTS idx_live_sessions_status ON live_sessions(status);
 
-CREATE TABLE session_batches (
+CREATE TABLE IF NOT EXISTS session_batches (
   session_id UUID NOT NULL REFERENCES live_sessions(id) ON DELETE CASCADE,
   batch_id UUID NOT NULL REFERENCES batches(id) ON DELETE CASCADE,
   PRIMARY KEY (session_id, batch_id)
 );
-
-CREATE TABLE session_registrants (
+CREATE TABLE IF NOT EXISTS session_registrants (
   session_id UUID NOT NULL REFERENCES live_sessions(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   zoom_registrant_id TEXT,
   personal_join_url TEXT,
   PRIMARY KEY (session_id, user_id)
 );
-
-CREATE TABLE attendance (
+CREATE TABLE IF NOT EXISTS attendance (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   session_id UUID NOT NULL REFERENCES live_sessions(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -357,12 +285,13 @@ CREATE TABLE attendance (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (session_id, user_id)
 );
-
 CREATE INDEX IF NOT EXISTS idx_attendance_session ON attendance(session_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_user ON attendance(user_id);
 
--- 2.10 topics (must precede recordings FK topic_id)
-CREATE TABLE topics (
+-- ────────────────────────────────────────────────────────────────────────────
+-- Topics + Recordings (canonical, with provider) + batches
+-- ────────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS topics (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   description TEXT,
@@ -370,11 +299,7 @@ CREATE TABLE topics (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 2.11 recordings + recording_batches (multi-batch flexibility, unified with old videos)
--- provider (Phase 7B): which video infrastructure owns the asset — 'mux' | 'bunny'.
--- mux_* columns are the provider-identifier STORAGE SLOTS keyed by `provider`
--- (historical names kept for backwards compatibility; rename deferred to Mux retirement).
-CREATE TABLE recordings (
+CREATE TABLE IF NOT EXISTS recordings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   session_id UUID REFERENCES live_sessions(id) ON DELETE SET NULL,
   title TEXT NOT NULL,
@@ -393,23 +318,42 @@ CREATE TABLE recordings (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
 CREATE INDEX IF NOT EXISTS idx_recordings_session ON recordings(session_id);
 CREATE INDEX IF NOT EXISTS idx_recordings_status ON recordings(status);
 CREATE INDEX IF NOT EXISTS idx_recordings_topic ON recordings(topic_id);
 
-CREATE TABLE recording_batches (
+CREATE TABLE IF NOT EXISTS recording_batches (
   recording_id UUID NOT NULL REFERENCES recordings(id) ON DELETE CASCADE,
   batch_id UUID NOT NULL REFERENCES batches(id) ON DELETE CASCADE,
   assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (recording_id, batch_id)
 );
-
 CREATE INDEX IF NOT EXISTS idx_recording_batches_recording ON recording_batches(recording_id);
 CREATE INDEX IF NOT EXISTS idx_recording_batches_batch ON recording_batches(batch_id);
 
--- video_progress and video_views reference recordings(id) after the 007 migration
-CREATE TABLE video_progress (
+-- Legacy video tables required for migration 007 to execute on fresh DB
+-- These existed before 007 and are dropped by 007; they must exist for 007's INSERT ... SELECT to not fail with "relation does not exist"
+CREATE TABLE IF NOT EXISTS videos (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title TEXT NOT NULL,
+  description TEXT,
+  topic_id UUID REFERENCES topics(id) ON DELETE SET NULL,
+  mux_asset_id TEXT,
+  mux_playback_id TEXT,
+  mux_upload_id TEXT,
+  duration_seconds INTEGER,
+  status TEXT NOT NULL DEFAULT 'processing' CHECK (status IN ('processing', 'ready', 'failed')),
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS video_batches (
+  video_id UUID NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+  batch_id UUID NOT NULL REFERENCES batches(id) ON DELETE CASCADE,
+  PRIMARY KEY (video_id, batch_id)
+);
+
+CREATE TABLE IF NOT EXISTS video_progress (
   user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   video_id UUID NOT NULL REFERENCES recordings(id) ON DELETE CASCADE,
   watched_seconds INTEGER NOT NULL DEFAULT 0,
@@ -417,20 +361,20 @@ CREATE TABLE video_progress (
   last_watched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (user_id, video_id)
 );
-
-CREATE TABLE video_views (
+CREATE TABLE IF NOT EXISTS video_views (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   video_id UUID NOT NULL REFERENCES recordings(id) ON DELETE CASCADE,
   viewed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   ip_address TEXT
 );
-
 CREATE INDEX IF NOT EXISTS idx_video_views_user ON video_views(user_id);
 CREATE INDEX IF NOT EXISTS idx_video_views_video ON video_views(video_id);
 
--- 2.12 tests, test_questions, test_attempts
-CREATE TABLE tests (
+-- ────────────────────────────────────────────────────────────────────────────
+-- Assessments: tests / questions / attempts
+-- ────────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS tests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title TEXT NOT NULL,
   description TEXT,
@@ -442,8 +386,7 @@ CREATE TABLE tests (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
-CREATE TABLE test_questions (
+CREATE TABLE IF NOT EXISTS test_questions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   test_id UUID NOT NULL REFERENCES tests(id) ON DELETE CASCADE,
   question_text TEXT NOT NULL,
@@ -453,8 +396,7 @@ CREATE TABLE test_questions (
   marks INTEGER NOT NULL DEFAULT 1,
   sort_order INTEGER NOT NULL DEFAULT 0
 );
-
-CREATE TABLE test_attempts (
+CREATE TABLE IF NOT EXISTS test_attempts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   test_id UUID NOT NULL REFERENCES tests(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -464,8 +406,10 @@ CREATE TABLE test_attempts (
   answers JSONB
 );
 
--- 2.13 upload_queue (Zoom → Mux pipeline)
-CREATE TABLE upload_queue (
+-- ────────────────────────────────────────────────────────────────────────────
+-- Upload queue + bulk jobs
+-- ────────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS upload_queue (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   session_id UUID NOT NULL REFERENCES live_sessions(id) ON DELETE CASCADE,
   zoom_download_url TEXT NOT NULL,
@@ -477,11 +421,9 @@ CREATE TABLE upload_queue (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
 CREATE INDEX IF NOT EXISTS idx_upload_queue_status ON upload_queue(status);
 
--- 2.14 bulk_upload_jobs (NEW — track CSV/Excel uploads)
-CREATE TABLE bulk_upload_jobs (
+CREATE TABLE IF NOT EXISTS bulk_upload_jobs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   job_type TEXT NOT NULL CHECK (job_type IN ('students', 'invoices', 'receipts')),
   uploaded_by UUID NOT NULL REFERENCES profiles(id),
@@ -494,16 +436,15 @@ CREATE TABLE bulk_upload_jobs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   completed_at TIMESTAMPTZ
 );
-
 CREATE INDEX IF NOT EXISTS idx_bulk_jobs_user ON bulk_upload_jobs(uploaded_by);
 CREATE INDEX IF NOT EXISTS idx_bulk_jobs_type ON bulk_upload_jobs(job_type);
 
 -- ────────────────────────────────────────────────────────────────────────────
--- 3. RPC function to mark absentees after session ends
+-- Functions & Triggers (base)
 -- ────────────────────────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION update_updated_at_column() RETURNS TRIGGER AS $$ BEGIN NEW.updated_at = NOW(); RETURN NEW; END; $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION mark_absent_for_session(p_session_id UUID)
-RETURNS void AS $$
+CREATE OR REPLACE FUNCTION mark_absent_for_session(p_session_id UUID) RETURNS void AS $$
 BEGIN
   INSERT INTO attendance (session_id, user_id, status)
   SELECT sr.session_id, sr.user_id, 'absent'
@@ -513,18 +454,6 @@ BEGIN
       SELECT 1 FROM attendance a
       WHERE a.session_id = sr.session_id AND a.user_id = sr.user_id
     );
-END;
-$$ LANGUAGE plpgsql;
-
--- ────────────────────────────────────────────────────────────────────────────
--- 4. Trigger to update updated_at automatically
--- ────────────────────────────────────────────────────────────────────────────
-
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-  NEW.updated_at = NOW();
-  RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -538,3 +467,4 @@ CREATE TRIGGER set_updated_at_recordings BEFORE UPDATE ON recordings FOR EACH RO
 CREATE TRIGGER set_updated_at_tests BEFORE UPDATE ON tests FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER set_updated_at_attendance BEFORE UPDATE ON attendance FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER set_updated_at_upload_queue BEFORE UPDATE ON upload_queue FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER set_updated_at_sessions BEFORE UPDATE ON sessions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

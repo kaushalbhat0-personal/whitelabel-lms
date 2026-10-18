@@ -357,11 +357,11 @@ export default function TestAttemptPage() {
   const startTimeRef = useRef(Date.now());
 
   // helpers: local preservation (minimal, no tokens/passwords)
-  const getBackupKey = useCallback((id: string) => `mct:attempt:${id}:backup`, []);
+  const getBackupKey = useCallback((id: string) => `lms:attempt:${id}:backup`, []);
   const preserveLocally = useCallback((id: string, test: string, ans: Record<string, any>, idx: number, remaining: number | null) => {
     try {
       const payload = { testId: test, attemptId: id, answers: ans, currentIndex: idx, timeRemainingSeconds: remaining, timestamp: Date.now() };
-      localStorage.setItem(`mct:attempt:${id}:backup`, JSON.stringify(payload));
+      localStorage.setItem(`lms:attempt:${id}:backup`, JSON.stringify(payload));
     } catch {}
   }, []);
 
@@ -413,7 +413,7 @@ export default function TestAttemptPage() {
         }
         // Restore locally preserved answers if server has none (e.g., after 401 local save)
         try {
-          const backupRaw = localStorage.getItem(`mct:attempt:${att.id}:backup`);
+          const backupRaw = localStorage.getItem(`lms:attempt:${att.id}:backup`);
           if (backupRaw) {
             const backup = JSON.parse(backupRaw);
             const backupAnswers = backup.answers ?? {};
@@ -485,7 +485,7 @@ export default function TestAttemptPage() {
           }
         }
         await submitAttempt(attemptId, { answers: answersList, timeRemainingSeconds: 0 } as any);
-        try { localStorage.removeItem(`mct:attempt:${attemptId}:backup`); } catch {}
+        try { localStorage.removeItem(`lms:attempt:${attemptId}:backup`); } catch {}
         toast.info('Time expired — your answers have been submitted.');
         router.replace(`/student/tests/result/${attemptId}`);
       } catch (err: any) {
@@ -663,7 +663,7 @@ export default function TestAttemptPage() {
       } as any);
 
       // Clear local backup on success
-      try { localStorage.removeItem(`mct:attempt:${attemptId}:backup`); } catch {}
+      try { localStorage.removeItem(`lms:attempt:${attemptId}:backup`); } catch {}
       toast.success('Test submitted successfully.');
       // Redirect to results page
       router.replace(`/student/tests/result/${attemptId}`);

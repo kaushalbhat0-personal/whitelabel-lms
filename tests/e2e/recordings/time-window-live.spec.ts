@@ -115,7 +115,7 @@ test.describe('Live Session UI — Admin/Student', () => {
   test('student live page shows Join at 390 and 1440', async ({ page, request }) => {
     // Login via API to get token, then set via page? Use UI login for real browser
     await page.goto('http://localhost:3000/login');
-    await page.fill('#email', process.env.E2E_STUDENT_A_EMAIL || 'student-a@mct.com');
+    await page.fill('#email', process.env.E2E_STUDENT_A_EMAIL || 'student-a@example.com');
     await page.fill('#password', process.env.E2E_STUDENT_A_PASSWORD || 'Student1234!');
     await page.click('button[type="submit"]');
     await page.waitForURL(/\/student/, { timeout: 15000 });

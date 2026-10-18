@@ -747,7 +747,7 @@ function BulkImportModal({
     const blob = new Blob([rows], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = 'mct_question_template.csv'; a.click();
+    a.href = url; a.download = 'question_template.csv'; a.click();
     URL.revokeObjectURL(url);
   };
 

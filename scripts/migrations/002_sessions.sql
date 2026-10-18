@@ -43,6 +43,7 @@ CREATE INDEX IF NOT EXISTS idx_webinar_attendance_user ON webinar_attendance(use
 -- 3. Trigger: auto-update updated_at on sessions
 -- ────────────────────────────────────────────────────────────────────────────
 
+DROP TRIGGER IF EXISTS set_updated_at_sessions ON sessions;
 CREATE TRIGGER set_updated_at_sessions
   BEFORE UPDATE ON sessions
   FOR EACH ROW

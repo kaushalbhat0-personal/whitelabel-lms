@@ -5,7 +5,7 @@ import { stopHeartbeat } from './session-heartbeat';
 
 const VALIDATION_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
 const EXPIRY_GRACE_MS = 2 * 60 * 1000; // 2-minute grace before showing overlay
-const CHANNEL_NAME = 'mct-auth-channel';
+const CHANNEL_NAME = 'lms-auth-channel';
 
 let validatorTimer: ReturnType<typeof setInterval> | null = null;
 let channel: BroadcastChannel | null = null;

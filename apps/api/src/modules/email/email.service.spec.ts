@@ -15,9 +15,9 @@ describe('EmailService - onboarding', () => {
     configMock = {
       get: jest.fn((key: string) => {
         if (key === 'RESEND_API_KEY') return 're_test_123';
-        if (key === 'EMAIL_FROM') return 'noreply@mctlearn.com';
-        if (key === 'EMAIL_REPLY_TO') return 'moneycrafttrader@gmail.com';
-        if (key === 'FRONTEND_URL') return 'https://mctlearn.com';
+        if (key === 'EMAIL_FROM') return 'noreply@example.com';
+        if (key === 'EMAIL_REPLY_TO') return 'support@example.com';
+        if (key === 'FRONTEND_URL') return 'https://example.com';
         return undefined;
       }),
     };
@@ -40,8 +40,8 @@ describe('EmailService - onboarding', () => {
   });
 
   it('uses EMAIL_FROM and EMAIL_REPLY_TO env', () => {
-    expect((service as any).fromAddress).toBe('noreply@mctlearn.com');
-    expect((service as any).replyToAddress).toBe('moneycrafttrader@gmail.com');
+    expect((service as any).fromAddress).toBe('noreply@example.com');
+    expect((service as any).replyToAddress).toBe('support@example.com');
   });
 
   it('welcome email html contains name, email, password, loginUrl and change-password banner, no password in logs', async () => {
@@ -49,14 +49,14 @@ describe('EmailService - onboarding', () => {
     await service.sendWelcomeEmail('student@test.com', 'Test Student', 'Secret123Aa1!');
 
     const resendCall = (service as any).resend.emails.send.mock.calls[0][0];
-    expect(resendCall.from).toBe('noreply@mctlearn.com');
-    expect(resendCall.replyTo).toBe('moneycrafttrader@gmail.com');
+    expect(resendCall.from).toBe('noreply@example.com');
+    expect(resendCall.replyTo).toBe('support@example.com');
     expect(resendCall.to).toBe('student@test.com');
-    expect(resendCall.subject).toBe('Your MCT Learn account is ready');
+    expect(resendCall.subject).toBe('Your LMS account is ready');
     expect(resendCall.html).toContain('Test Student');
     expect(resendCall.html).toContain('student@test.com');
     expect(resendCall.html).toContain('Secret123Aa1!');
-    expect(resendCall.html).toContain('https://mctlearn.com/login');
+    expect(resendCall.html).toContain('https://example.com/login');
     expect(resendCall.html).toContain('Please change your password after first login');
 
     // Ensure log does not contain password
@@ -75,15 +75,15 @@ describe('EmailService - onboarding', () => {
     expect(allLogs).toContain('stub@test.com');
   });
 
-  it('does not use moneycrafttrader.com as FROM domain', () => {
-    expect((service as any).fromAddress).not.toContain('moneycrafttrader.com');
-    expect((service as any).fromAddress).toBe('noreply@mctlearn.com');
+  it('uses verified domain as FROM', () => {
+    expect((service as any).fromAddress).toBe('noreply@example.com');
+    expect((service as any).fromAddress).toContain('example.com');
   });
 
-  it('sends replyTo as moneycrafttrader@gmail.com', async () => {
+  it('sends replyTo as support@example.com', async () => {
     await service.sendWelcomeEmail('student@test.com', 'Test Student', 'Secret123Aa1!');
     const resendCall = (service as any).resend.emails.send.mock.calls[0][0];
-    expect(resendCall.replyTo).toBe('moneycrafttrader@gmail.com');
+    expect(resendCall.replyTo).toBe('support@example.com');
   });
 });
 

@@ -86,7 +86,7 @@ describe('ZoomWebhookHandler', () => {
       fromResults.push({ data: [{ id: 'u1' }], error: null }); // user lookup
 
       await handler.handle('webinar.participant_joined', {
-        object: { id: 'w1', participant: { email: 'student-a@mct.com' } },
+        object: { id: 'w1', participant: { email: 'student-a@example.com' } },
       }, supabase);
 
       const attendanceChain = fromChains.find((c, i) => fromChains.indexOf(c) === i && c.upsert.mock.calls.length > 0);
@@ -109,7 +109,7 @@ describe('ZoomWebhookHandler', () => {
       fromResults.push({ data: [{ id: 'u1' }], error: null }); // user
       fromResults.push({ data: [{ join_time: new Date(Date.now() - 60000).toISOString() }], error: null }); // attendance
 
-      await handler.handle('webinar.participant_left', { object: { id: 'w1', participant: { email: 'student-a@mct.com' } } }, supabase);
+      await handler.handle('webinar.participant_left', { object: { id: 'w1', participant: { email: 'student-a@example.com' } } }, supabase);
 
       const updateChain = fromChains.find((c) => c.update.mock.calls.length > 0);
       const updatePayload = updateChain?.update.mock.calls[0][0];

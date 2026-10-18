@@ -29,7 +29,7 @@ describe('AuthService — one-device graceful replacement', () => {
   let supabase: any;
   let jwt: any;
 
-  const profile = { id: 'u1', name: 'Student', email: 's@mct.com', role: 'student', is_active: true, must_change_password: false };
+  const profile = { id: 'u1', name: 'Student', email: 's@example.com', role: 'student', is_active: true, must_change_password: false };
 
   beforeEach(async () => {
     redis = redisMock();
@@ -44,7 +44,7 @@ describe('AuthService — one-device graceful replacement', () => {
         AuthService,
         { provide: SupabaseService, useValue: supabase },
         { provide: JwtService, useValue: jwt },
-        { provide: ConfigService, useValue: { get: jest.fn(() => 'https://mctlms-web.vercel.app') } },
+        { provide: ConfigService, useValue: { get: jest.fn(() => 'http://localhost:3000') } },
         { provide: DeviceService, useValue: { registerDevice: jest.fn(async () => ({ device: null, isNew: false })) } },
         { provide: EmailService, useValue: {} },
         { provide: PlaybackGuardService, useValue: { revokeUserTokens: jest.fn(async () => {}) } },
@@ -67,7 +67,7 @@ describe('AuthService — one-device graceful replacement', () => {
   });
 
   it('TEST 1: no active session → normal login succeeds', async () => {
-    const result = await service.login({ email: 's@mct.com', password: 'pass123' } as any, '1.1.1.1', 'UA');
+    const result = await service.login({ email: 's@example.com', password: 'pass123' } as any, '1.1.1.1', 'UA');
     expect(result.token).toBe('jwt-token');
     expect(redis.setex).toHaveBeenCalledWith(expect.stringContaining('user_session:u1'), expect.any(Number), expect.any(String));
   });
@@ -79,7 +79,7 @@ describe('AuthService — one-device graceful replacement', () => {
 
     let caught: any = null;
     try {
-      await service.login({ email: 's@mct.com', password: 'pass123' } as any, '2.2.2.2', 'UA');
+      await service.login({ email: 's@example.com', password: 'pass123' } as any, '2.2.2.2', 'UA');
     } catch (e: any) {
       caught = e;
     }
@@ -96,7 +96,7 @@ describe('AuthService — one-device graceful replacement', () => {
     await redis.setex('user_session:u1', 86400, 'old-id');
     await redis.setex('session:old-id', 86400, '{}');
     // First login revokes
-    await expect(service.login({ email: 's@mct.com', password: 'pass123' } as any, '2.2.2.2', 'UA')).rejects.toThrow(ConflictException);
+    await expect(service.login({ email: 's@example.com', password: 'pass123' } as any, '2.2.2.2', 'UA')).rejects.toThrow(ConflictException);
     // Old session should now be invalid
     expect(await service.validateSession('u1', 'old-id')).toBe(false);
   });
@@ -104,9 +104,9 @@ describe('AuthService — one-device graceful replacement', () => {
   it('TEST 4: second login after replacement succeeds', async () => {
     await redis.setex('user_session:u1', 86400, 'old-id');
     await redis.setex('session:old-id', 86400, '{}');
-    await expect(service.login({ email: 's@mct.com', password: 'pass123' } as any, '2.2.2.2', 'UA')).rejects.toThrow(ConflictException);
+    await expect(service.login({ email: 's@example.com', password: 'pass123' } as any, '2.2.2.2', 'UA')).rejects.toThrow(ConflictException);
     // Now no active session, next login should succeed
-    const result = await service.login({ email: 's@mct.com', password: 'pass123' } as any, '2.2.2.2', 'UA');
+    const result = await service.login({ email: 's@example.com', password: 'pass123' } as any, '2.2.2.2', 'UA');
     expect(result.token).toBe('jwt-token');
     const newSession = await redis.get('user_session:u1');
     expect(newSession).toBeTruthy();
@@ -115,7 +115,7 @@ describe('AuthService — one-device graceful replacement', () => {
 
   it('TEST 5: wrong password still produces normal 401, not SESSION_REPLACED', async () => {
     supabase.authClient.auth.signInWithPassword.mockResolvedValue({ data: { user: null }, error: { message: 'Invalid' } } as any);
-    await expect(service.login({ email: 's@mct.com', password: 'wrong' } as any, '3.3.3.3', 'UA')).rejects.toThrow(UnauthorizedException);
+    await expect(service.login({ email: 's@example.com', password: 'wrong' } as any, '3.3.3.3', 'UA')).rejects.toThrow(UnauthorizedException);
   });
 
   it('TEST 6: normal logout still works and clears both keys', async () => {
@@ -158,7 +158,7 @@ describe('AuthService — one-device graceful replacement', () => {
     await redis.setex('session:old-session-id', 86400, JSON.stringify({ userId: 'u1' }));
     const playbackGuard = (service as any).playbackGuard as { revokeUserTokens: jest.Mock };
     playbackGuard.revokeUserTokens.mockClear();
-    await expect(service.login({ email: 's@mct.com', password: 'pass123' } as any, '2.2.2.2', 'UA')).rejects.toThrow(ConflictException);
+    await expect(service.login({ email: 's@example.com', password: 'pass123' } as any, '2.2.2.2', 'UA')).rejects.toThrow(ConflictException);
     expect(playbackGuard.revokeUserTokens).not.toHaveBeenCalled();
     expect(await redis.get('playback_revoked:u1')).toBeNull();
     // Old session gone
@@ -171,10 +171,10 @@ describe('AuthService — one-device graceful replacement', () => {
     await redis.setex('session:old-id', 86400, '{}');
     const playbackGuard = (service as any).playbackGuard as { revokeUserTokens: jest.Mock };
     playbackGuard.revokeUserTokens.mockClear();
-    await expect(service.login({ email: 's@mct.com', password: 'pass123' } as any, '2.2.2.2', 'UA')).rejects.toThrow(ConflictException);
+    await expect(service.login({ email: 's@example.com', password: 'pass123' } as any, '2.2.2.2', 'UA')).rejects.toThrow(ConflictException);
     expect(playbackGuard.revokeUserTokens).not.toHaveBeenCalled();
     // Retry
-    const result = await service.login({ email: 's@mct.com', password: 'pass123' } as any, '2.2.2.2', 'UA');
+    const result = await service.login({ email: 's@example.com', password: 'pass123' } as any, '2.2.2.2', 'UA');
     expect(result.token).toBe('jwt-token');
     expect(playbackGuard.revokeUserTokens).not.toHaveBeenCalled();
     expect(await redis.get('playback_revoked:u1')).toBeNull();

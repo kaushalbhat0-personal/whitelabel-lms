@@ -3,15 +3,24 @@ import { Public } from './common/decorators/public.decorator';
 
 @Controller()
 export class AppController {
-  @Public()
-  @Get()
-  @Get('health')
-  health() {
+  private healthPayload() {
     return {
       status: 'ok',
-      service: 'mct-lms-api',
+      service: 'lms-api',
       version: 'current',
       timestamp: new Date().toISOString(),
     };
+  }
+
+  @Public()
+  @Get()
+  root() {
+    return this.healthPayload();
+  }
+
+  @Public()
+  @Get('health')
+  health() {
+    return this.healthPayload();
   }
 }
