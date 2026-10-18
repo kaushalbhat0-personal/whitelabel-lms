@@ -304,7 +304,7 @@ export class MuxService {
       );
     }
 
-    privateKey = privateKey.replace(/\\n/g, '\n');
+    privateKey = this.normalizePrivateKey(privateKey);
 
     const header = { alg: 'RS256', typ: 'JWT', kid: keyId };
     const payload: Record<string, unknown> = {
@@ -318,6 +318,36 @@ export class MuxService {
     payload.session_uuid = sessionId;
 
     return this.signJwt(header, payload, privateKey);
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  //  normalizePrivateKey
+  // ──────────────────────────────────────────────────────────────
+
+  /**
+   * Accept the signing key as a PEM string (with real or escaped newlines)
+   * or as base64-encoded PEM (single-line .env convention). Returns a PEM
+   * string Node's crypto can parse (PKCS#1 and PKCS#8 both supported).
+   */
+  private normalizePrivateKey(raw: string): string {
+    let key = raw.trim();
+    // Strip surrounding quotes if the value was quoted in the env source.
+    if (
+      (key.startsWith('"') && key.endsWith('"')) ||
+      (key.startsWith("'") && key.endsWith("'"))
+    ) {
+      key = key.slice(1, -1);
+    }
+    key = key.replace(/\\n/g, '\n');
+    if (key.includes('BEGIN')) return key;
+    // Fall back to base64-encoded PEM.
+    try {
+      const decoded = Buffer.from(key, 'base64').toString('utf8').replace(/\\n/g, '\n');
+      if (decoded.includes('BEGIN')) return decoded;
+    } catch {
+      // Fall through and let crypto report the original problem.
+    }
+    return key;
   }
 
   // ──────────────────────────────────────────────────────────────
