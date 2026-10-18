@@ -16,6 +16,7 @@ import { UserRole } from '@lms/shared-types';
 import { BusinessConfigService } from './business-config.service';
 import { UpdateBusinessConfigDto } from './dto/update-business-config.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 
 @Controller('business-config')
 export class BusinessConfigController {
@@ -24,11 +25,13 @@ export class BusinessConfigController {
   /**
    * GET /business-config/public
    *
-   * Presentation-safe subset for authenticated admin/student shell.
-   * Returns only business_name, logo_url, currency, locale, timezone.
-   * Does NOT expose gstin/pan/address/tax/etc.
+   * Presentation-safe subset for public shells (login, metadata) and
+   * authenticated admin/student shells.
+   * Returns only business_name, logo_url, favicon_url, currency, locale,
+   * timezone, theme_json. Does NOT expose gstin/pan/address/tax/etc.
+   * Public (no JWT) so logged-out pages can render brand identity.
    */
-  @Roles(UserRole.ADMIN, UserRole.STUDENT, UserRole.TEACHER)
+  @Public()
   @Get('public')
   getPublicConfig() {
     return this.businessConfigService.getPublicConfig();
