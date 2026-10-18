@@ -5,6 +5,7 @@
   "scripts": {
     "start:dev": "nest start --watch",
     "build": "nest build",
+    "postbuild": "puppeteer browsers install chrome",
     "start": "node dist/apps/api/src/main.js",
     "test": "jest --passWithNoTests",
     "test:watch": "jest --watch",
