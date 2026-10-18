@@ -134,4 +134,104 @@ describe('Supabase RLS — anon client defense-in-depth', () => {
     expect(error).toBeNull();
     expect(Array.isArray(data)).toBe(true);
   });
+
+  // ------------------------------------------------------------------
+  // Default-deny boundary proofs (SEC-01). These tables hold demo rows, so
+  // an empty result genuinely proves RLS denial rather than empty tables.
+  // ------------------------------------------------------------------
+  const populatedTables = ['payments', 'receipts', 'recordings', 'certificates', 'test_attempts'];
+  for (const table of populatedTables) {
+    it(`anon cannot read ${table} (populated table - genuine denial proof)`, async () => {
+      if (!shouldRun) return;
+      const anon = anonClient();
+      const { data, error } = await anon.from(table).select('id').limit(1);
+      if (error) {
+        expect(error).toBeDefined();
+      } else {
+        if (data && data.length > 0) {
+          console.error(`SECURITY FINDING: anon client read ${data.length} rows from ${table}`);
+        }
+        expect(data).toEqual([]);
+      }
+    });
+  }
+
+  it('anon INSERT into protected tables is denied', async () => {
+    if (!shouldRun) return;
+    const anon = anonClient();
+    const { error } = await anon.from('profiles').insert({
+      id: '00000000-0000-0000-0000-000000000000',
+      name: 'RLS Probe',
+      email: 'rls-probe@example.invalid',
+      role: 'student',
+    });
+    // RLS default-deny surfaces as 42501 / row-level-security message.
+    // (Without RLS this would instead fail on the auth.users FK - also an
+    // error, but the assertion below pins the RLS behavior.)
+    expect(error).toBeDefined();
+    const msg = `${(error as any)?.code || ''} ${error?.message || ''}`;
+    expect(msg).toMatch(/42501|row-level security|permission denied|not allowed/i);
+  });
+
+  it('anon UPDATE on protected tables is denied', async () => {
+    if (!shouldRun) return;
+    const anon = anonClient();
+    const { data, error } = await anon
+      .from('profiles')
+      .update({ name: 'RLS Probe' })
+      .eq('id', '00000000-0000-0000-0000-000000000000')
+      .select('id');
+    if (error) {
+      const msg = `${(error as any)?.code || ''} ${error?.message || ''}`;
+      expect(msg).toMatch(/42501|row-level security|permission denied|not allowed/i);
+    } else {
+      // RLS-filtered update touches zero rows.
+      expect(data).toEqual([]);
+    }
+  });
+
+  it('anon DELETE on protected tables is denied', async () => {
+    if (!shouldRun) return;
+    const anon = anonClient();
+    const { data, error } = await anon
+      .from('profiles')
+      .delete()
+      .eq('id', '00000000-0000-0000-0000-000000000000')
+      .select('id');
+    if (error) {
+      const msg = `${(error as any)?.code || ''} ${error?.message || ''}`;
+      expect(msg).toMatch(/42501|row-level security|permission denied|not allowed/i);
+    } else {
+      expect(data).toEqual([]);
+    }
+  });
+
+  it('service_role write round-trip still works (self-cleaning probe)', async () => {
+    const serviceUrl = process.env.SUPABASE_URL || '';
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+    if (!serviceUrl || !serviceKey) {
+      console.warn('Skipping service_role write probe — SERVICE_ROLE_KEY not set');
+      return;
+    }
+    const svc = createClient(serviceUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+    const marker = `rls-probe-${Date.now()}`;
+    const { data: ins, error: insErr } = await svc
+      .from('system_events')
+      .insert({ event_type: 'rls_probe', source: 'test', message: marker })
+      .select('id');
+    expect(insErr).toBeNull();
+    const probeId = (ins as any[])[0].id;
+    const { error: delErr } = await svc.from('system_events').delete().eq('id', probeId);
+    expect(delErr).toBeNull();
+    const { data: gone } = await svc.from('system_events').select('id').eq('id', probeId);
+    expect(gone).toEqual([]);
+  });
+
+  // NOTE on student isolation: LMS students never hold Supabase Auth sessions
+  // (custom JWT + Redis only; no auth.uid() in any runtime path), so a
+  // "student Supabase token reads another student's rows" test would invent an
+  // authentication path the product does not have. The database boundary is
+  // instead proven by the anon-denial assertions above (a stolen browser key
+  // yields nothing), while per-student scoping remains enforced by the API
+  // layer (RolesGuard + user.id scoping, covered by e2e auth suites).
 });
