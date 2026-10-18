@@ -11,7 +11,9 @@
     "test:e2e:api": "playwright test --config=tests/e2e/playwright.config.ts --workers=1 --grep-invert \"student-playback-ui|PiP|mobile double-tap\"",
     "test:e2e:browser": "playwright test --config=tests/e2e/playwright.config.ts --workers=1 --grep \"student-playback-ui|PiP|mobile double-tap\"",
     "recordings:repair-batch-links": "node scripts/repair-batch-links.js",
-    "db:generate": "tsx scripts/generate-fresh-sql.ts"
+    "db:generate": "tsx scripts/generate-fresh-sql.ts",
+    "factory": "tsx scripts/deployment-factory/src/cli.ts",
+    "factory:test": "tsx --test scripts/deployment-factory/test/validate.test.ts scripts/deployment-factory/test/generators.test.ts scripts/deployment-factory/test/verification.test.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",

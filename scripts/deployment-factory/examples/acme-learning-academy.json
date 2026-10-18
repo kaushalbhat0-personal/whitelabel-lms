@@ -1,0 +1,53 @@
+{
+  "client": {
+    "name": "Acme Learning Academy",
+    "deploymentId": "acme-2026-01"
+  },
+  "identity": {
+    "businessName": "Acme Learning Academy",
+    "logoUrl": "https://learn.acmelearningacademy.com/brand/logo.png",
+    "faviconUrl": "https://learn.acmelearningacademy.com/brand/favicon.ico",
+    "website": "https://www.acmelearningacademy.com",
+    "supportEmail": "support@acmelearningacademy.com",
+    "supportPhone": "+1-212-555-0148",
+    "email": "hello@acmelearningacademy.com",
+    "phone": "+1-212-555-0148",
+    "addressLine1": "500 Fifth Avenue, Suite 1200",
+    "city": "New York",
+    "state": "NY",
+    "pincode": "10110",
+    "country": "USA"
+  },
+  "localization": {
+    "locale": "en-US",
+    "timezone": "America/New_York",
+    "currency": "USD",
+    "fyStartMonth": 0
+  },
+  "tax": {
+    "mode": "exclusive",
+    "rate": 8
+  },
+  "financial": {
+    "invoicePrefix": "ACME-INV",
+    "receiptPrefix": "ACME-RCP",
+    "currentFinancialYear": "2026-2027"
+  },
+  "theme": {
+    "primary": "#1e3a8a",
+    "sidebarBg": "#0f172a",
+    "accent": "#f59e0b"
+  },
+  "legal": {
+    "legalFooter": "© 2026 Acme Learning Academy. All rights reserved."
+  },
+  "deployment": {
+    "frontendDomain": "https://learn.acmelearningacademy.com",
+    "apiDomain": "https://api.acmelearningacademy.com"
+  },
+  "providers": {
+    "video": "bunny",
+    "email": "none",
+    "zoom": false
+  }
+}
