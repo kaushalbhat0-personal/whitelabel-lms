@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-cream font-sans text-ink antialiased;
+  }
+
+  /* Visible keyboard focus everywhere (WCAG 2.2 AA). */
+  *:focus-visible {
+    outline: 2px solid #0f766e;
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
+  ::selection {
+    background: rgb(194 65 12 / 0.16);
+  }
+}
+
+@layer components {
+  .input-shell {
+    @apply w-full rounded-cta border border-line bg-paper px-4 py-3 text-base text-ink placeholder:text-ink-soft/60;
+  }
+}
+
+/* Motion: reveal primitives. Disabled movement under reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .reveal {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  /* Kill Tailwind entrance utilities; keep opacity transitions only. */
+  .animate-fade-in-up,
+  .animate-fade-in {
+    animation: none !important;
+  }
+}
