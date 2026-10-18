@@ -98,6 +98,7 @@ export function isolationGuards(config: Record<string, any>, knownDomains: strin
   const emailsToCheck: Array<[string, string]> = [
     ['identity.supportEmail', config?.identity?.supportEmail],
     ['identity.email', config?.identity?.email],
+    ['admin.email', config?.admin?.email],
   ];
   for (const [field, value] of emailsToCheck) {
     if (typeof value !== 'string' || !value.includes('@')) continue;

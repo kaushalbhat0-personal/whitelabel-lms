@@ -18,6 +18,18 @@
     "pincode": "10110",
     "country": "USA"
   },
+  "admin": {
+    "name": "Acme Admin",
+    "email": "admin@acmelearningacademy.com"
+  },
+  "ownership": {
+    "supabaseOwner": "Acme IT (client-owned project)",
+    "hostingOwner": "Acme IT (Render + Vercel)",
+    "redisProvider": "Upstash (client-owned)",
+    "registrarOwner": "Acme IT",
+    "senderDomainOwner": "deferred — Resend not purchased",
+    "notes": "Example client for factory dry runs."
+  },
   "localization": {
     "locale": "en-US",
     "timezone": "America/New_York",

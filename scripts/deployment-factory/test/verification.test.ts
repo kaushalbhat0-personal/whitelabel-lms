@@ -127,11 +127,20 @@ describe('handoff report', () => {
   it('is secret-free and marks NOT READY without backup ack', () => {
     const r = buildHandoffReport({
       config: acme(), repoHead: 'abc123',
-      verifyChecks: [{ id: 'x', label: 'API health', status: 'PASS', detail: 'ok' }],
-      verifyOverall: 'PASS',
-      providers: probeProviders(acme()),
+      verification: {
+        checks: [{ id: 'x', label: 'API health', status: 'PASS', detail: 'ok' }],
+        overall: 'PASS',
+        client: { name: 'Acme Learning Academy', deploymentId: 'acme-2026-01' },
+        target: { api: 'https://api.acmelearningacademy.com', frontend: 'https://learn.acmelearningacademy.com' },
+      },
+      db: {
+        checks: evaluateDbFacts(freshFacts()).filter((c) => c.id !== 'rls'),
+        overall: 'WARN',
+        client: { name: 'Acme Learning Academy', deploymentId: 'acme-2026-01' },
+        target: { supabaseHost: 'xyz.supabase.co' },
+      },
       backupAcknowledged: false,
-      unresolvedWarnings: [],
+      verifiedBy: 'Op',
     });
     assert.ok(r.includes('NOT READY'));
     assert.ok(!r.includes('SERVICE_ROLE') && !r.includes('SECRET'));
@@ -140,14 +149,32 @@ describe('handoff report', () => {
   it('marks READY FOR HANDOFF when gates pass', () => {
     const r = buildHandoffReport({
       config: acme(), repoHead: 'abc123',
-      dbChecks: evaluateDbFacts(freshFacts()).filter((c) => c.id !== 'rls'),
-      verifyChecks: [{ id: 'x', label: 'API health', status: 'PASS', detail: 'ok' }],
-      verifyOverall: 'PASS',
-      providers: probeProviders(acme()),
+      db: {
+        checks: evaluateDbFacts(freshFacts()).filter((c) => c.id !== 'rls'),
+        overall: 'PASS',
+        client: { name: 'Acme Learning Academy', deploymentId: 'acme-2026-01' },
+        target: { supabaseHost: 'xyz.supabase.co' },
+      },
+      verification: {
+        checks: [{ id: 'x', label: 'API health', status: 'PASS', detail: 'ok' }],
+        overall: 'PASS',
+        client: { name: 'Acme Learning Academy', deploymentId: 'acme-2026-01' },
+        target: { api: 'https://api.acmelearningacademy.com', frontend: 'https://learn.acmelearningacademy.com' },
+      },
       backupAcknowledged: true,
-      unresolvedWarnings: [],
+      verifiedBy: 'Op',
     });
     assert.ok(r.includes('READY FOR HANDOFF'));
+  });
+
+  it('is NOT READY without any evidence (P0-3 gate)', () => {
+    const r = buildHandoffReport({
+      config: acme(), repoHead: 'abc123',
+      backupAcknowledged: true,
+      verifiedBy: 'Op',
+    });
+    assert.ok(r.includes('NOT READY'));
+    assert.ok(!r.includes('READY FOR HANDOFF'));
   });
 });
 

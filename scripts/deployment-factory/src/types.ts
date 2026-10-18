@@ -71,6 +71,22 @@ export interface ClientProviders {
   zoom: boolean;
 }
 
+export interface ClientAdmin {
+  /** First LMS administrator (human). Non-secret. Password is NEVER represented here. */
+  name: string;
+  email: string;
+}
+
+export interface ClientOwnership {
+  /** Operator intake notes: who owns what. Names/notes only — NEVER credentials. */
+  supabaseOwner?: string;
+  hostingOwner?: string;
+  redisProvider?: string;
+  registrarOwner?: string;
+  senderDomainOwner?: string;
+  notes?: string;
+}
+
 export interface ClientConfig {
   client: {
     /** Human name, e.g. "Acme Learning Academy" */
@@ -88,12 +104,18 @@ export interface ClientConfig {
   };
   deployment: ClientDeployment;
   providers: ClientProviders;
+  /** First admin identity (non-secret). When present, first-admin SQL uses it. */
+  admin?: ClientAdmin;
+  /** Intake notes: who owns what (names/notes only, never credentials). */
+  ownership?: ClientOwnership;
 }
 
 /** Sections allowed at the top level of a client config file. */
 export const TOP_LEVEL_KEYS = [
   'client',
   'identity',
+  'admin',
+  'ownership',
   'localization',
   'tax',
   'financial',
@@ -101,4 +123,14 @@ export const TOP_LEVEL_KEYS = [
   'legal',
   'deployment',
   'providers',
+] as const;
+
+/** Ownership note keys (freeform names/notes only — never credentials). */
+export const OWNERSHIP_KEYS = [
+  'supabaseOwner',
+  'hostingOwner',
+  'redisProvider',
+  'registrarOwner',
+  'senderDomainOwner',
+  'notes',
 ] as const;

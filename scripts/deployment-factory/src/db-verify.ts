@@ -214,3 +214,37 @@ export function dbOverall(checks: DbCheck[]): DbCheck['status'] {
   if (checks.some((c) => c.status === 'WARN')) return 'WARN';
   return 'PASS';
 }
+
+/** Hostname of the Supabase project URL (non-secret — safe for evidence). */
+export function supabaseHostOf(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return '(unparseable supabase url)';
+  }
+}
+
+export interface DbEvidence {
+  generatedAt: string;
+  /** Non-secret target identity: hostname only, NEVER keys. */
+  target: { supabaseHost: string };
+  /** Present only when verify-db ran with --config (required for handoff). */
+  client?: { name: string; deploymentId: string };
+  checks: DbCheck[];
+  overall: DbCheck['status'];
+}
+
+/** Build the local evidence bundle written by `verify-db --json`. */
+export function buildDbEvidence(
+  supabaseUrl: string,
+  client: { name: string; deploymentId: string } | undefined,
+  checks: DbCheck[],
+): DbEvidence {
+  return {
+    generatedAt: new Date().toISOString(),
+    target: { supabaseHost: supabaseHostOf(supabaseUrl) },
+    ...(client ? { client } : {}),
+    checks,
+    overall: dbOverall(checks),
+  };
+}

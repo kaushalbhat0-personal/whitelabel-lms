@@ -113,6 +113,129 @@ export function checkOriginConsistency(config: ClientConfig): VerifyCheck {
   return { id: 'origins', label: 'Frontend/API origins consistent', status: 'PASS', detail: `FRONTEND_URL=${f} · NEXT_PUBLIC_API_URL=${a} (exact, no trailing slash).` };
 }
 
+/**
+ * Full BusinessConfig drift comparison (pure, unit-testable).
+ *
+ * The public endpoint exposes ONLY the presentation-safe subset
+ * (business_name, logo_url, favicon_url, currency, locale, timezone,
+ * theme_json). Everything else (support contacts, tax, FY, prefixes,
+ * legal footer) is private by design and is compared ONLY against an
+ * authenticated GET /business-config body — never weakened, never logged.
+ *
+ * Rules: mismatches → FAIL (field + expected + observed, never secrets);
+ * live-unavailable fields → noted, never false failures; config-unset
+ * optionals → skipped silently; authed body absent → detail check SKIP.
+ */
+export function comparePublicBrand(config: ClientConfig, live: Record<string, unknown>): VerifyCheck {
+  const mismatches: string[] = [];
+  const uncompared: string[] = [];
+  const want: Record<string, unknown> = {
+    business_name: config.identity.businessName,
+    logo_url: config.identity.logoUrl,
+    favicon_url: config.identity.faviconUrl,
+    currency: config.localization.currency,
+    locale: config.localization.locale,
+    timezone: config.localization.timezone,
+  };
+  for (const [k, v] of Object.entries(want)) {
+    if (live[k] === undefined) uncompared.push(k);
+    else if (live[k] !== v) mismatches.push(`${k}: live=${JSON.stringify(live[k])} config=${JSON.stringify(v)}`);
+  }
+  // Theme: compare the three allowlisted keys individually (exact match is meaningful).
+  const liveTheme = (live.theme_json ?? live.themeJson) as Record<string, unknown> | undefined;
+  if (liveTheme === undefined || liveTheme === null || typeof liveTheme !== 'object') {
+    uncompared.push('theme_json.{primary,sidebarBg,accent}');
+  } else {
+    for (const k of ['primary', 'sidebarBg', 'accent'] as const) {
+      const lv = (liveTheme as Record<string, unknown>)[k];
+      const wv = config.theme[k];
+      if (lv === undefined) uncompared.push(`theme_json.${k}`);
+      else if (lv !== wv) mismatches.push(`theme_json.${k}: live=${JSON.stringify(lv)} config=${JSON.stringify(wv)}`);
+    }
+  }
+  if (mismatches.length > 0) {
+    return {
+      id: 'public-brand', label: 'Public brand matches config',
+      status: 'FAIL',
+      detail: `MISMATCH — ${mismatches.join('; ')}. Re-send the BusinessConfig payload (factory push-config), then re-verify.`,
+    };
+  }
+  return {
+    id: 'public-brand', label: 'Public brand matches config',
+    status: 'PASS',
+    detail: uncompared.length === 0
+      ? 'Live public brand matches the client config (name, logo, favicon, currency, locale, timezone, theme×3).'
+      : `Public fields match; live did not expose (not failures): ${uncompared.join(', ')}.`,
+  };
+}
+
+/** Private-field mapping: config value → live snake_case key. Compared ONLY via authed read. */
+export function compareBusinessConfigDetail(config: ClientConfig, live: Record<string, unknown> | null | undefined): VerifyCheck {
+  if (!live || typeof live !== 'object') {
+    return {
+      id: 'business-config-detail', label: 'BusinessConfig detail matches config',
+      status: 'SKIP',
+      detail: 'No authenticated config body — set LMS_ADMIN_EMAIL + LMS_ADMIN_PASSWORD env so private fields (tax, FY, prefixes, contacts) can be compared. Public subset already checked.',
+    };
+  }
+  const pairs: Array<[field: string, liveKey: string, expected: unknown]> = [
+    ['supportEmail', 'support_email', config.identity.supportEmail],
+    ['supportPhone', 'support_phone', config.identity.supportPhone],
+    ['website', 'website', config.identity.website],
+    ['fyStartMonth', 'fy_start_month', config.localization.fyStartMonth],
+    ['taxMode', 'tax_mode', config.tax.mode],
+    ['taxRate', 'tax_rate', config.tax.rate],
+    ['invoicePrefix', 'invoice_prefix', config.financial.invoicePrefix],
+    ['receiptPrefix', 'receipt_prefix', config.financial.receiptPrefix],
+    ['currentFinancialYear', 'current_financial_year', config.financial.currentFinancialYear],
+    ['legalFooter', 'legal_footer', config.legal.legalFooter],
+  ];
+  const mismatches: string[] = [];
+  const skipped: string[] = [];
+  const numEq = (a: unknown, b: unknown): boolean => {
+    if (a === b) return true;
+    // PostgREST may render numerics as strings — numeric equality is meaningful equality.
+    if (typeof a === 'number' || typeof b === 'number') {
+      const na = Number(a);
+      const nb = Number(b);
+      if (Number.isFinite(na) && Number.isFinite(nb)) return na === nb;
+    }
+    return false;
+  };
+  for (const [field, liveKey, expected] of pairs) {
+    if (expected === undefined) {
+      skipped.push(field);
+      continue;
+    }
+    const observed = (live as Record<string, unknown>)[liveKey];
+    if (observed === undefined || observed === null) {
+      // Live row predates the field (or partial PUT): WARN-worthy, not FAIL.
+      mismatches.push(`${field}: live is empty, config=${JSON.stringify(expected)} (re-run push-config)`);
+    } else if (!numEq(observed, expected)) {
+      mismatches.push(`${field}: live=${JSON.stringify(observed)} config=${JSON.stringify(expected)}`);
+    }
+  }
+  if (mismatches.length > 0) {
+    return {
+      id: 'business-config-detail', label: 'BusinessConfig detail matches config',
+      status: 'FAIL',
+      detail: `MISMATCH — ${mismatches.join('; ')}. Re-run factory push-config, then re-verify.`,
+    };
+  }
+  if (skipped.length === pairs.length) {
+    return {
+      id: 'business-config-detail', label: 'BusinessConfig detail matches config',
+      status: 'SKIP',
+      detail: 'No optional detail fields are set in this client config — nothing private to compare.',
+    };
+  }
+  return {
+    id: 'business-config-detail', label: 'BusinessConfig detail matches config',
+    status: 'PASS',
+    detail: `Private fields match (tax ${config.tax.mode}/${config.tax.rate}, FY ${config.financial.currentFinancialYear}, prefixes ${config.financial.invoicePrefix}/${config.financial.receiptPrefix}${skipped.length > 0 ? `; skipped unset: ${skipped.join(', ')}` : ''}).`,
+  };
+}
+
 export async function verifyDeployment(opts: VerifyOptions): Promise<VerifyReport> {
   const timeoutMs = opts.timeoutMs ?? 15000;
   const api = opts.apiUrl.replace(/\/$/, '');
@@ -156,7 +279,7 @@ export async function verifyDeployment(opts: VerifyOptions): Promise<VerifyRepor
     checks.push({ id: 'origins', label: 'Frontend/API origins consistent', status: 'SKIP', detail: 'No client config supplied — pass --config for the origin cross-check.' });
   }
 
-  // 4. Public brand
+  // 4. Public brand (full public subset via comparePublicBrand)
   try {
     const r = await get(`${api}/business-config/public`, timeoutMs);
     if (r.status === 404) {
@@ -171,21 +294,7 @@ export async function verifyDeployment(opts: VerifyOptions): Promise<VerifyRepor
         body = {};
       }
       if (opts.config) {
-        const mismatches: string[] = [];
-        const want: Record<string, unknown> = {
-          business_name: opts.config.identity.businessName,
-          currency: opts.config.localization.currency,
-          locale: opts.config.localization.locale,
-          timezone: opts.config.localization.timezone,
-        };
-        for (const [k, v] of Object.entries(want)) {
-          if (body[k] !== undefined && body[k] !== v) mismatches.push(`${k}: live=${JSON.stringify(body[k])} config=${JSON.stringify(v)}`);
-        }
-        checks.push({
-          id: 'public-brand', label: 'Public brand matches config',
-          status: mismatches.length === 0 ? 'PASS' : 'FAIL',
-          detail: mismatches.length === 0 ? 'Live public brand matches the client config.' : `MISMATCH — ${mismatches.join('; ')}. Re-send the BusinessConfig payload.`,
-        });
+        checks.push(comparePublicBrand(opts.config, body));
       } else {
         checks.push({ id: 'public-brand', label: 'Public brand reachable', status: 'PASS', detail: 'GET /business-config/public → 200 (no config supplied for value comparison).' });
       }
@@ -218,12 +327,29 @@ export async function verifyDeployment(opts: VerifyOptions): Promise<VerifyRepor
           status: anon.status === 401 || anon.status === 403 ? 'PASS' : 'FAIL',
           detail: `GET /business-config without token → ${anon.status} (expect 401/403).`,
         });
+        // 5b. Private-field drift comparison (tax, FY, prefixes, contacts) —
+        // uses the SAME authed read; nothing extra is exposed or logged.
+        if (opts.config) {
+          if (authed.status === 200) {
+            let authedBody: Record<string, unknown> | null = null;
+            try {
+              authedBody = JSON.parse(authed.text) as Record<string, unknown>;
+            } catch {
+              authedBody = null;
+            }
+            checks.push(compareBusinessConfigDetail(opts.config, authedBody));
+          } else {
+            checks.push(compareBusinessConfigDetail(opts.config, null));
+          }
+        }
       }
     } catch (e) {
       checks.push({ id: 'admin-login', label: 'Admin login', status: 'FAIL', detail: `Error: ${e instanceof Error ? e.message : String(e)}` });
     }
   } else {
     checks.push({ id: 'admin-login', label: 'Admin login', status: 'SKIP', detail: 'Set LMS_ADMIN_EMAIL + LMS_ADMIN_PASSWORD env to enable (never on the command line).' });
+    // Private fields cannot be compared without an admin session — say so explicitly.
+    if (opts.config) checks.push(compareBusinessConfigDetail(opts.config, undefined));
   }
 
   if (opts.mode === 'full') {

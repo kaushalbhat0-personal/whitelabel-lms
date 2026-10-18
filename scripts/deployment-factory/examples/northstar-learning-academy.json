@@ -1,0 +1,65 @@
+{
+  "client": {
+    "name": "Northstar Learning Academy",
+    "deploymentId": "northstar-2026-01"
+  },
+  "identity": {
+    "businessName": "Northstar Learning Academy",
+    "logoUrl": "https://learn.northstar-academy.io/brand/logo.png",
+    "faviconUrl": "https://learn.northstar-academy.io/brand/favicon.ico",
+    "website": "https://www.northstar-academy.io",
+    "supportEmail": "support@northstar-academy.io",
+    "supportPhone": "+1-312-555-0119",
+    "email": "hello@northstar-academy.io",
+    "phone": "+1-312-555-0119",
+    "addressLine1": "200 West Madison Street, Suite 800",
+    "city": "Chicago",
+    "state": "IL",
+    "pincode": "60606",
+    "country": "USA"
+  },
+  "admin": {
+    "name": "Maya Krishnan",
+    "email": "maya.krishnan@northstar-academy.io"
+  },
+  "ownership": {
+    "supabaseOwner": "Northstar Ops (client-owned project)",
+    "hostingOwner": "Northstar Ops (Render + Vercel)",
+    "redisProvider": "Managed Redis host (client-owned)",
+    "registrarOwner": "Northstar Ops",
+    "senderDomainOwner": "deferred — Resend not purchased",
+    "notes": "Client #2 factory dry run: Bunny video, Resend deferred, no Zoom."
+  },
+  "localization": {
+    "locale": "en-US",
+    "timezone": "America/Chicago",
+    "currency": "USD",
+    "fyStartMonth": 0
+  },
+  "tax": {
+    "mode": "exclusive",
+    "rate": 8
+  },
+  "financial": {
+    "invoicePrefix": "NS-INV",
+    "receiptPrefix": "NS-RCP",
+    "currentFinancialYear": "2026-2027"
+  },
+  "theme": {
+    "primary": "#0e7490",
+    "sidebarBg": "#082f49",
+    "accent": "#fbbf24"
+  },
+  "legal": {
+    "legalFooter": "© 2026 Northstar Learning Academy. All rights reserved."
+  },
+  "deployment": {
+    "frontendDomain": "https://learn.northstar-academy.io",
+    "apiDomain": "https://api.northstar-academy.io"
+  },
+  "providers": {
+    "video": "bunny",
+    "email": "none",
+    "zoom": false
+  }
+}

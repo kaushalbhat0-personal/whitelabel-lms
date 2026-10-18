@@ -13,7 +13,7 @@
  * This module is pure (no I/O) so it is fully unit-testable.
  */
 
-import { TOP_LEVEL_KEYS } from './types';
+import { TOP_LEVEL_KEYS, OWNERSHIP_KEYS } from './types';
 import { isolationGuards } from './guards';
 
 export interface ValidationError {
@@ -166,6 +166,40 @@ export function validateClientConfig(raw: unknown, opts: { knownDomains?: string
     }
     if (identity.phone !== undefined && (typeof identity.phone !== 'string' || identity.phone.length < 10)) {
       err('identity.phone', `identity.phone must be at least 10 characters (API rule). Received: ${JSON.stringify(identity.phone)}`);
+    }
+  }
+
+  // admin (first LMS administrator — non-secret identity only, never a password)
+  const admin = config.admin as Record<string, unknown> | undefined;
+  if (admin !== undefined) {
+    if (typeof admin !== 'object' || Array.isArray(admin)) {
+      err('admin', 'admin must be an object when present ({ name, email }). The password is NEVER represented here.');
+    } else {
+      for (const k of Object.keys(admin)) {
+        if (k !== 'name' && k !== 'email') err(`admin.${k}`, `Unknown field "admin.${k}". Allowed: name, email.`);
+      }
+      if (typeof admin.name !== 'string' || (admin.name as string).trim().length === 0) {
+        err('admin.name', 'admin.name is required when the admin section is present (the first LMS administrator).');
+      }
+      if (typeof admin.email !== 'string' || !EMAIL_RE.test(admin.email as string)) {
+        err('admin.email', `admin.email must be a valid email address. Received: ${JSON.stringify(admin.email)}`);
+      }
+    }
+  }
+
+  // ownership (intake notes — names/notes only, never credentials)
+  const ownership = config.ownership as Record<string, unknown> | undefined;
+  if (ownership !== undefined) {
+    if (typeof ownership !== 'object' || Array.isArray(ownership)) {
+      err('ownership', 'ownership must be an object when present (owner names/notes only — never credentials).');
+    } else {
+      for (const k of Object.keys(ownership)) {
+        if (!OWNERSHIP_KEYS.includes(k as (typeof OWNERSHIP_KEYS)[number])) {
+          err(`ownership.${k}`, `Unknown field "ownership.${k}". Allowed: ${OWNERSHIP_KEYS.join(', ')}.`);
+        } else if (typeof ownership[k] !== 'string' || (ownership[k] as string).trim().length === 0) {
+          err(`ownership.${k}`, `ownership.${k} must be a non-empty note when present. Received: ${JSON.stringify(ownership[k])}`);
+        }
+      }
     }
   }
 
