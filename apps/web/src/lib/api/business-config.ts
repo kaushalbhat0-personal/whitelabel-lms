@@ -49,6 +49,18 @@ export interface BusinessConfigPublic {
   locale: string;
   timezone: string;
   theme_json: ThemeJson;
+  /**
+   * Deployment-scoped password policy, resolved server-side from
+   * PASSWORD_MANAGEMENT. Absent on older APIs → treat as 'enabled'
+   * (normal self-service password flows; server still enforces).
+   */
+  password_management?: 'enabled' | 'disabled';
+}
+
+export function isPasswordManagementDisabled(
+  cfg: Pick<BusinessConfigPublic, 'password_management'> | null | undefined,
+): boolean {
+  return cfg?.password_management === 'disabled';
 }
 
 export async function getBusinessConfig() {

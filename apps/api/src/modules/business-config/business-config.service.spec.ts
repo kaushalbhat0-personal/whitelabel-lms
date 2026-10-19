@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import { BusinessConfigService } from './business-config.service';
 import { SupabaseService } from '../../common/services/supabase.service';
 
@@ -96,6 +97,7 @@ describe('BusinessConfigService — P2A fields', () => {
       providers: [
         BusinessConfigService,
         { provide: SupabaseService, useValue: { client } },
+        { provide: ConfigService, useValue: { get: jest.fn(() => undefined) } },
       ],
     }).compile();
     service = module.get(BusinessConfigService);

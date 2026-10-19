@@ -7,13 +7,14 @@ import { fetchApi, ApiError } from '@/lib/api-client';
 import { ROUTES, API_ROUTES } from '@/lib/constants';
 import { useSession } from '@/hooks/useSession';
 import { useDeviceFingerprint } from '@/lib/hooks/useDeviceFingerprint';
-import { getPublicBusinessConfig } from '@/lib/api/business-config';
+import { getPublicBusinessConfig, isPasswordManagementDisabled } from '@/lib/api/business-config';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 
 export default function LoginPage() {
   const router = useRouter();
   const [businessName, setBusinessName] = useState('LMS Platform');
+  const [passwordResetDisabled, setPasswordResetDisabled] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -29,6 +30,7 @@ export default function LoginPage() {
     getPublicBusinessConfig()
       .then((cfg) => {
         if (cfg.business_name) setBusinessName(cfg.business_name);
+        if (isPasswordManagementDisabled(cfg)) setPasswordResetDisabled(true);
       })
       .catch(() => {});
   }, []);
@@ -175,13 +177,20 @@ export default function LoginPage() {
             </div>
 
             <div className="flex items-center justify-end">
-              <button
-                type="button"
-                onClick={() => setShowForgotPassword(true)}
-                className="text-sm text-brand-600 hover:text-brand-700 min-h-[44px] inline-flex items-center px-2 -mr-2"
-              >
-                Forgot Password?
-              </button>
+              {passwordResetDisabled ? (
+                <p className="px-2 text-right text-xs leading-relaxed text-text-secondary">
+                  Demo accounts are operator-managed. Password reset is unavailable for demo access.
+                  Request fresh demo access if you need help signing in.
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowForgotPassword(true)}
+                  className="text-sm text-brand-600 hover:text-brand-700 min-h-[44px] inline-flex items-center px-2 -mr-2"
+                >
+                  Forgot Password?
+                </button>
+              )}
             </div>
 
             <Button

@@ -7,7 +7,7 @@ import { API_ROUTES, ROUTES } from '@/lib/constants';
 import { getAccessTokenSync } from '@/lib/auth-token';
 import { clearMustChangePassword, getSessionCache } from '@/lib/auth';
 import { useAuthStore } from '@/stores/auth.store';
-import { getPublicBusinessConfig } from '@/lib/api/business-config';
+import { getPublicBusinessConfig, isPasswordManagementDisabled } from '@/lib/api/business-config';
 import { Button } from '@/components/ui/Button';
 
 export default function ChangePasswordPage() {
@@ -19,6 +19,7 @@ export default function ChangePasswordPage() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [initialCheckDone, setInitialCheckDone] = useState(false);
+  const [passwordChangeDisabled, setPasswordChangeDisabled] = useState(false);
 
   const submittingRef = useRef(false);
   const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -37,6 +38,7 @@ export default function ChangePasswordPage() {
     getPublicBusinessConfig()
       .then((cfg) => {
         if (cfg.business_name) setBusinessName(cfg.business_name);
+        if (isPasswordManagementDisabled(cfg)) setPasswordChangeDisabled(true);
       })
       .catch(() => {});
   }, []);
@@ -117,6 +119,25 @@ export default function ChangePasswordPage() {
   };
 
   if (!initialCheckDone) return null;
+
+  if (passwordChangeDisabled) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-100 p-4">
+        <div
+          className="w-full max-w-md rounded-xl bg-white p-6 sm:p-8 shadow-lg mx-4"
+          role="status"
+          aria-live="polite"
+        >
+          <h1 className="mb-2 text-2xl font-bold text-gray-900">{businessName}</h1>
+          <p className="mb-6 text-sm text-gray-500">Set Your Password</p>
+          <div className="rounded-lg bg-gray-50 p-4 text-sm leading-relaxed text-gray-700">
+            Password changes are managed by the demo operator. Request fresh demo access if you need
+            help signing in.
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (success) {
     return (

@@ -31,6 +31,7 @@ import { LoginDto } from './dto/login.dto';
 import { SupabaseService } from '../../common/services/supabase.service';
 import { REDIS_KEYS, REDIS_TTL } from '../../common/constants/redis-keys.constant';
 import { resolveSessionPolicy, SessionPolicy } from '../../common/constants/session-policy.constant';
+import { resolvePasswordPolicy, PasswordManagementPolicy } from '../../common/constants/password-policy.constant';
 import { TABLES } from '../../common/constants/tables.constant';
 import { DeviceService } from '../devices/device.service';
 import { EmailService } from '../email/email.service';
@@ -55,14 +56,31 @@ export class AuthService {
     redisService: RedisService,
   ) {
     this.redis = redisService.getOrThrow();
-    // Fail fast at startup on an invalid SESSION_POLICY. Unset → 'single'.
+    // Fail fast at startup on invalid policies. Unset → single-session + password management enabled.
     this.sessionPolicy = resolveSessionPolicy(
       configService.get<string>('SESSION_POLICY'),
+    );
+    this.passwordPolicy = resolvePasswordPolicy(
+      configService.get<string>('PASSWORD_MANAGEMENT'),
     );
   }
 
   private readonly redis: Redis;
   private readonly sessionPolicy: SessionPolicy;
+  private readonly passwordPolicy: PasswordManagementPolicy;
+
+  /**
+   * Self-service password flows are deployment-scoped. Deployments with
+   * PASSWORD_MANAGEMENT=disabled (e.g. the shared-account sales demo) block
+   * forgot/change at the API boundary; admin/operator rotation is unaffected.
+   */
+  private ensurePasswordManagementAllowed(): void {
+    if (this.passwordPolicy === 'disabled') {
+      throw new ForbiddenException(
+        'Password changes are managed by the demo operator. Request fresh demo access if you need help signing in.',
+      );
+    }
+  }
 
   // ────────────────────────────────────────────────────────────────
   //  login
@@ -370,6 +388,8 @@ export class AuthService {
     newPassword: string,
     confirmPassword: string,
   ): Promise<{ message: string }> {
+    this.ensurePasswordManagementAllowed();
+
     if (newPassword !== confirmPassword) {
       throw new BadRequestException('Passwords do not match');
     }
@@ -398,8 +418,12 @@ export class AuthService {
   /**
    * Send a Supabase password reset email to the user.
    * Always returns 200 — never reveals if the email exists.
+   * Deployments with PASSWORD_MANAGEMENT=disabled reject uniformly for every
+   * address (no reset email is issued), so account existence is not leaked.
    */
   async forgotPassword(email: string): Promise<{ message: string }> {
+    this.ensurePasswordManagementAllowed();
+
     const frontendUrl = this.configService.get<string>(
       'FRONTEND_URL',
       'http://localhost:3000',

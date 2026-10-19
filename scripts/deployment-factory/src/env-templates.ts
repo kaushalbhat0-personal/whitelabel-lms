@@ -70,6 +70,8 @@ export function buildRenderEnvTemplate(config: ClientConfig): string {
   lines.push('JWT_EXPIRES_IN=24h');
   lines.push(opt('single = one active session per user (client default). multi is demo-only and is set manually on the demo deployment — never generated here.'));
   lines.push('SESSION_POLICY=single');
+  lines.push(opt('enabled = normal self-service password flows (client default). disabled is demo-only and is set manually on the demo deployment — never generated here.'));
+  lines.push('PASSWORD_MANAGEMENT=enabled');
   lines.push('');
 
   lines.push('# ── Supabase (client project) ────────────────────────────────');

@@ -17,9 +17,11 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../../common/services/supabase.service';
 import { TABLES } from '../../common/constants/tables.constant';
 import { UpdateBusinessConfigDto } from './dto/update-business-config.dto';
+import { resolvePasswordPolicy } from '../../common/constants/password-policy.constant';
 import {
   DEFAULT_BUSINESS_NAME,
   DEFAULT_CURRENCY,
@@ -35,7 +37,10 @@ import { isValidHex6 } from './dto/theme-json.dto';
 export class BusinessConfigService {
   private readonly logger = new Logger(BusinessConfigService.name);
 
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly configService: ConfigService,
+  ) {}
 
   /**
    * Fetch the single business_config row.
@@ -81,6 +86,9 @@ export class BusinessConfigService {
    * Public presentation-safe subset — no sensitive financial/legal fields.
    * Returns business_name, logo_url, favicon_url, currency, locale, timezone, theme_json with DEFAULT_* fallbacks.
    * Used by authenticated admin/student shell and browser metadata; never exposes gstin/pan/address/tax/etc.
+   * Also carries the deployment-scoped password_management flag so logged-out
+   * pages (login/forgot/change/reset) can hide self-service password UI without
+   * a second configuration source. Resolved from PASSWORD_MANAGEMENT env.
    */
   async getPublicConfig(): Promise<{
     business_name: string;
@@ -90,6 +98,7 @@ export class BusinessConfigService {
     locale: string;
     timezone: string;
     theme_json: { primary: string; sidebarBg: string; accent: string };
+    password_management: 'enabled' | 'disabled';
   }> {
     const row = await this.getConfig();
     const r: any = row;
@@ -101,6 +110,9 @@ export class BusinessConfigService {
       locale: r.locale ?? DEFAULT_LOCALE,
       timezone: r.timezone ?? DEFAULT_TIMEZONE,
       theme_json: this.resolveTheme(r.theme_json),
+      password_management: resolvePasswordPolicy(
+        this.configService.get<string>('PASSWORD_MANAGEMENT'),
+      ),
     };
   }
 

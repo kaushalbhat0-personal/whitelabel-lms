@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import { BusinessConfigService } from './business-config.service';
 import { BusinessConfigController } from './business-config.controller';
 import { SupabaseService } from '../../common/services/supabase.service';
@@ -48,6 +49,7 @@ describe('BusinessConfig public presentation config', () => {
       providers: [
         BusinessConfigService,
         { provide: SupabaseService, useValue: { client: mockClient } },
+        { provide: ConfigService, useValue: { get: jest.fn(() => undefined) } },
       ],
     }).compile();
 
@@ -95,6 +97,11 @@ describe('BusinessConfig public presentation config', () => {
     expect(result.locale).toBe('en-IN');
     expect(result.timezone).toBe('Asia/Kolkata');
     expect(result.business_name).toBe('Test');
+  });
+
+  it('public config carries password_management defaulting to enabled', async () => {
+    const result: any = await controller.getPublicConfig();
+    expect(result.password_management).toBe('enabled');
   });
 
   it('unauthenticated follows existing API 401 pattern (controller requires JWT)', () => {

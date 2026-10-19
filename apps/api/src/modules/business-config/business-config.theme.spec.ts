@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import { BusinessConfigService } from './business-config.service';
 import { SupabaseService } from '../../common/services/supabase.service';
 import {
@@ -44,7 +45,11 @@ describe('BusinessConfigService — theme_json COMM-01B-A', () => {
   async function createWithRow(row: any) {
     const client = makeClient(row);
     const module: TestingModule = await Test.createTestingModule({
-      providers: [BusinessConfigService, { provide: SupabaseService, useValue: { client } }],
+      providers: [
+        BusinessConfigService,
+        { provide: SupabaseService, useValue: { client } },
+        { provide: ConfigService, useValue: { get: jest.fn(() => undefined) } },
+      ],
     }).compile();
     service = module.get(BusinessConfigService);
     return { service, client };
@@ -122,7 +127,11 @@ describe('BusinessConfigService — theme_json COMM-01B-A', () => {
     const existing = { ...baseRow, theme_json: { primary: '#111111', sidebarBg: '#222222', accent: '#333333' } };
     const client = makeClient(existing);
     const module: TestingModule = await Test.createTestingModule({
-      providers: [BusinessConfigService, { provide: SupabaseService, useValue: { client } }],
+      providers: [
+        BusinessConfigService,
+        { provide: SupabaseService, useValue: { client } },
+        { provide: ConfigService, useValue: { get: jest.fn(() => undefined) } },
+      ],
     }).compile();
     service = module.get(BusinessConfigService);
 

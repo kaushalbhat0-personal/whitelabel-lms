@@ -61,7 +61,7 @@ describe('AuthService — one-device graceful replacement', () => {
         AuthService,
         { provide: SupabaseService, useValue: supabase },
         { provide: JwtService, useValue: jwt },
-        { provide: ConfigService, useValue: { get: jest.fn((key: string) => key === 'SESSION_POLICY' ? undefined : 'http://localhost:3000') } },
+        { provide: ConfigService, useValue: { get: jest.fn((key: string) => key === 'FRONTEND_URL' ? 'http://localhost:3000' : undefined) } },
         { provide: DeviceService, useValue: { registerDevice: jest.fn(async () => ({ device: null, isNew: false })) } },
         { provide: EmailService, useValue: {} },
         { provide: PlaybackGuardService, useValue: { revokeUserTokens: jest.fn(async () => {}) } },
@@ -241,7 +241,7 @@ describe('AuthService — SESSION_POLICY=multi (concurrent sessions)', () => {
         AuthService,
         { provide: SupabaseService, useValue: supabase },
         { provide: JwtService, useValue: jwt },
-        { provide: ConfigService, useValue: { get: jest.fn((key: string) => key === 'SESSION_POLICY' ? 'multi' : 'http://localhost:3000') } },
+        { provide: ConfigService, useValue: { get: jest.fn((key: string) => key === 'SESSION_POLICY' ? 'multi' : key === 'FRONTEND_URL' ? 'http://localhost:3000' : undefined) } },
         { provide: DeviceService, useValue: { registerDevice: jest.fn(async () => ({ device: null, isNew: false })) } },
         { provide: EmailService, useValue: {} },
         { provide: PlaybackGuardService, useValue: { revokeUserTokens: jest.fn(async () => {}) } },
@@ -342,6 +342,94 @@ describe('AuthService — SESSION_POLICY=multi (concurrent sessions)', () => {
   });
 });
 
+describe('AuthService — PASSWORD_MANAGEMENT=disabled (operator-managed demo)', () => {
+  let service: AuthService;
+
+  beforeEach(async () => {
+    const redis = redisMock();
+    const supabase: any = {
+      authClient: { auth: { signInWithPassword: jest.fn(), resetPasswordForEmail: jest.fn() } },
+      client: { from: jest.fn() },
+    };
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        AuthService,
+        { provide: SupabaseService, useValue: supabase },
+        { provide: JwtService, useValue: { signAsync: jest.fn(async () => 'jwt') } },
+        { provide: ConfigService, useValue: { get: jest.fn((key: string) => key === 'PASSWORD_MANAGEMENT' ? 'disabled' : null) } },
+        { provide: DeviceService, useValue: { registerDevice: jest.fn(async () => ({ device: null, isNew: false })) } },
+        { provide: EmailService, useValue: {} },
+        { provide: PlaybackGuardService, useValue: {} },
+        { provide: ObservabilityService, useValue: { logEvent: jest.fn(async () => {}) } },
+        { provide: RedisService, useValue: { getOrThrow: () => redis } },
+      ],
+    }).compile();
+    service = module.get(AuthService);
+    (service as any).supabase = supabase;
+  });
+
+  it('forgot password is blocked without issuing a reset email', async () => {
+    const supabase = (service as any).supabaseService as any;
+    await expect(service.forgotPassword('anyone@example.com')).rejects.toThrow(/managed by the demo operator/);
+    expect(supabase.authClient.auth.resetPasswordForEmail).not.toHaveBeenCalled();
+  });
+
+  it('change password is blocked without touching Supabase Auth', async () => {
+    const supabase = (service as any).supabaseService as any;
+    const adminSpy = jest.fn();
+    supabase.client = { auth: { admin: { updateUserById: adminSpy } }, from: jest.fn() };
+    await expect(service.changePassword('u1', 'NewPass123', 'NewPass123')).rejects.toThrow(/managed by the demo operator/);
+    expect(adminSpy).not.toHaveBeenCalled();
+  });
+
+  it('block message is identical regardless of address (no enumeration)', async () => {
+    await expect(service.forgotPassword('a@example.com')).rejects.toThrow('Password changes are managed by the demo operator. Request fresh demo access if you need help signing in.');
+    await expect(service.forgotPassword('b@example.com')).rejects.toThrow('Password changes are managed by the demo operator. Request fresh demo access if you need help signing in.');
+  });
+});
+
+describe('AuthService — PASSWORD_MANAGEMENT enabled/default (client behavior)', () => {
+  it('unset policy keeps forgot-password available (always-200, sends email)', async () => {
+    const redis = redisMock();
+    const resetSpy = jest.fn().mockResolvedValue({ error: null });
+    const supabase: any = {
+      authClient: { auth: { resetPasswordForEmail: resetSpy } },
+      client: { from: jest.fn() },
+    };
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        AuthService,
+        { provide: SupabaseService, useValue: supabase },
+        { provide: JwtService, useValue: {} },
+        { provide: ConfigService, useValue: { get: jest.fn((key: string) => key === 'FRONTEND_URL' ? 'http://localhost:3000' : undefined) } },
+        { provide: DeviceService, useValue: {} },
+        { provide: EmailService, useValue: {} },
+        { provide: PlaybackGuardService, useValue: {} },
+        { provide: ObservabilityService, useValue: { logEvent: jest.fn(async () => {}) } },
+        { provide: RedisService, useValue: { getOrThrow: () => redis } },
+      ],
+    }).compile();
+    const svc = module.get(AuthService);
+    await expect(svc.forgotPassword('s@example.com')).resolves.toMatchObject({ message: expect.stringMatching(/reset link has been sent/) });
+    expect(resetSpy).toHaveBeenCalled();
+  });
+
+  it.each(['nope', 'DISABLED', 'off', '0'])('invalid PASSWORD_MANAGEMENT=%p fails fast at startup', async (value) => {
+    await expect(Test.createTestingModule({
+      providers: [
+        AuthService,
+        { provide: SupabaseService, useValue: {} },
+        { provide: JwtService, useValue: {} },
+        { provide: ConfigService, useValue: { get: jest.fn((k: string) => k === 'PASSWORD_MANAGEMENT' ? value : null) } },
+        { provide: DeviceService, useValue: {} },
+        { provide: EmailService, useValue: {} },
+        { provide: PlaybackGuardService, useValue: {} },
+        { provide: ObservabilityService, useValue: {} },
+        { provide: RedisService, useValue: { getOrThrow: () => redisMock() } },
+      ],
+    }).compile()).rejects.toThrow(/PASSWORD_MANAGEMENT/);
+  });
+});
 describe('AuthService — SESSION_POLICY configuration', () => {
   it('unset SESSION_POLICY behaves exactly like single mode (409 on second login)', async () => {
     const redisLocal = redisMock();

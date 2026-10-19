@@ -161,3 +161,19 @@ holds; do not build an automated reset:
 
 After reset, re-run the §5 verification checklist including both the demo
 student and the operator-held demo admin logins.
+
+## 10. Demo password policy (shared-account protection)
+
+- Demo deployments run with `PASSWORD_MANAGEMENT=disabled` (Render demo API
+  env only). Client deployments and factory templates use `enabled`.
+- Under `disabled`: `POST /auth/forgot-password` and `POST /auth/change-password`
+  are rejected server-side (uniform 403, no reset email issued, no account
+  enumeration); the web login/change/reset pages show the operator-managed
+  message instead of password forms. Admin/operator rotation paths
+  (`resendWelcome`, Supabase dashboard) are unaffected.
+- If a password-reset email was issued before the policy was enabled, its link
+  still completes via Supabase directly. After enabling, rotate the shared
+  student password once (dashboard → operator vault) to invalidate stragglers.
+- Optional hardening on the DEMO Supabase project: disable the "Reset password"
+  email template so no recovery flow can originate there either. Never commit
+  demo credentials; rotation values live in the operator vault only.

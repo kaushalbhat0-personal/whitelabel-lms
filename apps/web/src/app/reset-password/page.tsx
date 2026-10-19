@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { ROUTES } from '@/lib/constants';
-import { getPublicBusinessConfig } from '@/lib/api/business-config';
+import { getPublicBusinessConfig, isPasswordManagementDisabled } from '@/lib/api/business-config';
 import { Button } from '@/components/ui/Button';
 
 export default function ResetPasswordPage() {
@@ -17,6 +17,7 @@ export default function ResetPasswordPage() {
   const [success, setSuccess] = useState(false);
   const [ready, setReady] = useState(false);
   const [readyError, setReadyError] = useState<string | null>(null);
+  const [passwordResetDisabled, setPasswordResetDisabled] = useState(false);
 
   const supabase = useMemo(() => createClient(), []);
 
@@ -104,12 +105,15 @@ export default function ResetPasswordPage() {
     getPublicBusinessConfig()
       .then((cfg) => {
         if (cfg.business_name) setBusinessName(cfg.business_name);
+        if (isPasswordManagementDisabled(cfg)) setPasswordResetDisabled(true);
       })
       .catch(() => {});
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Deployment policy: never attempt a Supabase password update when disabled.
+    if (passwordResetDisabled) return;
     if (submittingRef.current) return;
     submittingRef.current = true;
     setError('');
@@ -180,6 +184,33 @@ export default function ResetPasswordPage() {
           </div>
           <h1 className="mb-2 text-xl font-bold text-gray-900">Password Reset!</h1>
           <p className="text-sm text-gray-500">Redirecting to login...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (passwordResetDisabled) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-100">
+        <div
+          className="w-full max-w-md rounded-xl bg-white p-8 shadow-lg"
+          role="status"
+          aria-live="polite"
+        >
+          <h1 className="mb-2 text-2xl font-bold text-gray-900">{businessName}</h1>
+          <p className="mb-6 text-sm text-gray-500">Reset Your Password</p>
+          <div className="rounded-lg bg-gray-50 p-4 text-sm leading-relaxed text-gray-700">
+            Demo accounts are operator-managed. Password reset is unavailable for demo access.
+            Request fresh demo access if you need help signing in.
+          </div>
+          <div className="mt-4">
+            <a
+              href={ROUTES.LOGIN}
+              className="inline-flex min-h-[44px] items-center text-brand-600 hover:text-brand-700 underline"
+            >
+              Go to login
+            </a>
+          </div>
         </div>
       </div>
     );

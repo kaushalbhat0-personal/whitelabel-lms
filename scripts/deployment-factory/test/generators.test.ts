@@ -48,6 +48,12 @@ describe('env templates', () => {
     assert.ok(!t.includes('SESSION_POLICY=multi'));
   });
 
+  it('render template pins PASSWORD_MANAGEMENT=enabled and never disabled', () => {
+    const t = buildRenderEnvTemplate(acme());
+    assert.ok(t.includes('PASSWORD_MANAGEMENT=enabled'));
+    assert.ok(!t.includes('PASSWORD_MANAGEMENT=disabled'));
+  });
+
   it('render template has no service-role leakage into vercel; vercel template derives API url', () => {
     const v = buildVercelEnvTemplate(acme());
     assert.ok(!v.includes('SERVICE_ROLE'));

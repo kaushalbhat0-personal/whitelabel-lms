@@ -18,14 +18,17 @@ import { ValidationPipe, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
 import { resolveSessionPolicy } from './common/constants/session-policy.constant';
+import { resolvePasswordPolicy } from './common/constants/password-policy.constant';
 
 async function bootstrap() {
-  // Fail fast on an invalid SESSION_POLICY before creating the application.
-  // Allowed: 'single' | 'multi'. Unset defaults to 'single'. An invalid value
-  // must never silently become 'multi' (weakened client sessions) or be
-  // ignored (broken demo). Constructors re-resolve the same value, so a
-  // misconfiguration in file-based env also fails during Nest DI init.
+  // Fail fast on invalid deployment policies before creating the application.
+  // SESSION_POLICY: 'single' | 'multi' (unset → 'single').
+  // PASSWORD_MANAGEMENT: 'enabled' | 'disabled' (unset → 'enabled').
+  // Invalid values must never silently weaken clients or break the demo.
+  // Constructors re-resolve the same values, so file-based misconfiguration
+  // also fails during Nest DI init.
   resolveSessionPolicy(process.env.SESSION_POLICY);
+  resolvePasswordPolicy(process.env.PASSWORD_MANAGEMENT);
 
   // rawBody: true tells NestJS's body-parser to preserve the exact byte
   // sequence on req.rawBody.  The Mux webhook handler needs this to verify
