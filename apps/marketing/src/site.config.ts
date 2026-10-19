@@ -9,16 +9,43 @@
  * domain. The localhost fallback is intentional: no permanent domain has
  * been finalized, and no placeholder domain is invented here.
  *
- * DEMO_URL: set NEXT_PUBLIC_DEMO_URL in production to the demo LMS origin
- * (e.g. https://demo.<marketing-domain>). Resolved once here — components
- * must use siteConfig.demoUrl / siteConfig.demoLoginUrl, never read the
- * environment variable directly and never hardcode a demo deployment URL.
+ * DEMO_URL: set NEXT_PUBLIC_DEMO_URL in production to the demo LMS location
+ * (bare https origin preferred, e.g. https://demo.<marketing-domain>). A value
+ * with a path — including a trailing `/login` — is tolerated and normalized
+ * to its origin so the launch link can never duplicate to `/login/login`.
+ * Resolved once here — components must use siteConfig.demoUrl /
+ * siteConfig.demoLoginUrl, never read the environment variable directly
+ * and never hardcode a demo deployment URL.
  */
+
+/**
+ * Normalize the demo LMS location to a bare https origin (MKT-01H, hardened DEMO-07).
+ *
+ * Contract: NEXT_PUBLIC_DEMO_URL names WHERE the demo LMS lives, not a full
+ * login URL. A bare origin is expected, but a value with a path — notably a
+ * trailing `/login` — is tolerated and reduced to its origin so the launch
+ * link can never become `/login/login`.
+ *
+ * Returns undefined for anything unusable (empty, non-https, unparsable), in
+ * which case demo-launch UI degrades to the request-access flow.
+ */
+export function normalizeDemoUrl(raw: string): string | undefined {
+  const trimmed = (raw ?? '').trim().replace(/\/+$/, '');
+  if (trimmed.length === 0) return undefined;
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    return undefined;
+  }
+  if (url.protocol !== 'https:') return undefined;
+  return url.origin;
+}
 
 /**
  * Resolve the demo LMS origin (MKT-01H).
  *
- * - Production: requires NEXT_PUBLIC_DEMO_URL (https origin). When absent
+ * - Production: requires NEXT_PUBLIC_DEMO_URL (https). When absent
  *   or invalid, returns undefined so demo-launch UI degrades to the
  *   request-access flow instead of linking somewhere wrong. The prebuild
  *   env check (scripts/check-marketing-env.mjs) makes this loud in logs.
@@ -28,13 +55,13 @@
  *   the fallback URL as canonical and do not copy it elsewhere.
  */
 function resolveDemoUrl(): string | undefined {
-  const raw = (process.env.NEXT_PUBLIC_DEMO_URL ?? '').trim().replace(/\/+$/, '');
+  const normalized = normalizeDemoUrl(process.env.NEXT_PUBLIC_DEMO_URL ?? '');
+  if (normalized) return normalized;
+  const raw = (process.env.NEXT_PUBLIC_DEMO_URL ?? '').trim();
   if (raw.length > 0) {
-    if (raw.startsWith('https://')) return raw;
     console.warn(
-      `[marketing] NEXT_PUBLIC_DEMO_URL must be an https origin; ignoring invalid value.`,
+      `[marketing] NEXT_PUBLIC_DEMO_URL must be an https URL for the demo LMS; ignoring invalid value.`,
     );
-    return undefined;
   }
   if (process.env.NODE_ENV === 'production') return undefined;
   return 'https://whitelabel-lms-opal.vercel.app';

@@ -12,6 +12,7 @@
     "test:e2e:browser": "playwright test --config=tests/e2e/playwright.config.ts --workers=1 --grep \"student-playback-ui|PiP|mobile double-tap\"",
     "recordings:repair-batch-links": "node scripts/repair-batch-links.js",
     "db:generate": "tsx scripts/generate-fresh-sql.ts",
+    "test:marketing": "tsx --test apps/marketing/src/site.config.test.ts",
     "factory": "tsx scripts/deployment-factory/src/cli.ts",
     "factory:test": "tsx --test scripts/deployment-factory/test/validate.test.ts scripts/deployment-factory/test/generators.test.ts scripts/deployment-factory/test/verification.test.ts scripts/deployment-factory/test/brand-compare.test.ts scripts/deployment-factory/test/push-config.test.ts scripts/deployment-factory/test/handoff-gate.test.ts"
   },

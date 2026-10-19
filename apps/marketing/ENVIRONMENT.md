@@ -18,6 +18,12 @@ deployed from the LMS. No secrets live here — only public navigation targets.
 | `NEXT_PUBLIC_SITE_URL` | `https://<MARKETING_DOMAIN>`         | canonical URLs, `metadataBase`, sitemap, OG    |
 | `NEXT_PUBLIC_DEMO_URL` | `https://demo.<MARKETING_DOMAIN>`    | “Launch Live Demo” CTA → `${…}/login`          |
 
+URL contract: the value names the demo LMS location. A bare `https`
+origin is expected; a trailing `/login` path is tolerated and normalized
+to the origin, so the launch link can never duplicate to `/login/login`.
+Missing/invalid values hide the launch CTA and show the request-access
+flow instead (fail-safe, never a wrong link).
+
 Both are **baked at build time**: changing either requires a redeploy.
 Both are public by design (`NEXT_PUBLIC_*`). Never put secrets here:
 

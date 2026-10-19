@@ -41,7 +41,8 @@ if (!demoUrl) {
 } else if (!/^https:\/\/[^/]+$/.test(demoUrl)) {
   warn(
     `NEXT_PUBLIC_DEMO_URL should be a bare https origin (no path, no trailing slash); ` +
-      `got ${JSON.stringify(demoUrl)}.`,
+      `got ${JSON.stringify(demoUrl)}. A trailing /login path is tolerated and normalized, ` +
+      `but please store the bare origin to keep the contract obvious.`,
   );
 }
 
