@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Analytics } from '@vercel/analytics/react';
 import { Fraunces, Inter } from 'next/font/google';
 import { siteConfig } from '@/site.config';
 import { MarketingNav } from '@/components/marketing-nav';
@@ -64,6 +65,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <main id="main-content">{children}</main>
         <MarketingFooter />
         <SiteSchema />
+        <Analytics />
       </body>
     </html>
   );
