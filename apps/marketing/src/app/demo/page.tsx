@@ -3,9 +3,9 @@ import { siteConfig } from '@/site.config';
 import { Button, PageShell, Section } from '@/components/primitives';
 
 export const metadata: Metadata = {
-  title: 'Live demo',
+  title: 'Live Demo of the White-Label LMS for Coaching Institutes',
   description:
-    'Explore the branded LMS before you commit. Request guided demo access and see the admin, student, and certificate experience.',
+    'Try the live MicroNest LMS demo for coaching institutes and academies. Generate a temporary demo account — fictional demo data, about 30 minutes of access, credentials shown once, no public passwords.',
   alternates: { canonical: '/demo' },
 };
 
@@ -21,7 +21,7 @@ export default function DemoPage() {
       <PageShell
         eyebrow="Live demo"
         title="See the LMS before you buy."
-        lede="The live demo lets you explore the student and admin experience of a fully branded learning platform — the same product we deploy for academies."
+        lede="MicroNest LMS is the finished white-label LMS we deploy for coaching institutes and academies — explore the student and admin experience in this live demo before you commit."
       >
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
           {siteConfig.demoAccessUrl ? (
@@ -46,7 +46,9 @@ export default function DemoPage() {
             <p className="mt-3 max-w-2xl text-lg leading-relaxed text-ink-soft">
               Generate a temporary demo account and explore the live demo yourself. Access lasts
               about 30 minutes, credentials are shown once on the demo site, and nothing is
-              published here. Admin walkthroughs are available as a guided demo.
+              published here. Everything inside runs on fictional demo data — never real customer
+              data. When your access expires, the temporary account stops working and you can
+              generate a new one. Admin walkthroughs are available as a guided demo.
             </p>
             <div className="mt-6 flex flex-col gap-3 sm:flex-row">
               <Button href={siteConfig.demoAccessUrl} size="lg">

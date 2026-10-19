@@ -9,6 +9,10 @@ import { ChevronDown } from 'lucide-react';
  */
 export const faqs = [
   {
+    q: 'What is a white-label LMS?',
+    a: 'A white-label LMS is a finished learning platform that carries your branding instead of ours — your name, logo, colors, domain, and document identity — and runs on infrastructure you control. MicroNest LMS is exactly that: we brand it, configure it, and deploy it for your academy; you own the environment, data, and provider accounts.',
+  },
+  {
     q: 'Is this a SaaS subscription?',
     a: 'No. The LMS is deployed as a separate installation for your academy — on infrastructure you control — rather than a shared MicroNest-hosted subscription you rent per month.',
   },

@@ -3,9 +3,9 @@ import { siteConfig } from '@/site.config';
 import { Button, PageShell, Section } from '@/components/primitives';
 
 export const metadata: Metadata = {
-  title: 'Contact',
+  title: 'Contact MicroNest About Your White-Label LMS',
   description:
-    'Request your branded LMS deployment. Contact MicroNest for pricing, timelines, and demo access for your institute.',
+    'Contact MicroNest about a branded white-label LMS for your coaching institute or academy. ₹1,20,000 one-time founding offer, live demo available — tell us about your setup to start.',
   alternates: { canonical: '/contact' },
 };
 
@@ -26,6 +26,18 @@ export default function ContactPage() {
         title="Let's get your LMS ready."
         lede="Tell us about your academy and we'll help you understand the setup, branding, and deployment process."
       />
+
+      <Section aria-label="About this enquiry" className="border-t border-line">
+        <p className="max-w-3xl text-lg leading-relaxed text-ink-soft">
+          MicroNest provides MicroNest LMS, a finished white-label LMS we brand and deploy for coaching
+          institutes and academies on infrastructure they control. The Founding Client Offer is ₹1,20,000
+          one-time for the first 10 deployments, with hosting and provider costs separate — and you can{' '}
+          <a href="/demo" className="font-semibold text-clay-dark underline-offset-4 hover:underline">
+            explore the live demo
+          </a>{' '}
+          before you write to us.
+        </p>
+      </Section>
 
       <Section aria-label="Contact options" className="border-t border-line">
         <div className="grid items-start gap-6 md:grid-cols-2">

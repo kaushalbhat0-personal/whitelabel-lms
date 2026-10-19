@@ -40,7 +40,7 @@ export function Pricing() {
             ₹1,20,000 <span className="font-sans text-xl font-semibold text-ink-soft">one-time</span>
           </p>
           <p className="mt-3 text-base font-medium text-ink-soft">
-            First 10 deployments · hosting and provider costs separate
+            A white-label LMS for your academy · First 10 deployments · hosting and provider costs separate
           </p>
           <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Button href="/demo" size="lg">

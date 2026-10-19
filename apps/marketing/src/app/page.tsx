@@ -119,9 +119,9 @@ export default function HomePage() {
               Your own branded LMS, deployed for you.
             </h1>
             <p className="mt-5 max-w-xl text-lg leading-relaxed text-ink-soft">
-              A finished LMS for coaching institutes and academies — branded with your identity and deployed on
-              infrastructure you control. Run recorded courses only, or add Zoom-powered live classes when you need
-              them.
+              A finished white-label LMS for coaching institutes and academies — branded with your identity and
+              deployed on infrastructure you control. Your brand on every screen, your domain, your data. Run
+              recorded courses only, or add Zoom-powered live classes when you need them.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Button href="/demo" size="lg" className="sm:min-h-[44px]">
@@ -147,6 +147,18 @@ export default function HomePage() {
           <div className="animate-fade-in">
             <ProductPreview />
           </div>
+        </Container>
+      </div>
+
+      {/* ── Definition (AEO/GEO entity block) ─────────── */}
+      <div className="border-b border-line bg-cream">
+        <Container className="py-10 sm:py-12">
+          <p className="max-w-3xl text-lg leading-relaxed text-ink">
+            MicroNest LMS is a finished white-label LMS for coaching institutes and academies: we brand and
+            configure it for your organization, then deploy it on infrastructure you control. You own the LMS
+            environment, database, storage, provider accounts, and data. It is a deployment of a finished
+            product — not an LMS built from scratch for every client.
+          </p>
         </Container>
       </div>
 

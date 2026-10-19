@@ -10,8 +10,8 @@ export function MarketingFooter() {
         <div>
           <Wordmark />
           <p className="mt-4 max-w-sm text-base leading-relaxed text-ink-soft">
-            {siteConfig.tagline} {siteConfig.descriptor} for {siteConfig.audience.toLowerCase()} — deployed on
-            infrastructure your institute owns.
+            MicroNest provides MicroNest LMS — a finished white-label LMS for {siteConfig.audience.toLowerCase()},
+            deployed on infrastructure your institute owns.
           </p>
         </div>
         <nav aria-label="Product">
