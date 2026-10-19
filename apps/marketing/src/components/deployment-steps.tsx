@@ -23,7 +23,7 @@ export function DeploymentSteps() {
               <span className="absolute left-12 top-6 h-px w-[calc(100%-3rem)] bg-line" />
             ) : null}
           </div>
-          <div className="flex h-12 w-12 items-center justify-center rounded-full border border-line bg-paper text-lg font-bold text-clay shadow-card">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full border border-line bg-paper font-display text-lg font-semibold text-clay shadow-card">
             {String(i + 1).padStart(2, '0')}
           </div>
           <h3 className="mt-4 text-lg font-bold text-ink">{s.title}</h3>

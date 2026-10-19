@@ -1,11 +1,15 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { Fraunces, Inter } from 'next/font/google';
 import { siteConfig } from '@/site.config';
 import { MarketingNav } from '@/components/marketing-nav';
 import { MarketingFooter } from '@/components/marketing-footer';
 import './globals.css';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' });
+
+// Single editorial display face for headlines (MKT-02B). Self-hosted via
+// next/font — no runtime external request. Body copy stays Inter.
+const display = Fraunces({ subsets: ['latin'], variable: '--font-display', display: 'swap' });
 
 const description =
   'A branded LMS deployed for your institute. We configure and launch your own learning platform on infrastructure you own — for coaching institutes and academies.';
@@ -35,7 +39,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={`${inter.variable} ${display.variable}`}>
       <body className="font-sans">
         <a
           href="#main-content"

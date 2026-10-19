@@ -21,10 +21,10 @@ const points = [
 export function Security() {
   return (
     <div>
-      <ul className="mt-8 space-y-2.5">
+      <ul className="mt-8 grid gap-x-10 gap-y-3 sm:grid-cols-2">
         {points.map((item) => (
-          <li key={item.title} className="flex items-start gap-3 text-base text-ink">
-            <Check size={20} className="mt-0.5 shrink-0 text-teal" aria-hidden="true" />
+          <li key={item.title} className="flex items-start gap-3 border-t border-line pt-3 text-[15px] text-ink">
+            <Check size={18} className="mt-0.5 shrink-0 text-teal" aria-hidden="true" />
             <span>
               <strong className="font-semibold">{item.title}</strong>
               {item.detail ? <span className="text-ink-soft">{item.detail}</span> : null}

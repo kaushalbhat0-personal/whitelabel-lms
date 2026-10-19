@@ -97,7 +97,7 @@ export function PageShell({
     <div className="pb-8 pt-14 sm:pt-20">
       <Container>
         {eyebrow ? <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-teal">{eyebrow}</p> : null}
-        <h1 className="max-w-3xl text-3xl font-bold leading-tight text-ink sm:text-4xl lg:text-5xl">{title}</h1>
+        <h1 className="max-w-3xl font-display text-3xl font-semibold leading-tight tracking-tight text-ink sm:text-4xl lg:text-5xl">{title}</h1>
         {lede ? <p className="mt-5 max-w-2xl text-lg leading-relaxed text-ink-soft">{lede}</p> : null}
         {children}
       </Container>

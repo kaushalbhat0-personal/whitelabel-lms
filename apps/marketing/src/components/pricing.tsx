@@ -31,19 +31,25 @@ const excluded = [
 export function Pricing() {
   return (
     <div>
-      <div className="rounded-hero border border-line bg-paper p-8 text-center shadow-card sm:p-12">
-        <p className="text-sm font-bold uppercase tracking-[0.18em] text-teal">Founding Client Offer</p>
-        <p className="mt-3 text-4xl font-bold tracking-tight text-ink sm:text-5xl">
-          ₹1,20,000 <span className="text-xl font-semibold text-ink-soft">one-time</span>
-        </p>
-        <p className="mt-2 text-base font-medium text-ink-soft">First 10 deployments</p>
-        <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <Button href="/demo" size="lg">
-            Get Instant Demo Access
-          </Button>
-          <Button href="/contact" variant="secondary" size="lg">
-            Talk to Us
-          </Button>
+      <div className="overflow-hidden rounded-hero border border-ink/10 bg-paper text-center shadow-[0_24px_48px_-24px_rgb(28_25_23/0.22)]">
+        <div className="border-b border-line/70 bg-cream/70 px-8 py-2.5" aria-hidden="true">
+          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-teal">Founding Client Offer</p>
+        </div>
+        <div className="p-8 sm:p-12">
+          <p className="font-display text-5xl font-semibold tracking-tight text-ink sm:text-6xl">
+            ₹1,20,000 <span className="font-sans text-xl font-semibold text-ink-soft">one-time</span>
+          </p>
+          <p className="mt-3 text-base font-medium text-ink-soft">
+            First 10 deployments · hosting and provider costs separate
+          </p>
+          <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <Button href="/demo" size="lg">
+              Get Instant Demo Access
+            </Button>
+            <Button href="/contact" variant="secondary" size="lg">
+              Talk to Us
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -75,8 +81,8 @@ export function Pricing() {
         </div>
       </div>
 
-      <div className="mt-8 rounded-card border border-line bg-ink p-6 text-cream sm:p-8">
-        <h3 className="text-xl font-bold">Not custom LMS development.</h3>
+      <div className="mt-8 border border-line bg-ink p-6 text-cream sm:p-8">
+        <h3 className="font-display text-xl font-semibold tracking-tight">Not custom LMS development.</h3>
         <p className="mt-2 max-w-3xl text-base leading-relaxed opacity-90">
           You are not paying us to build an LMS from scratch. You get a finished LMS that we configure, brand, and
           deploy for your academy.

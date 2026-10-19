@@ -24,7 +24,9 @@ const config: Config = {
         line: '#E7E0D3',
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['var(--font-inter)', 'Inter', 'system-ui', 'sans-serif'],
+        // Single editorial display face (MKT-02B). Headlines only; body stays Inter.
+        display: ['var(--font-display)', 'Georgia', 'serif'],
       },
       maxWidth: {
         content: '80rem', // 1280px editorial cap

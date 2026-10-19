@@ -2,10 +2,10 @@ import Link from 'next/link';
 import { siteConfig } from '@/site.config';
 import { Wordmark } from './wordmark';
 
-/** Footer shell — conservative wording, no entity/registration claims. */
+/** Footer shell — conservative wording, no entity/registration claims. Visual polish only (MKT-02B). */
 export function MarketingFooter() {
   return (
-    <footer className="border-t border-line bg-paper">
+    <footer className="border-t-2 border-ink bg-paper">
       <div className="mx-auto grid w-full max-w-content gap-10 px-5 py-14 sm:px-8 md:grid-cols-3">
         <div>
           <Wordmark />

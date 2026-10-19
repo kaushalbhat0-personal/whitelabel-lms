@@ -5,15 +5,18 @@ import {
   BookOpen,
   ClipboardCheck,
   Database,
-  Globe,
   GraduationCap,
+  Handshake,
   HardDrive,
   KeyRound,
   Library,
   Mail,
+  Palette,
   Radio,
+  Rocket,
   Server,
   ShieldCheck,
+  SlidersHorizontal,
   Users,
   Video,
   Wallet,
@@ -42,17 +45,17 @@ const ownershipChips = ['Your brand', 'Your domain', 'Your infrastructure', 'You
 const valueStrip = [
   {
     icon: Library,
-    title: '01 — Finished LMS',
+    title: 'Finished LMS',
     text: 'Courses, assessments, fees, certificates and more — already built, not billed from scratch.',
   },
   {
     icon: BadgeCheck,
-    title: '02 — Your Brand',
+    title: 'Your Brand',
     text: 'Name, logo, domain, colors and business identity across every screen.',
   },
   {
     icon: Server,
-    title: '03 — Your Infrastructure',
+    title: 'Your Infrastructure',
     text: 'Your hosting, database, storage, providers and student data.',
   },
 ];
@@ -97,11 +100,11 @@ const ownedByYou = [
 ];
 
 const handledByUs = [
-  'Branding',
-  'Configuration',
-  'Deployment',
-  'Verification',
-  'Handoff',
+  { icon: Palette, label: 'Branding' },
+  { icon: SlidersHorizontal, label: 'Configuration' },
+  { icon: Rocket, label: 'Deployment' },
+  { icon: BadgeCheck, label: 'Verification' },
+  { icon: Handshake, label: 'Handoff' },
 ];
 
 export default function HomePage() {
@@ -112,7 +115,7 @@ export default function HomePage() {
         <Container className="grid items-center gap-10 pb-16 pt-12 sm:pt-16 lg:grid-cols-2 lg:gap-14 lg:pb-24 lg:pt-20">
           <div className="animate-fade-in-up">
             <p className="text-sm font-bold uppercase tracking-[0.18em] text-teal">Branded LMS deployment</p>
-            <h1 className="mt-4 text-4xl font-bold leading-[1.08] tracking-tight text-ink sm:text-5xl lg:text-[3.4rem]">
+            <h1 className="mt-4 font-display text-[2.6rem] font-semibold leading-[1.05] tracking-[-0.01em] text-ink sm:text-6xl lg:text-[3.9rem]">
               Your own branded LMS, deployed for you.
             </h1>
             <p className="mt-5 max-w-xl text-lg leading-relaxed text-ink-soft">
@@ -149,24 +152,30 @@ export default function HomePage() {
 
       {/* ── Value strip ──────────────────────────────────── */}
       <div className="border-y border-line bg-paper">
-        <Container className="py-12 sm:py-14">
-          <p className="text-center text-sm font-bold uppercase tracking-[0.18em] text-teal">Built. Branded. Deployed.</p>
-          <div className="mt-8 grid gap-4 md:grid-cols-3">
-            {valueStrip.map((v) => (
-              <div key={v.title} className="rounded-card border border-line bg-cream p-6 shadow-card">
-                <v.icon size={24} className="text-clay" aria-hidden="true" />
-                <h2 className="mt-3 text-xl font-bold text-ink">{v.title}</h2>
-                <p className="mt-2 text-base leading-relaxed text-ink-soft">{v.text}</p>
+        <Container className="py-12 sm:py-16">
+          <p className="text-sm font-bold uppercase tracking-[0.18em] text-teal">Built. Branded. Deployed.</p>
+          <dl className="mt-8 grid gap-8 md:grid-cols-3 md:gap-10">
+            {valueStrip.map((v, i) => (
+              <div key={v.title} className="border-t-2 border-ink pt-5">
+                <div className="flex items-baseline gap-3">
+                  <dt className="sr-only">{v.title}</dt>
+                  <dd aria-hidden="true" className="font-display text-sm font-semibold tracking-widest text-clay">
+                    {String(i + 1).padStart(2, '0')}
+                  </dd>
+                  <v.icon size={20} className="translate-y-0.5 text-teal" aria-hidden="true" />
+                </div>
+                <dd className="mt-3 font-display text-xl font-semibold tracking-tight text-ink">{v.title}</dd>
+                <dd className="mt-2 text-base leading-relaxed text-ink-soft">{v.text}</dd>
               </div>
             ))}
-          </div>
+          </dl>
         </Container>
       </div>
 
       {/* ── Product proof ────────────────────────────────── */}
       <Section id="product" aria-label="Product tour">
         <p className="text-sm font-bold uppercase tracking-[0.18em] text-teal">Is it real?</p>
-        <h2 className="mt-3 max-w-2xl text-3xl font-bold tracking-tight text-ink sm:text-4xl">
+        <h2 className="mt-3 max-w-2xl text-3xl font-display font-semibold tracking-tight text-ink sm:text-4xl">
           A complete LMS, already built.
         </h2>
         <p className="mt-4 max-w-2xl text-lg leading-relaxed text-ink-soft">
@@ -180,7 +189,7 @@ export default function HomePage() {
       <div className="border-y border-line bg-paper">
         <Container className="py-16 sm:py-20 lg:py-24">
           <p className="text-sm font-bold uppercase tracking-[0.18em] text-teal">How you teach</p>
-          <h2 className="mt-3 max-w-2xl text-3xl font-bold tracking-tight text-ink sm:text-4xl">
+          <h2 className="mt-3 max-w-2xl text-3xl font-display font-semibold tracking-tight text-ink sm:text-4xl">
             Recorded-only, or recorded + Zoom live classes.
           </h2>
           <p className="mt-4 max-w-2xl text-lg leading-relaxed text-ink-soft">
@@ -198,7 +207,7 @@ export default function HomePage() {
           <p id="features-label" className="text-sm font-bold uppercase tracking-[0.18em] text-teal">
             What it does
           </p>
-          <h2 className="mt-3 max-w-2xl text-3xl font-bold tracking-tight text-ink sm:text-4xl">
+          <h2 className="mt-3 max-w-2xl text-3xl font-display font-semibold tracking-tight text-ink sm:text-4xl">
             Everything an institute needs to teach, assess, and collect fees
           </h2>
           <div className="mt-10 grid gap-x-8 gap-y-10 sm:grid-cols-2" role="list" aria-labelledby="features-label">
@@ -219,8 +228,8 @@ export default function HomePage() {
               </div>
             ))}
           </div>
-          <div className="mt-10 rounded-card border border-line bg-cream p-6">
-            <h3 className="flex items-center gap-2 text-lg font-bold text-ink">
+          <div className="mt-12 border-t border-line pt-6">
+            <h3 className="flex items-center gap-2 font-display text-xl font-semibold tracking-tight text-ink">
               <ShieldCheck size={20} className="text-teal" aria-hidden="true" />
               And proof of learning
             </h3>
@@ -235,7 +244,7 @@ export default function HomePage() {
       {/* ── White-label ──────────────────────────────────── */}
       <Section id="branding" aria-label="White-label branding">
         <p className="text-sm font-bold uppercase tracking-[0.18em] text-teal">Can it become mine?</p>
-        <h2 className="mt-3 max-w-2xl text-3xl font-bold tracking-tight text-ink sm:text-4xl">Make the LMS yours.</h2>
+        <h2 className="mt-3 max-w-2xl text-3xl font-display font-semibold tracking-tight text-ink sm:text-4xl">Make the LMS yours.</h2>
         <p className="mt-4 max-w-2xl text-lg leading-relaxed text-ink-soft">
           Your students see your brand — not a generic LMS. Every academy below is a fictional styling example of the
           same product.
@@ -248,7 +257,7 @@ export default function HomePage() {
       {/* ── Security & access ────────────────────────────── */}
       <Section aria-label="Security and access" className="border-y border-line bg-paper">
         <p className="text-sm font-bold uppercase tracking-[0.18em] text-teal">Controlled access</p>
-        <h2 className="mt-3 max-w-2xl text-3xl font-bold tracking-tight text-ink sm:text-4xl">
+        <h2 className="mt-3 max-w-2xl text-3xl font-display font-semibold tracking-tight text-ink sm:text-4xl">
           One active session per student.
         </h2>
         <p className="mt-4 max-w-2xl text-lg leading-relaxed text-ink-soft">
@@ -262,13 +271,13 @@ export default function HomePage() {
         <Container className="grid gap-10 py-16 sm:py-20 lg:grid-cols-2 lg:py-24">
           <div>
             <p className="text-sm font-bold uppercase tracking-[0.18em] text-sand">Why it is different</p>
-            <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Your LMS. Your infrastructure. Your data.</h2>
+            <h2 className="mt-3 font-display text-3xl font-semibold tracking-tight sm:text-4xl">Your LMS. Your infrastructure. Your data.</h2>
             <p className="mt-4 max-w-lg text-lg leading-relaxed opacity-90">
               No subscriptions to our platform. No student data sitting on someone else&apos;s servers. We deploy and
               configure the LMS on infrastructure controlled by you — you pay your providers directly.
             </p>
             <h3 className="mt-8 text-sm font-bold uppercase tracking-[0.18em] text-sand">You own</h3>
-            <ul className="mt-4 space-y-3">
+            <ul className="mt-4 grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
               {ownedByYou.map((o) => (
                 <li key={o.label} className="flex items-center gap-3 text-base font-medium">
                   <o.icon size={20} className="shrink-0 text-sand" aria-hidden="true" />
@@ -281,9 +290,9 @@ export default function HomePage() {
             <h3 className="text-xl font-bold">We handle</h3>
             <ul className="mt-5 space-y-3">
               {handledByUs.map((h) => (
-                <li key={h} className="flex items-start gap-3 text-base opacity-90">
-                  <Globe size={20} className="mt-0.5 shrink-0 text-sand" aria-hidden="true" />
-                  {h}
+                <li key={h.label} className="flex items-start gap-3 text-base opacity-90">
+                  <h.icon size={20} className="mt-0.5 shrink-0 text-sand" aria-hidden="true" />
+                  {h.label}
                 </li>
               ))}
             </ul>
@@ -299,7 +308,7 @@ export default function HomePage() {
       {/* ── Deployment process ───────────────────────────── */}
       <Section id="how-it-works" aria-label="How deployment works">
         <p className="text-sm font-bold uppercase tracking-[0.18em] text-teal">How do I get it?</p>
-        <h2 className="mt-3 max-w-2xl text-3xl font-bold tracking-tight text-ink sm:text-4xl">
+        <h2 className="mt-3 max-w-2xl text-3xl font-display font-semibold tracking-tight text-ink sm:text-4xl">
           From finished product to your academy.
         </h2>
         <DeploymentSteps />
@@ -308,7 +317,7 @@ export default function HomePage() {
       {/* ── Maturity signal ──────────────────────────────── */}
       <div className="border-y border-line bg-sand/60">
         <Container className="py-14 text-center sm:py-16">
-          <h2 className="mx-auto max-w-2xl text-3xl font-bold tracking-tight text-ink sm:text-4xl">
+          <h2 className="mx-auto max-w-2xl text-3xl font-display font-semibold tracking-tight text-ink sm:text-4xl">
             Start with a finished LMS.
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-lg leading-relaxed text-ink-soft">
@@ -321,7 +330,7 @@ export default function HomePage() {
       {/* ── Pricing (full section, MKT-01D) ────────────── */}
       <Section id="pricing" aria-label="Pricing">
         <p className="text-sm font-bold uppercase tracking-[0.18em] text-teal">Pricing</p>
-        <h2 className="mt-3 max-w-2xl text-3xl font-bold tracking-tight text-ink sm:text-4xl">
+        <h2 className="mt-3 max-w-2xl text-3xl font-display font-semibold tracking-tight text-ink sm:text-4xl">
           A finished LMS, configured for your academy.
         </h2>
         <div className="mt-10">
@@ -332,7 +341,7 @@ export default function HomePage() {
       {/* ── Demo CTA ─────────────────────────────────────── */}
       <Section aria-label="Demo call to action">
         <div className="rounded-hero border border-line bg-paper p-8 text-center shadow-card sm:p-12">
-          <h2 className="text-3xl font-bold tracking-tight text-ink sm:text-4xl">See it with your own eyes.</h2>
+          <h2 className="text-3xl font-display font-semibold tracking-tight text-ink sm:text-4xl">See it with your own eyes.</h2>
           <p className="mx-auto mt-4 max-w-xl text-lg text-ink-soft">
             Explore the LMS demo and see how the student and admin experience works.
           </p>
@@ -351,7 +360,7 @@ export default function HomePage() {
       <div className="border-t border-line bg-paper">
         <Container className="py-16 sm:py-20">
           <p className="text-sm font-bold uppercase tracking-[0.18em] text-teal">Questions</p>
-          <h2 className="mt-3 max-w-2xl text-3xl font-bold tracking-tight text-ink sm:text-4xl">
+          <h2 className="mt-3 max-w-2xl text-3xl font-display font-semibold tracking-tight text-ink sm:text-4xl">
             Asked by every academy owner
           </h2>
           <Faq />

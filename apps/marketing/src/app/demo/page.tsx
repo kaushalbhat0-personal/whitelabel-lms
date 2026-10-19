@@ -42,7 +42,7 @@ export default function DemoPage() {
       <Section aria-label="Get instant LMS demo access" className="border-t border-line">
         {siteConfig.demoAccessUrl ? (
           <div id="instant-access" className="scroll-mt-24 rounded-card border border-line bg-paper p-6 shadow-card sm:p-8">
-            <h2 className="text-2xl font-bold text-ink sm:text-3xl">Get instant demo access</h2>
+            <h2 className="font-display text-2xl font-semibold tracking-tight text-ink sm:text-3xl">Get instant demo access</h2>
             <p className="mt-3 max-w-2xl text-lg leading-relaxed text-ink-soft">
               Generate a temporary demo account and explore the live demo yourself. Access lasts
               about 30 minutes, credentials are shown once on the demo site, and nothing is
@@ -61,7 +61,7 @@ export default function DemoPage() {
           </div>
         ) : (
           <div className="rounded-card border border-line bg-paper p-6 shadow-card sm:p-8">
-            <h2 className="text-2xl font-bold text-ink sm:text-3xl">Guided demo access</h2>
+            <h2 className="font-display text-2xl font-semibold tracking-tight text-ink sm:text-3xl">Guided demo access</h2>
             <p className="mt-3 max-w-2xl text-lg leading-relaxed text-ink-soft">
               The hosted demo opens for real enquiries. Send us a request and we will provide access personally —
               there is no instant automated access, by design.
@@ -76,7 +76,7 @@ export default function DemoPage() {
       </Section>
 
       <Section aria-label="What the demo covers" className="border-t border-line">
-        <h2 className="text-2xl font-bold text-ink sm:text-3xl">What you can explore</h2>
+        <h2 className="font-display text-2xl font-semibold tracking-tight text-ink sm:text-3xl">What you can explore</h2>
         <div className="mt-6 grid gap-4 md:grid-cols-3">
           {covers.map((c) => (
             <div key={c.title} className="rounded-card border border-line bg-paper p-6 shadow-card">
