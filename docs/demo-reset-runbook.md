@@ -177,3 +177,55 @@ student and the operator-held demo admin logins.
 - Optional hardening on the DEMO Supabase project: disable the "Reset password"
   email template so no recovery flow can originate there either. Never commit
   demo credentials; rotation values live in the operator vault only.
+
+## 11. Temporary instant demo access (per-prospect accounts, demo only)
+
+> **Scope:** sales-demo deployment only. This is a deployment-scoped
+> capability (`TEMP_DEMO_ACCESS`), not a client feature and not `DEMO_MODE`.
+> Client deployments leave the flag unset (disabled) and are unaffected.
+
+How it works:
+
+- Marketing `/demo` links prospects to the LMS-hosted `/demo-access` page
+  (`NEXT_PUBLIC_DEMO_URL` + `/demo-access`). Marketing never issues
+  credentials and never calls the API.
+- The prospect clicks Generate Demo Access → `POST /demo/access` (public, no
+  request body — any supplied property is rejected with 400) creates one
+  independent `student` account: random `demo-<hex>@demo.invalid` login,
+  CSPRNG password, `must_change_password=false`,
+  `expires_at = now() + 30 minutes`.
+- Credentials return once over HTTPS (`Cache-Control: no-store`) and live
+  only in page memory. The prospect still logs in normally at `/login`.
+- A per-minute sweeper revokes ALL Redis sessions (`forceLogoutUser` +
+  playback/join state), then sets `is_active=false`. Login also rejects
+  past-`expires_at` rows, so new logins stop even between sweeper ticks.
+- ~24h after expiry a hourly job hard-deletes the Auth user + profile.
+  Every destructive predicate requires `expires_at IS NOT NULL`, so normal
+  accounts (always NULL) can never be touched.
+- Abuse protection: 3 successful issuances per IP per hour, 500 per UTC day
+  globally (counts successes only). Over-limit and failure responses are a
+  neutral 503 with no internals.
+
+Operator setup (demo project only, one time):
+
+1. In the Supabase dashboard (DEMO project) SQL Editor, run
+   `scripts/migrations/041_temp_demo_access.sql` once. Verify:
+   `profiles` gained nullable `expires_at` (existing rows stay NULL).
+2. On Render (demo API service) set `TEMP_DEMO_ACCESS=enabled` (keep
+   `SESSION_POLICY=multi`, `PASSWORD_MANAGEMENT=disabled`), redeploy.
+3. Client Render services and the deployment factory stay untouched: factory
+   templates never emit the flag (regression-tested), unset means disabled,
+   and the endpoint answers 404 when disabled.
+
+Disable / revoke in an incident:
+
+- Set `TEMP_DEMO_ACCESS=disabled` (or remove it) on the demo API and
+  redeploy — issuance immediately answers 404. The sweeper keeps revoking
+  already-issued temporary rows; to force-expire one now, set its
+  `expires_at` to the past in the dashboard and wait ≤1 minute.
+
+Security rules (same bar as §7):
+
+- Never publish, log, screenshot, or ticket a generated password. The only
+  intended exposure is the issuing HTTPS response.
+- Never email temporary accounts, never add password-reset flows for them.
