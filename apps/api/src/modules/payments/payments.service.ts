@@ -272,9 +272,8 @@ export class PaymentsService {
    *   3. Update the installment status to PAID.
    *   4. Insert a payment row linking student, course, plan, and installment.
    *   5. If all installments are now paid, mark the plan as COMPLETED.
-   *   6. Return the payment record.
-   *
-   * TODO (Prompt 13): Trigger Receipt (PDF) generation after creating the payment.
+   *   6. Enqueue receipt generation via outbox (never blocks the payment commit).
+   *   7. Return the payment record.
    */
   async markInstallmentPaid(
     installmentId: string,

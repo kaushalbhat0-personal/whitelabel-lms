@@ -201,11 +201,12 @@ export class DeviceService {
       .eq('id', deviceId)
       .eq('user_id', userId);
 
-    await this.redis.del(REDIS_KEYS.userSession(userId));
+    // Read the pointer BEFORE deleting it — the previous order deleted first,
+    // making the subsequent read always null and orphaning session:{id} to TTL.
     const storedSessionId = await this.redis.get(REDIS_KEYS.userSession(userId));
+    await this.redis.del(REDIS_KEYS.userSession(userId));
     if (storedSessionId) {
       await this.redis.del(REDIS_KEYS.session(storedSessionId));
-      await this.redis.del(REDIS_KEYS.userSession(userId));
     }
 
     this.logger.log(`Device ${deviceId} deleted and session invalidated for user ${userId}`);
