@@ -19,10 +19,18 @@
  *   - Rate limits count SUCCESSFUL creations only; a failed attempt
  *     releases its reserved slot so failures cannot burn quota — while the
  *     reserve-before-create order still bounds concurrent bursts.
+ *   - On TEMP_DEMO_ACCESS=enabled deployments this service promises a
+ *     POPULATED demo: every issued account is enrolled in the showcase batch
+ *     (DEMO_SHOWCASE_BATCH_ID, deployment-scoped, demo-only). If the showcase
+ *     batch is missing/invalid or enrollment fails, issuance fails closed —
+ *     the partial identity is rolled back and a neutral 503 is returned.
+ *     Empty accounts are never issued on purpose.
  *
  * A junior should know:
  *   - Never add password/token/credentials to logger or observability calls.
  *   - Supabase errors may echo the email; log static messages only.
+ *   - Never log or return the showcase batch ID — it is deployment config,
+ *     not client-facing data.
  */
 
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
@@ -44,6 +52,21 @@ export const DEMO_ACCESS_MAX_PER_IP_PER_HOUR = 3;
 export const DEMO_ACCESS_MAX_GLOBAL_PER_DAY = 500;
 /** Grace period before an expired temporary account is hard-deleted. */
 export const DEMO_ACCESS_GRACE_DELETE_HOURS = 24;
+/**
+ * Deployment-scoped showcase batch for populated temporary demo accounts.
+ * Demo Render deployment sets this manually to an existing populated batch.
+ * Never committed, never emitted by the factory, never in migrations.
+ * Client deployments leave it unset (TEMP_DEMO_ACCESS gate keeps them out).
+ */
+export const DEMO_SHOWCASE_BATCH_ENV = 'DEMO_SHOWCASE_BATCH_ID';
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Strict UUID check so a typo'd env value fails closed instead of issuing empty accounts. */
+export function isValidShowcaseBatchId(raw: unknown): raw is string {
+  return typeof raw === 'string' && UUID_RE.test(raw.trim());
+}
 
 export interface DemoAccessCredentials {
   loginUrl: string;
@@ -92,11 +115,14 @@ export class DemoAccessService {
     try {
       created = await this.createAuthUser(password);
       await this.insertProfile(created.userId, created.email, expiresAt);
+      // Populated-demo promise: the account is useless without content, so a
+      // showcase failure rolls back everything instead of issuing an empty LMS.
+      await this.attachToShowcaseBatch(created.userId);
     } catch {
       // Failed attempts must not consume quota — release the reserved slot.
       await this.releaseSlot(ip);
       if (created) {
-        await this.deleteAuthUserBestEffort(created.userId);
+        await this.rollbackProvisioning(created.userId);
       }
       // Static message only: Supabase errors may echo identifiers and must
       // never reach logs, responses, or telemetry unsanitized.
@@ -234,6 +260,69 @@ export class DemoAccessService {
     } catch {
       // Tolerate already-deleted / missing users — expected cleanup race.
     }
+  }
+
+  /**
+   * Enroll the temporary student in the deployment's showcase batch.
+   *
+   * Uses the existing batch_students junction with an idempotent upsert on
+   * the (batch_id, user_id) primary key — the same relationship and pattern
+   * as canonical enrollment. Read-only for shared content: this adds one
+   * junction row, never touches batches/courses/recordings/videos/tests.
+   *
+   * Fails closed: missing/invalid config, unknown batch, or upsert error all
+   * throw so issue() rolls back instead of handing out an empty demo.
+   * The batch ID never leaves this service (no logs, no telemetry, no errors).
+   */
+  private async attachToShowcaseBatch(userId: string): Promise<void> {
+    const raw = this.configService.get<string>(DEMO_SHOWCASE_BATCH_ENV);
+    if (!isValidShowcaseBatchId(raw)) {
+      throw new Error('showcase-batch-unavailable');
+    }
+    const batchId = raw.trim();
+
+    const { data: batch, error: batchError } = await this.supabaseService.client
+      .from(TABLES.BATCHES)
+      .select('id')
+      .eq('id', batchId)
+      .maybeSingle();
+
+    if (batchError || !batch) {
+      throw new Error('showcase-batch-unavailable');
+    }
+
+    const { error: enrollError } = await this.supabaseService.client
+      .from(TABLES.BATCH_STUDENTS)
+      .upsert({ batch_id: batchId, user_id: userId }, { onConflict: 'batch_id,user_id' });
+
+    if (enrollError) {
+      throw new Error('showcase-enroll-failed');
+    }
+  }
+
+  /**
+   * Best-effort rollback of a failed provisioning attempt: remove the
+   * junction row (if the upsert landed), the temporary profile, and the
+   * Auth user. Scoped to the new userId only — shared batch/content and
+   * other students are untouched. The expiry sweeper remains the final
+   * safety net if any step here fails.
+   */
+  private async rollbackProvisioning(userId: string): Promise<void> {
+    try {
+      await this.supabaseService.client.from(TABLES.BATCH_STUDENTS).delete().eq('user_id', userId);
+    } catch {
+      // Best effort — sweeper/grace-delete covers leftovers.
+    }
+    try {
+      await this.supabaseService.client
+        .from(TABLES.PROFILES)
+        .delete()
+        .eq('id', userId)
+        .not('expires_at', 'is', null);
+    } catch {
+      // Best effort — sweeper/grace-delete covers leftovers.
+    }
+    await this.deleteAuthUserBestEffort(userId);
   }
 
   private async logEvent(

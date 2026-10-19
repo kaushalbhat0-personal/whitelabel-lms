@@ -139,8 +139,7 @@ describe('DemoAccessCleanupService', () => {
     );
   });
 
-  it('revocation purges session pointer, set, per-session keys, and join/playback state', async () => {
-    await redis.setex('user_session:temp-9', 999, 'sess-a');
+  it('revocation purges session pointer, set, per-session keys, and join/playback state', async () => {    await redis.setex('user_session:temp-9', 999, 'sess-a');
     await redis.sadd('user_sessions:temp-9', 'sess-a');
     auth.forceLogoutUser.mockImplementationOnce(async (userId: string) => {
       await redis.del(`user_session:${userId}`, 'session:sess-a', `user_sessions:${userId}`);
@@ -160,5 +159,53 @@ describe('DemoAccessCleanupService', () => {
     expect(await redis.get('user_session:temp-9')).toBeNull();
     // Targeted playback/join keys deleted without SCAN/KEYS (scan only for bounded patterns).
     expect(redis.del).toHaveBeenCalledWith(expect.stringContaining('playback_revoked:temp-9'));
+  });
+
+  it('sweep deletes ONLY the expired temporary user enrollment rows (scoped by user_id)', async () => {
+    mockSweepRows([{ id: 'temp-1' }]);
+    await service.handleExpirySweep();
+
+    const enrollmentChains = supabase.client.from.mock.calls
+      .map((c: any[], i: number) => ({ table: c[0], value: supabase.client.from.mock.results[i].value }))
+      .filter((c: any) => c.table === 'batch_students');
+    expect(enrollmentChains).toHaveLength(1);
+    expect(enrollmentChains[0].value.delete).toHaveBeenCalledTimes(1);
+    const eq = enrollmentChains[0].value.delete.mock.results[0].value.eq;
+    expect(eq).toHaveBeenCalledWith('user_id', 'temp-1');
+    // Never scoped by batch_id alone: shared batch, content, and other students survive.
+    for (const call of eq.mock.calls) {
+      expect(call[0]).not.toBe('batch_id');
+    }
+  });
+
+  it('grace delete removes the temporary user enrollment rows without touching shared content', async () => {
+    supabase.client.from.mockImplementation((table: string) => {
+      if (table === 'batch_students') {
+        const eq = jest.fn(async () => ({ error: null }));
+        return { delete: jest.fn(() => ({ eq })), __eq: eq };
+      }
+      return {
+        select: jest.fn().mockReturnThis(),
+        not: jest.fn().mockReturnThis(),
+        lte: jest.fn().mockReturnThis(),
+        limit: jest.fn(async () => ({ data: [{ id: 'stale-1' }], error: null })),
+        delete: jest.fn(() => ({
+          eq: jest.fn(() => ({ not: jest.fn(async () => ({ error: null })) })),
+        })),
+        update: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+      };
+    });
+
+    const result = await service.handleGraceDelete();
+    expect(result.deleted).toBe(1);
+
+    const enrollmentMock = (supabase.client.from as jest.Mock).mock.results
+      .map((r: any) => r.value)
+      .find((v: any) => v?.__eq);
+    expect(enrollmentMock.__eq).toHaveBeenCalledWith('user_id', 'stale-1');
+    for (const call of enrollmentMock.__eq.mock.calls) {
+      expect(call[0]).not.toBe('batch_id');
+    }
   });
 });

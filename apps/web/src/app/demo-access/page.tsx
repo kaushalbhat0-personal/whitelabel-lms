@@ -18,6 +18,11 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Copy, Check, RefreshCw } from 'lucide-react';
 import { fetchApi, ApiError } from '@/lib/api-client';
+import {
+  classifyDemoAccessError,
+  DEMO_COLD_START_ACTION,
+  type DemoAccessErrorCopy,
+} from '@/lib/demo-access-errors';
 import { ROUTES } from '@/lib/constants';
 import { getPublicBusinessConfig } from '@/lib/api/business-config';
 import { Alert } from '@/components/ui/Alert';
@@ -38,27 +43,28 @@ function formatRemaining(expiresAt: string, now: number): string {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
-function friendlyError(err: unknown): string {
+function friendlyError(err: unknown): DemoAccessErrorCopy {
+  // ApiError.status is 0 for transport/timeout/parse failures; anything else
+  // (TypeError, SyntaxError from an empty/non-JSON body) is status-less.
+  // Either way the prospect sees fixed copy — raw responses are never rendered.
   if (err instanceof ApiError) {
-    if (err.status === 404) {
-      return 'Demo access is not available on this deployment.';
-    }
-    if (err.status === 503 || err.status === 429) {
-      return 'Demo access is temporarily unavailable. Please try again later.';
-    }
+    const data = err.data as { message?: unknown } | undefined;
+    const apiMessage = typeof data?.message === 'string' ? data.message : err.message;
+    return classifyDemoAccessError(err.status, apiMessage);
   }
-  return 'Could not generate demo access right now. Please try again.';
+  return classifyDemoAccessError(0);
 }
 
 export default function DemoAccessPage() {
   const router = useRouter();
   const [businessName, setBusinessName] = useState('LMS Platform');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<DemoAccessErrorCopy | null>(null);
   const [credentials, setCredentials] = useState<DemoCredentials | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [copiedField, setCopiedField] = useState<'username' | 'password' | null>(null);
   const submittingRef = useRef(false);
+  const warmedUpRef = useRef(false);
 
   useEffect(() => {
     getPublicBusinessConfig()
@@ -66,6 +72,14 @@ export default function DemoAccessPage() {
         if (cfg.business_name) setBusinessName(cfg.business_name);
       })
       .catch(() => {});
+  }, []);
+
+  // ONE fire-and-forget warm-up: wakes a cold API before the prospect submits.
+  // Idempotent GET, no account, no quota, UI never blocks on it, failures silent.
+  useEffect(() => {
+    if (warmedUpRef.current) return;
+    warmedUpRef.current = true;
+    fetchApi('/health', { method: 'GET' }).catch(() => {});
   }, []);
 
   // Display-only countdown. Server-side expiry is authoritative — a manipulated
@@ -80,7 +94,7 @@ export default function DemoAccessPage() {
     if (submittingRef.current) return;
     submittingRef.current = true;
     setLoading(true);
-    setError('');
+    setError(null);
     setCopiedField(null);
     try {
       // No request body: the server hardcodes role/student and expiry.
@@ -125,7 +139,12 @@ export default function DemoAccessPage() {
           demonstration environment.
         </p>
 
-        {error && <Alert variant="error" className="mb-4">{error}</Alert>}
+        {error && (
+          <Alert variant="error" className="mb-4">
+            {error.title && <p className="font-semibold">{error.title}</p>}
+            <p>{error.message}</p>
+          </Alert>
+        )}
 
         {!credentials ? (
           <Button
@@ -135,7 +154,7 @@ export default function DemoAccessPage() {
             disabled={loading}
             className="w-full"
           >
-            {loading ? 'Generating...' : 'Generate Demo Access'}
+            {loading ? 'Generating...' : error?.kind === 'cold-start' ? DEMO_COLD_START_ACTION : 'Generate Demo Access'}
           </Button>
         ) : (
           <div className="space-y-4">

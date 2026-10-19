@@ -20,6 +20,9 @@
  *   - EVERY destructive predicate requires expires_at IS NOT NULL, so normal
  *     client accounts (always NULL) can never be touched — even if the
  *     capability flag is later disabled.
++ *   - Enrollment cleanup deletes ONLY the temporary user's own junction rows
++ *     (WHERE user_id = <temp>). Never by batch_id alone; the shared showcase
++ *     batch, its content, and other students are untouched.
  *   - Per-account try/catch: one bad row never aborts the batch.
  *   - No SCAN/KEYS: only targeted keys + the bounded join/playback patterns
  *     already used by the user-removal path.
@@ -81,6 +84,7 @@ export class DemoAccessCleanupService {
     for (const row of (data ?? []) as Array<{ id: string }>) {
       try {
         await this.revokeTemporaryAccess(row.id);
+        await this.removeEnrollments(row.id);
         const { error: updateError } = await this.supabaseService.client
           .from(TABLES.PROFILES)
           .update({ is_active: false })
@@ -133,6 +137,7 @@ export class DemoAccessCleanupService {
           // Tolerate already-deleted Auth users — expected cleanup race.
         }
         await this.revokeTemporaryAccess(row.id);
+        await this.removeEnrollments(row.id);
         const { error: deleteError } = await this.supabaseService.client
           .from(TABLES.PROFILES)
           .delete()
@@ -206,6 +211,22 @@ export class DemoAccessCleanupService {
     await safeScanDel(`playback_events:events:${userId}:*`);
     await safeScanDel(`join_token_index:*:${userId}`);
     await safeScanDel(`active_join:*:${userId}`);
+  }
+
+  /**
+   * Remove ONLY this temporary user's showcase enrollment rows.
+   * Scoped strictly by user_id — the predicate never mentions batch_id, so
+   * the shared batch, its content links, and every other student survive.
+   * Best effort: revocation + deactivation already cut access; a leftover
+   * row is re-attempted on the next tick and cascade-removed on profile
+   * delete (batch_students.user_id ON DELETE CASCADE).
+   */
+  private async removeEnrollments(userId: string): Promise<void> {
+    try {
+      await this.supabaseService.client.from(TABLES.BATCH_STUDENTS).delete().eq('user_id', userId);
+    } catch {
+      // Best effort — retried next tick; never blocks deactivation.
+    }
   }
 
   private async logEvent(
