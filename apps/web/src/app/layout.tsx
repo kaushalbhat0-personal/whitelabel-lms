@@ -51,6 +51,13 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: businessName,
     description: 'Learning Management System',
+    // LMS screens (including /login) require authentication and must never be
+    // search-indexed. This applies to the demo deployment and every client
+    // deployment alike: no per-environment branching is used by design.
+    robots: {
+      index: false,
+      follow: false,
+    },
     ...(faviconUrl ? { icons: { icon: faviconUrl } } : {}),
   };
 }

@@ -38,8 +38,9 @@ export default function DemoPage() {
           <div className="rounded-card border border-line bg-paper p-6 shadow-card sm:p-8">
             <h2 className="text-2xl font-bold text-ink sm:text-3xl">Try the live demo now</h2>
             <p className="mt-3 max-w-2xl text-lg leading-relaxed text-ink-soft">
-              The demo LMS opens on its own address with the demo login screen. Demo access is issued on request —
-              use the logins we provide to explore the student and admin experience.
+              The demo LMS opens on its own address with the demo login screen. Sign in with the demo
+              student access shared through the demo access process to explore courses, video lessons,
+              tests, and results as a student. Admin walkthroughs are available as a guided demo.
             </p>
             <div className="mt-6">
               <Button href={siteConfig.demoLoginUrl} size="lg">
@@ -76,8 +77,9 @@ export default function DemoPage() {
         <div className="mt-8 rounded-card border border-line bg-sand/60 p-6 sm:p-8">
           <h2 className="text-xl font-bold text-ink">Want access to the demo?</h2>
           <p className="mt-2 max-w-2xl text-base leading-relaxed text-ink-soft">
-            Send us a request and we will provide access personally. Demo logins are issued to real enquiries and are
-            never published on this site — there is no instant automated access, by design.
+            Launch the live demo and sign in with the demo student access shared through the demo access
+            process — credentials are never published on this site. For an admin walkthrough, send us a
+            request and we will arrange a guided demo personally.
           </p>
           <div className="mt-5">
             <Button href="/contact">Request Demo Access</Button>

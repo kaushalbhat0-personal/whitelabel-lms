@@ -95,3 +95,69 @@ A paying client is provisioned from the frozen codebase + canonical
 `scripts/generated/fresh-supabase-init.sql` + their own infra/env — NEVER by
 copying this demo database. This runbook and all demo records stay out of the
 product baseline.
+
+## 7. Shared student account policy (instant demo)
+
+- The demo **student** account is the only account intended for instant
+  prospect access. Prospects explore courses, recordings, tests, results,
+  certificates, and the live-class list as a student.
+- The demo **admin** account remains operator-only and is shown exclusively
+  through guided walkthroughs. Never share admin credentials with prospects.
+- Credentials live in the operator vault and the demo environment only.
+  They must never enter Git, marketing source or build output, screenshots,
+  URLs, logs, tickets, or public documentation.
+- Never hardcode a demo email or password in `apps/web`, `apps/marketing`,
+  tests, fixtures, or docs. The login form takes operator-shared input at
+  runtime; nothing demo-specific is branched in code (no `DEMO_MODE`,
+  no `tenant_id`).
+- The demo database holds the only copy of demo user rows. Canonical
+  migrations, `scripts/generated/*`, seeds, and the deployment factory
+  contain no demo users by design (see §6).
+
+## 8. Rotation procedure
+
+When to rotate the shared student password (no fixed high-frequency
+schedule; rotate on cause):
+
+- A prospect reports the demo student login no longer works (another
+  visitor may have used change-password on the shared account).
+- Suspicious activity on the shared student (unexpected profile change,
+  mass attempts, abuse reports).
+- Any material exposure incident (password pasted into a ticket, chat log,
+  screenshot, recording, or indexed page).
+- Scheduled operational rotation before a major sales push, at operator
+  discretion.
+
+How to rotate (operator-held tooling only, demo project):
+
+1. In the Supabase dashboard (DEMO project) Authentication > Users, locate
+   the demo student and use Send/Reset password or set a new strong unique
+   password. Alternatively, as demo admin via the API
+   (`POST /auth/change-password` is self-service; prefer the dashboard so
+   the operator controls the new value).
+2. Update the single operator-vault entry. Do not write the new value
+   anywhere else.
+3. Verify afterward: sign in as the demo student on the demo Vercel URL,
+   confirm the dashboard, one recording playback authorization, and one
+   published test listing; then sign out. Confirm `GET /health` → 200 and
+   an unauthenticated protected route → 401.
+4. If lockout recurs frequently, run the §3 reset scope check (a truncated
+   `profiles` table requires reprovisioning the demo student per §4 step 3)
+   and consider moving to per-prospect provisioning in a future checkpoint
+   — do not improvise a token/magic-link system here.
+
+## 9. Reset triggers (reuse §3, no automation)
+
+Execute the existing §3 full reset + §4 reprovision when any of the following
+holds; do not build an automated reset:
+
+- Prospect-generated attempts, progress, views, or notifications create
+  excessive demo noise before a sales call.
+- The shared student account is locked out (password changed by a visitor)
+  and rotation alone does not restore a known-good state.
+- Demo state becomes materially inconsistent (orphaned curriculum rows,
+  unpublished test with attempts, missing enrolment for the demo student).
+- The operator intentionally refreshes the demo before a scheduled call.
+
+After reset, re-run the §5 verification checklist including both the demo
+student and the operator-held demo admin logins.

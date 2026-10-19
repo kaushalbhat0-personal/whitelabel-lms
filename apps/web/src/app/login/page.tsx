@@ -246,6 +246,10 @@ export default function LoginPage() {
             </div>
           </div>
         )}
+        <p className="mt-6 text-center text-xs leading-relaxed text-text-secondary">
+          Demo access uses a student login shared through the demo access process. Admin walkthroughs
+          are available as a guided demo — contact your academy administrator.
+        </p>
       </div>
     </div>
   );
