@@ -52,18 +52,14 @@ export default function ContactPage() {
             </div>
           </div>
 
-          {/* Prepared form shell — visibly unwired until MKT-01F, mailto fallback retained. */}
-          <div
-            role="form"
-            aria-label="Deployment enquiry form — submission arrives in the next checkpoint"
-            className="rounded-card border border-line bg-paper p-6 shadow-card sm:p-8"
-          >
+          {/* Prepared form shell — visibly unwired until a later phase, mailto fallback retained. */}
+          <div className="rounded-card border border-line bg-paper p-6 shadow-card sm:p-8">
             <h2 className="text-xl font-bold text-ink">Enquiry form</h2>
             <p className="mt-2 rounded-card bg-sand p-3 text-sm font-medium text-ink">
               Online submission opens in the next update — email us directly for now, nothing you type here is sent
               anywhere.
             </p>
-            <div className="mt-5 space-y-4" aria-hidden="true">
+            <div className="mt-5 space-y-4">
               {fields.map((f) => (
                 <div key={f.id}>
                   <label htmlFor={f.id} className="mb-1 block text-sm font-semibold text-ink">

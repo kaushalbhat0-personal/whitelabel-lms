@@ -20,10 +20,10 @@ export function StickyMobileCta() {
       >
         <p className="min-w-0 flex-1 text-sm font-semibold text-ink">Ready to launch your LMS?</p>
         <Link
-          href="/contact"
+          href="/demo"
           className="inline-flex min-h-[44px] shrink-0 items-center rounded-cta bg-clay px-5 py-2.5 text-base font-semibold text-white"
         >
-          Get Started
+          See the Demo
         </Link>
         <button
           type="button"

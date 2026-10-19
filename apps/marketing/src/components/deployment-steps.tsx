@@ -5,16 +5,17 @@
  * Horizontal on desktop, vertical on mobile. No timelines promised.
  */
 const steps = [
-  { title: 'Tell us about your academy', text: 'Courses, students, branding wishes, and who owns what.' },
+  { title: 'Map your setup', text: 'We map your courses, students, branding and provider accounts.' },
   { title: 'We configure your LMS', text: 'Courses structure, batches, fees, tests, and settings.' },
   { title: 'We apply your branding', text: 'Name, logo, colors, domain, and document identity.' },
-  { title: 'We deploy and verify it', text: 'On your infrastructure, checked end to end before handoff.' },
+  { title: 'We deploy and verify it', text: 'On infrastructure you control, checked end to end before handoff.' },
   { title: 'We hand it over to you', text: 'Admin access, documentation, and a walkthrough with your team.' },
 ];
 
 export function DeploymentSteps() {
   return (
-    <ol className="mt-10 grid gap-8 md:grid-cols-5 md:gap-4">
+    <div>
+      <ol className="mt-10 grid gap-8 md:grid-cols-5 md:gap-4">
       {steps.map((s, i) => (
         <li key={s.title} className="relative">
           <div aria-hidden="true" className="hidden md:block">
@@ -29,6 +30,10 @@ export function DeploymentSteps() {
           <p className="mt-1.5 text-[15px] leading-relaxed text-ink-soft">{s.text}</p>
         </li>
       ))}
-    </ol>
+      </ol>
+      <p className="mt-8 max-w-3xl text-base leading-relaxed text-ink-soft">
+        You create the accounts you own; we configure them for the LMS.
+      </p>
+    </div>
   );
 }

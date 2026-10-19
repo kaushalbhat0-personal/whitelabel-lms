@@ -14,7 +14,7 @@ export const faqs = [
   },
   {
     q: 'Who owns the LMS environment?',
-    a: 'You do. Your academy controls the domain, hosting, database, storage, provider accounts, credentials, and all student and business data. We configure everything and hand it over with documentation and a walkthrough.',
+    a: 'You do. Your academy controls the domain, hosting, database, storage, video, Zoom, email, and other provider accounts, credentials, and all student and business data. We configure everything and hand it over with documentation and a walkthrough.',
   },
   {
     q: 'Can you use our branding?',
@@ -39,6 +39,30 @@ export const faqs = [
   {
     q: 'Can you help us deploy it?',
     a: 'Yes. MicroNest handles the full setup and deployment process — configuration, branding, deployment, verification, and handoff — so your team receives a working platform, not a project.',
+  },
+  {
+    q: 'Can I run the LMS without live classes?',
+    a: 'Yes. Recorded-only deployments are fully supported — courses, videos, tests, fees, and certificates all work without any live-class infrastructure.',
+  },
+  {
+    q: 'Does the LMS support Zoom live classes?',
+    a: 'Yes. Zoom-powered live classes are supported alongside your recorded courses. Your academy uses its own Zoom account, and sessions, attendance, and recordings stay inside the same LMS.',
+  },
+  {
+    q: 'Who pays for Zoom, hosting, storage and other providers?',
+    a: 'You do, directly. Zoom, hosting, database, video, domain, and other provider accounts belong to you and are billed to you by those providers. We never mark them up, and we never host your LMS on our infrastructure.',
+  },
+  {
+    q: 'Can students log in from multiple devices at the same time?',
+    a: 'Normal client deployments enforce one active session per student. This helps prevent simultaneous use of the same student account.',
+  },
+  {
+    q: 'What happens after I contact you?',
+    a: 'We reply personally within a few working days. We understand your courses, students, and branding, and we arrange guided demo access for your team.',
+  },
+  {
+    q: 'Can you deploy it on our infrastructure?',
+    a: 'Yes — that is the model. The LMS is deployed on infrastructure you control — your domain, hosting, database, storage, provider accounts, and student data — configured, branded, verified, and handed over with documentation.',
   },
 ];
 

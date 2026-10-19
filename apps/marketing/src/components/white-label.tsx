@@ -34,6 +34,7 @@ const identityItems = [
   'Brand colors across student and admin views',
   'Your own domain for students and staff',
   'Business details on invoices and receipts',
+  'Certificates and verification under your brand',
   'Currency, locale, and timezone',
   'Tax settings for compliant billing',
   'Invoice and receipt numbering you choose',

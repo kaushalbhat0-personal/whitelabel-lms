@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Menu, X } from 'lucide-react';
 import { siteConfig } from '@/site.config';
 import { Wordmark } from './wordmark';
@@ -12,6 +12,19 @@ import { Wordmark } from './wordmark';
  */
 export function MarketingNav() {
   const [open, setOpen] = useState(false);
+  const toggleRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpen(false);
+        toggleRef.current?.focus();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [open ]);
 
   return (
     <header className="sticky top-0 z-50 border-b border-line bg-cream/90 backdrop-blur-sm">
@@ -29,13 +42,14 @@ export function MarketingNav() {
         <div className="hidden md:block">
           <Link
             href="/contact"
-            className="inline-flex items-center rounded-cta bg-clay px-5 py-2.5 text-base font-semibold text-white transition-opacity hover:opacity-90"
+            className="inline-flex min-h-[44px] items-center rounded-cta bg-clay px-5 py-2.5 text-base font-semibold text-white transition-opacity hover:opacity-90"
           >
-            Get Started
+            Talk to Us
           </Link>
         </div>
         <button
           type="button"
+          ref={toggleRef}
           className="inline-flex items-center justify-center rounded-cta p-2 text-ink md:hidden"
           aria-expanded={open}
           aria-controls="mobile-menu"
@@ -65,7 +79,7 @@ export function MarketingNav() {
                 onClick={() => setOpen(false)}
                 className="block rounded-cta bg-clay px-3 py-4 text-center text-lg font-semibold text-white"
               >
-                Get Started
+                Talk to Us
               </Link>
             </li>
           </ul>

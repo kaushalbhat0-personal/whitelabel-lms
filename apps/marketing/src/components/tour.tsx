@@ -35,7 +35,7 @@ const stops = [
     icon: LayoutDashboard,
     eyebrow: 'Manage',
     title: 'Run the academy from one place.',
-    text: 'Students, courses, batches, sessions, announcements, and analytics — the daily operation of the institute in a single admin view.',
+    text: 'Students, courses, batches, optional Zoom live sessions, announcements, and analytics — the daily operation of the institute in a single admin view.',
     visual: <ManageVisual />,
   },
   {

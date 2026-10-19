@@ -13,14 +13,23 @@ export function Section({
   id,
   className = '',
   labelledBy,
+  'aria-label': ariaLabel,
+  'aria-labelledby': ariaLabelledBy,
 }: {
   children: ReactNode;
   id?: string;
   className?: string;
   labelledBy?: string;
+  'aria-label'?: string;
+  'aria-labelledby'?: string;
 }) {
   return (
-    <section id={id} aria-labelledby={labelledBy} className={`py-16 sm:py-20 lg:py-28 ${className}`}>
+    <section
+      id={id}
+      aria-label={ariaLabel}
+      aria-labelledby={ariaLabelledBy ?? labelledBy}
+      className={`py-16 sm:py-20 lg:py-28 ${className}`}
+    >
       <Container>{children}</Container>
     </section>
   );

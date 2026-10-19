@@ -13,7 +13,7 @@ const included = [
   'Initial infrastructure configuration assistance',
   'End-to-end LMS verification',
   'Admin setup and first-admin walkthrough',
-  'Student and admin walkthrough session',
+  'Student and admin walkthrough call',
   'Handoff with documentation',
 ];
 
@@ -38,11 +38,11 @@ export function Pricing() {
         </p>
         <p className="mt-2 text-base font-medium text-ink-soft">First 10 deployments</p>
         <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <Button href="/contact" size="lg">
-            Get Your LMS
+          <Button href="/demo" size="lg">
+            Get Instant Demo Access
           </Button>
-          <Button href="/demo" variant="secondary" size="lg">
-            See the Live Demo
+          <Button href="/contact" variant="secondary" size="lg">
+            Talk to Us
           </Button>
         </div>
       </div>

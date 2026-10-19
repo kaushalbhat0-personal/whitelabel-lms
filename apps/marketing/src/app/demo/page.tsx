@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 
 const covers = [
   { title: 'Student experience', text: 'Courses, video lessons, progress, tests, and results — as your students would see them.' },
-  { title: 'Admin experience', text: 'Students, batches, sessions, announcements, and analytics — as your team would run them.' },
+  { title: 'Admin experience', text: 'Students, batches, optional Zoom live sessions, announcements, and analytics — as your team would run them.' },
   { title: 'Fees and certificates', text: 'Fee plans, invoices, receipts, and verifiable certificates — as your office would issue them.' },
 ];
 
@@ -24,18 +24,24 @@ export default function DemoPage() {
         lede="The live demo lets you explore the student and admin experience of a fully branded learning platform — the same product we deploy for academies."
       >
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-          <Button href="/contact" size="lg">
-            Request Demo Access
-          </Button>
+          {siteConfig.demoAccessUrl ? (
+            <Button href="#instant-access" size="lg">
+              Get Instant Demo Access
+            </Button>
+          ) : (
+            <Button href="/contact" size="lg">
+              Talk to Us
+            </Button>
+          )}
           <Button href="/contact" variant="secondary" size="lg">
-            Get Your LMS
+            Talk to Us
           </Button>
         </div>
       </PageShell>
 
-      <Section aria-label="Launch the live demo" className="border-t border-line">
+      <Section aria-label="Get instant LMS demo access" className="border-t border-line">
         {siteConfig.demoAccessUrl ? (
-          <div className="rounded-card border border-line bg-paper p-6 shadow-card sm:p-8">
+          <div id="instant-access" className="scroll-mt-24 rounded-card border border-line bg-paper p-6 shadow-card sm:p-8">
             <h2 className="text-2xl font-bold text-ink sm:text-3xl">Get instant demo access</h2>
             <p className="mt-3 max-w-2xl text-lg leading-relaxed text-ink-soft">
               Generate a temporary demo account and explore the live demo yourself. Access lasts
@@ -48,7 +54,7 @@ export default function DemoPage() {
               </Button>
               {siteConfig.demoLoginUrl && (
                 <Button href={siteConfig.demoLoginUrl} variant="secondary" size="lg">
-                  Already have demo credentials? Open Live Demo
+                  Already have credentials? Open the LMS demo
                 </Button>
               )}
             </div>
@@ -62,7 +68,7 @@ export default function DemoPage() {
             </p>
             <div className="mt-6">
               <Button href="/contact" size="lg">
-                Request Demo Access
+                Talk to Us
               </Button>
             </div>
           </div>
@@ -80,7 +86,7 @@ export default function DemoPage() {
           ))}
         </div>
         <div className="mt-8 rounded-card border border-line bg-sand/60 p-6 sm:p-8">
-          <h2 className="text-xl font-bold text-ink">Want access to the demo?</h2>
+          <h3 className="text-xl font-bold text-ink">Want access to the demo?</h3>
           <p className="mt-2 max-w-2xl text-base leading-relaxed text-ink-soft">
             Get instant demo access to generate a temporary account — credentials are shown once
             on the demo site and are never published here. Clicking Get Instant Demo Access opens
@@ -88,7 +94,7 @@ export default function DemoPage() {
             walkthrough, send us a request and we will arrange a guided demo personally.
           </p>
           <div className="mt-5">
-            <Button href="/contact">Request Demo Access</Button>
+            <Button href="/contact">Talk to Us</Button>
           </div>
         </div>
       </Section>
