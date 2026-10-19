@@ -154,21 +154,20 @@ export default function HomePage() {
       <div className="border-y border-line bg-paper">
         <Container className="py-12 sm:py-16">
           <p className="text-sm font-bold uppercase tracking-[0.18em] text-teal">Built. Branded. Deployed.</p>
-          <dl className="mt-8 grid gap-8 md:grid-cols-3 md:gap-10">
+          <div className="mt-8 grid gap-8 md:grid-cols-3 md:gap-10">
             {valueStrip.map((v, i) => (
               <div key={v.title} className="border-t-2 border-ink pt-5">
                 <div className="flex items-baseline gap-3">
-                  <dt className="sr-only">{v.title}</dt>
-                  <dd aria-hidden="true" className="font-display text-sm font-semibold tracking-widest text-clay">
+                  <span aria-hidden="true" className="font-display text-sm font-semibold tracking-widest text-clay">
                     {String(i + 1).padStart(2, '0')}
-                  </dd>
+                  </span>
                   <v.icon size={20} className="translate-y-0.5 text-teal" aria-hidden="true" />
                 </div>
-                <dd className="mt-3 font-display text-xl font-semibold tracking-tight text-ink">{v.title}</dd>
-                <dd className="mt-2 text-base leading-relaxed text-ink-soft">{v.text}</dd>
+                <p className="mt-3 font-display text-xl font-semibold tracking-tight text-ink">{v.title}</p>
+                <p className="mt-2 text-base leading-relaxed text-ink-soft">{v.text}</p>
               </div>
             ))}
-          </dl>
+          </div>
         </Container>
       </div>
 
