@@ -1,12 +1,16 @@
 import { Award, ClipboardCheck, LayoutDashboard, Receipt, Video } from 'lucide-react';
 
 /**
- * Editorial product tour (MKT-01C).
+ * Editorial product tour (MKT-01C + MKT-01D-A).
  *
  * Static alternating rows — no carousel, no tabs, no client JS.
- * Visuals are honest CSS compositions from confirmed UI patterns with
- * fictional data (same policy as the hero preview). Each visual is
- * aria-hidden; the adjacent copy carries the meaning.
+ * Learn/Assess/Manage/Collect visuals are REAL screenshots captured from
+ * the live white-label LMS demo (MicroNest Services Academy, fictional
+ * demo data) stored as static WebP assets under public/product/. The
+ * Prove (certificate) visual remains an illustrative composition: no
+ * qualifying certificate exists in demo data and none was created
+ * for marketing. Each visual is aria-hidden; the adjacent copy carries
+ * the meaning.
  */
 
 const stops = [
@@ -95,90 +99,48 @@ function Frame({ children, label }: { children: React.ReactNode; label: string }
   );
 }
 
-function Bar({ width, color = 'bg-teal' }: { width: number; color?: string }) {
+function Shot({ src, width, height }: { src: string; width: number; height: number }) {
   return (
-    <div className="h-2 overflow-hidden rounded-full bg-sand">
-      <div className={`h-full rounded-full ${color}`} style={{ width: `${width}%` }} />
-    </div>
+    /* eslint-disable-next-line @next/next/no-img-element */
+    <img
+      src={src}
+      alt=""
+      width={width}
+      height={height}
+      loading="lazy"
+      className="block h-auto w-full"
+    />
   );
 }
 
 function LearnVisual() {
   return (
-    <Frame label="Illustrative course list with progress bars and a video lesson row.">
-      {[
-        { t: 'Rotational Mechanics · 12 lessons', p: 72 },
-        { t: 'Organic Chemistry · 9 lessons', p: 45 },
-      ].map((c) => (
-        <div key={c.t} className="mb-3 rounded-card border border-line bg-cream p-3 last:mb-0">
-          <p className="truncate text-sm font-semibold text-ink">{c.t}</p>
-          <div className="mt-2">
-            <Bar width={c.p} />
-          </div>
-        </div>
-      ))}
+    <Frame label="Screenshot: MicroNest Services Academy course learning screen with demo curriculum.">
+      <Shot src="/product/course-learning.webp" width={1440} height={900} />
     </Frame>
   );
 }
 
 function AssessVisual() {
   return (
-    <Frame label="Illustrative test result: score, auto-graded answers, and time taken.">
-      <div className="flex items-baseline justify-between">
-        <p className="text-sm font-semibold text-ink">Weekly Test · Physics</p>
-        <p className="text-2xl font-bold text-teal">86%</p>
-      </div>
-      <div className="mt-3 space-y-2">
-        {[
-          { t: 'Correct · auto-graded', p: 100, c: 'bg-teal' },
-          { t: 'Review · teacher', p: 60, c: 'bg-clay' },
-        ].map((r) => (
-          <div key={r.t}>
-            <p className="mb-1 text-xs text-ink-soft">{r.t}</p>
-            <Bar width={r.p} color={r.c} />
-          </div>
-        ))}
-      </div>
+    <Frame label="Screenshot: MicroNest Services Academy test result with score and question review.">
+      <Shot src="/product/test-results.webp" width={1440} height={900} />
     </Frame>
   );
 }
 
 function ManageVisual() {
   return (
-    <Frame label="Illustrative admin overview: student count, active batches, and pending fees.">
-      <div className="grid grid-cols-3 gap-2">
-        {[
-          { v: '1,240', l: 'Students' },
-          { v: '18', l: 'Batches' },
-          { v: '₹86k', l: 'Fees due' },
-        ].map((s) => (
-          <div key={s.l} className="rounded-card bg-cream p-3 text-center">
-            <p className="text-lg font-bold text-ink">{s.v}</p>
-            <p className="text-xs text-ink-soft">{s.l}</p>
-          </div>
-        ))}
-      </div>
-      <div className="mt-3 rounded-card border border-line p-3">
-        <p className="text-xs font-semibold text-ink">New announcement drafted</p>
-        <p className="mt-0.5 truncate text-xs text-ink-soft">Holiday schedule · all batches</p>
-      </div>
+    <Frame label="Screenshot: MicroNest Services Academy admin course and batch management.">
+      <Shot src="/product/admin-dashboard.webp" width={1440} height={900} />
     </Frame>
   );
 }
 
 function CollectVisual() {
   return (
-    <Frame label="Illustrative fee ledger: installment plan with paid and upcoming entries.">
-      {[
-        { t: 'Installment 1 of 6 · paid', done: true },
-        { t: 'Installment 2 of 6 · due 5th', done: false },
-        { t: 'Installment 3 of 6 · upcoming', done: false },
-      ].map((r) => (
-        <div key={r.t} className="mb-2 flex items-center gap-2 rounded-card bg-cream p-2.5 text-sm last:mb-0">
-          <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${r.done ? 'bg-teal' : 'bg-line'}`} />
-          <span className="truncate text-ink">{r.t}</span>
-        </div>
-      ))}
+    <Frame label="Screenshot: MicroNest Services Academy finance revenue overview.">
+      <Shot src="/product/finance.webp" width={1440} height={470} />
     </Frame>
   );
 }

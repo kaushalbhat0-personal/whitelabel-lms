@@ -162,7 +162,7 @@ export default function HomePage() {
         </h2>
         <p className="mt-4 max-w-2xl text-lg leading-relaxed text-ink-soft">
           Courses, learning, assessments, student management, finance, and certificates — already working together in
-          one LMS. What follows is an illustrative tour of the real product areas.
+          one LMS. What follows is a tour of the real product areas, shown with actual screenshots from the live demo.
         </p>
         <ProductTour />
       </Section>
