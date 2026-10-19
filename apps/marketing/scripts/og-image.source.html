@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<!--
+  OG image source (MKT-03B, SOC-01). Deterministic static composition —
+  NOT shipped to the site (only public/og-image.png is served).
+  Fonts: the site's own next/font woff2 latin subsets (relative paths).
+  Regenerate:
+    chrome --headless --disable-gpu --hide-scrollbars --force-device-scale-factor=1 ^
+      --screenshot=../public/og-image.png --window-size=1200,630 og-image.source.html
+  Then verify: 1200x630, <200 KB, no tofu glyphs, matches MKT-02B voice.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<style>
+  @font-face {
+    font-family: 'FrauncesOG'; font-style: normal; font-weight: 400 700; font-display: block;
+    src: url('../out/_next/static/media/af4bf8399d1aacdf-s.p.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'InterOG'; font-style: normal; font-weight: 400 700; font-display: block;
+    src: url('../out/_next/static/media/e4af272ccee01ff0-s.p.woff2') format('woff2');
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { width: 1200px; height: 630px; }
+  .card {
+    width: 1200px; height: 630px;
+    background: #FAF7F2;
+    display: flex; align-items: center;
+    font-family: 'InterOG', Arial, sans-serif;
+    position: relative; overflow: hidden;
+  }
+  .rule { position: absolute; left: 0; top: 0; bottom: 0; width: 14px; background: #0F766E; }
+  .main { padding: 56px 40px 56px 100px; max-width: 740px; }
+  .eyebrow {
+    font-size: 24px; font-weight: 700; letter-spacing: 5px;
+    color: #0F766E; text-transform: uppercase; white-space: nowrap;
+  }
+  h1 {
+    font-family: 'FrauncesOG', Georgia, serif;
+    font-size: 68px; line-height: 1.04; font-weight: 600;
+    color: #1C1917; margin-top: 22px; letter-spacing: -0.01em;
+  }
+  .sub { font-size: 27px; line-height: 1.45; color: #57534E; margin-top: 20px; }
+  .offer { display: flex; align-items: center; gap: 20px; margin-top: 26px; }
+  .pill {
+    background: #C2410C; color: #fff; font-weight: 700; font-size: 27px;
+    padding: 12px 26px; border-radius: 999px; white-space: nowrap;
+  }
+  .note { font-size: 24px; color: #57534E; }
+  .side {
+    position: absolute; right: 60px; top: 70px; width: 290px;
+  }
+  .tile {
+    background: #FFFFFF; border: 2px solid #E7E0D3; border-radius: 20px;
+    padding: 22px 24px; margin-bottom: 18px;
+  }
+  .tile .k { font-size: 20px; font-weight: 700; letter-spacing: 3px; color: #0F766E; text-transform: uppercase; }
+  .tile .v { font-family: 'FrauncesOG', Georgia, serif; font-size: 31px; color: #1C1917; margin-top: 6px; }
+  .tile.accent { background: #1C1917; border-color: #1C1917; }
+  .tile.accent .v { color: #FAF7F2; }
+  .tile.accent .k { color: #F3EFE7; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="rule"></div>
+    <div class="main">
+      <div class="eyebrow">MicroNest &middot; Branded LMS</div>
+      <h1>Your own branded LMS, deployed for you.</h1>
+      <div class="sub">MicroNest LMS &mdash; a finished white-label LMS for coaching institutes &amp; academies.</div>
+      <div class="offer">
+        <div class="pill">&#8377;1,20,000 one-time</div>
+        <div class="note">First 10 deployments &middot; you own everything</div>
+      </div>
+    </div>
+    <div class="side">
+      <div class="tile"><div class="k">You own</div><div class="v">Domain &amp; data</div></div>
+      <div class="tile"><div class="k">We handle</div><div class="v">Brand &amp; deploy</div></div>
+      <div class="tile accent"><div class="k">Not SaaS</div><div class="v">No subscription</div></div>
+    </div>
+  </div>
+</body>
+</html>

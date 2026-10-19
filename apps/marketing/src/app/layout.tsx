@@ -3,6 +3,7 @@ import { Fraunces, Inter } from 'next/font/google';
 import { siteConfig } from '@/site.config';
 import { MarketingNav } from '@/components/marketing-nav';
 import { MarketingFooter } from '@/components/marketing-footer';
+import { SiteSchema } from '@/components/site-schema';
 import './globals.css';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' });
@@ -28,11 +29,20 @@ export const metadata: Metadata = {
     title: `${siteConfig.tagline} | ${siteConfig.brandName}`,
     description,
     url: '/',
+    images: [
+      {
+        url: '/og-image.png',
+        width: 1200,
+        height: 630,
+        alt: 'MicroNest LMS — your own branded LMS, deployed for you.',
+      },
+    ],
   },
   twitter: {
-    card: 'summary',
+    card: 'summary_large_image',
     title: `${siteConfig.tagline} | ${siteConfig.brandName}`,
     description,
+    images: ['/og-image.png'],
   },
   robots: { index: true, follow: true },
 };
@@ -50,6 +60,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <MarketingNav />
         <main id="main-content">{children}</main>
         <MarketingFooter />
+        <SiteSchema />
       </body>
     </html>
   );
