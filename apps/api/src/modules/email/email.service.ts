@@ -40,18 +40,34 @@ export class EmailService implements OnModuleInit {
     @Optional() private supabaseService?: SupabaseService,
   ) {
     const apiKey = this.config.get<string>('RESEND_API_KEY');
-    this.fromAddress =
-      this.config.get<string>('EMAIL_FROM') ?? 'onboarding@resend.dev';
+    const configuredFrom = this.config.get<string>('EMAIL_FROM');
+    if (!apiKey || apiKey === 're_xxxxxxxxxxxx') {
+      this.isStub = true;
+      // STUB MODE: nothing is ever sent. The sender is a local placeholder
+      // that only appears in logs — never a real or Resend-owned address.
+      this.fromAddress = configuredFrom ?? 'stub@localhost.invalid';
+      this.logger.warn('EmailService running in STUB MODE — emails will be logged, not sent.');
+      this.logger.warn('Set RESEND_API_KEY in .env to enable real email sending.');
+    } else {
+      if (!configuredFrom) {
+        // Fail visibly: a real send without an explicit sender would either
+        // crash at Resend or, worse, fall back to a sender the client does
+        // not own. Never invent one.
+        throw new Error(
+          'EMAIL_FROM is required when RESEND_API_KEY is set. Configure an explicit sender on a verified domain.',
+        );
+      }
+      this.isStub = false;
+      this.fromAddress = configuredFrom;
+    }
     this.replyToAddress = this.config.get<string>('EMAIL_REPLY_TO') || undefined;
     this.frontendUrl =
       this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3000';
 
-    if (!apiKey || apiKey === 're_xxxxxxxxxxxx') {
-      this.isStub = true;
+    if (this.isStub) {
       this.logger.warn('EmailService running in STUB MODE — emails will be logged, not sent.');
       this.logger.warn('Set RESEND_API_KEY in .env to enable real email sending.');
     } else {
-      this.isStub = false;
       this.resend = new Resend(apiKey);
       this.logger.log(
         `EmailService ready — sending from: ${this.fromAddress}` +

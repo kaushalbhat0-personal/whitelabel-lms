@@ -49,4 +49,50 @@ describe('ZoomService (webhook signature)', () => {
       expect(result.plainToken).toBe('abc');
     });
   });
+
+  describe('ZOOM_ENABLED recorded-only guard', () => {
+    async function buildService(zoomEnabled: string | undefined) {
+      const mod: TestingModule = await Test.createTestingModule({
+        providers: [
+          ZoomService,
+          {
+            provide: ConfigService,
+            useValue: {
+              get: jest.fn().mockImplementation((k: string) => {
+                if (k === 'ZOOM_ENABLED') return zoomEnabled;
+                if (k === 'ZOOM_ACCOUNT_ID') return 'acc';
+                if (k === 'ZOOM_CLIENT_ID') return 'cid';
+                if (k === 'ZOOM_CLIENT_SECRET') return 'csecret';
+                return null;
+              }),
+            },
+          },
+        ],
+      }).compile();
+      return mod.get(ZoomService);
+    }
+
+    it('ZOOM_ENABLED=false rejects credential issuance with 503', async () => {
+      const { ServiceUnavailableException } = await import('@nestjs/common');
+      const svc = await buildService('disabled');
+      await expect((svc as any).getAccessToken()).rejects.toBeInstanceOf(ServiceUnavailableException);
+    });
+
+    it('ZOOM_ENABLED unset preserves legacy behavior (no guard trip)', async () => {
+      const svc = await buildService(undefined);
+      // Creds are present in this mock, so the guard passes; the failure (if
+      // any) must come from the network layer, never from the guard.
+      // getAccessToken would attempt axios — assert the guard itself passes by
+      // calling with creds removed and expecting the legacy credential error.
+      const mod: TestingModule = await Test.createTestingModule({
+        providers: [
+          ZoomService,
+          { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue(null) } },
+        ],
+      }).compile();
+      const noCreds = mod.get(ZoomService);
+      await expect((noCreds as any).getAccessToken()).rejects.toThrow(/ZOOM_ACCOUNT_ID/);
+      expect(svc).toBeDefined();
+    });
+  });
 });

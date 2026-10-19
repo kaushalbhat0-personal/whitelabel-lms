@@ -73,6 +73,26 @@ describe('ZoomLiveProvider — LiveProvider boundary', () => {
     expect((provider as any).zoomRequest).toHaveBeenCalledWith('DELETE', '/webinars/123');
   });
 
+  it('ZOOM_ENABLED=false rejects at the credential boundary with 503 (recorded-only)', async () => {
+    const { ServiceUnavailableException } = await import('@nestjs/common');
+    configGet.mockImplementation((key: string) => {
+      if (key === 'ZOOM_ENABLED') return 'disabled';
+      if (key === 'ZOOM_ACCOUNT_ID') return 'acc';
+      if (key === 'ZOOM_CLIENT_ID') return 'cid';
+      if (key === 'ZOOM_CLIENT_SECRET') return 'csecret';
+      return undefined;
+    });
+    // Private getAccessToken is the single choke point every Zoom API call
+    // passes through (zoomRequest is transport-mocked in this suite).
+    await expect((provider as any).getAccessToken()).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect((provider as any).getAccessToken()).rejects.toThrow(/recorded-only/);
+  });
+
+  it('ZOOM_ENABLED unset preserves legacy behavior (credential check, no 503)', async () => {
+    configGet.mockImplementation(() => undefined);
+    await expect((provider as any).getAccessToken()).rejects.toThrow(/ZOOM_ACCOUNT_ID/);
+  });
+
   it('registerAttendee delegates and returns join_url', async () => {
     (provider as any).zoomRequest.mockResolvedValueOnce({ join_url: 'https://zoom/j/personal' });
     const url = await provider.registerAttendee('999', { name: 'A B', email: 'a@test.com' });

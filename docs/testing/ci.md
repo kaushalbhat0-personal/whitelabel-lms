@@ -1,58 +1,34 @@
-# CI — GitHub Actions
+# CI — Current Posture
 
-## Workflow
+> There is currently **no GitHub Actions workflow** configured for this repository
+> (`.github/workflows/` is empty). Do not assume CI is running.
 
-`.github/workflows/e2e-recordings.yml` triggers on:
+## What runs instead (operator / local gates)
 
-- Push to `main` or `develop` (when `apps/api/`, `tests/e2e/`, or the workflow itself changes)
-- Pull requests targeting `main`
-- Manual trigger via `workflow_dispatch`
+| Gate | Command | What it proves |
+|---|---|---|
+| Factory suite | `pnpm factory:test` | Config validation, timezone allowlist, template pins, verification, handoff gates |
+| Marketing suite | `pnpm test:marketing` | Demo URL normalization contract |
+| API unit tests | `pnpm --filter @lms/api test` | Service-level regression (run before release) |
+| Typechecks | `pnpm --filter @lms/api typecheck`, web/marketing equivalents | Compile safety |
+| DB generation drift | `pnpm db:generate` + `git diff --exit-code` | Canonical migrations match generated SQL |
+| Factory preflight | `pnpm factory preflight` | Node/pnpm versions, git state, migration continuity, deterministic SQL rebuild |
 
-## Steps
+## Playwright E2E (local only)
 
-1. Checkout repo
-2. Install pnpm + Node.js 20
-3. `pnpm install --frozen-lockfile`
-4. `pnpm --filter @lms/api build`
-5. Start Postgres 16 service container
-6. Run DB migrations
-7. Seed E2E test users
-8. Install Playwright Chromium browser
-9. Run tests: `pnpm exec playwright test --project=recordings-api`
-10. Upload artifacts (traces, screenshots, HTML report)
-
-## Environment Secrets
-
-| Secret | Purpose |
-|--------|---------|
-| `SUPABASE_URL` | Supabase project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | Service-role key for DB assertions |
-| `E2E_ADMIN_EMAIL` | Admin test user email |
-| `E2E_ADMIN_PASSWORD` | Admin test user password |
-| `E2E_STUDENT_A_EMAIL` | Student A test user email |
-| `E2E_STUDENT_A_PASSWORD` | Student A test user password |
-| `E2E_STUDENT_B_EMAIL` | Student B test user email |
-| `E2E_STUDENT_B_PASSWORD` | Student B test user password |
-
-## CI Configuration
-
-| Setting | Value |
-|---------|-------|
-| Runner | `ubuntu-22.04` |
-| Timeout | 15 minutes |
-| Retries | 2 |
-| Workers | 2 |
-| `fullyParallel` | `true` |
-| Max failures | 5 (aborts early to save CI minutes) |
-
-## Local CI Simulation
+The Playwright suites under `tests/e2e/` (including `recordings`) run locally:
 
 ```bash
-$env:CI='true'
-pnpm exec playwright test --project=recordings-api
+pnpm exec playwright test --config=tests/e2e/playwright.config.ts --workers=1
 ```
 
-## Artifact Retention
+E2E credentials live in `tests/e2e/.env.example` (dummy local values only).
+E2E requires a live API + seeded database; it is not wired to any hosted CI.
 
-- Test results (`test-results/`, `playwright-report/`): 7 days
-- Playwright traces (only on failure): 14 days
+## If CI is introduced later
+
+Any future workflow must, at minimum, run the six gates above and publish
+their exact counts. Until such a workflow exists and is green on `main`,
+release readiness is established by the operator running this document's
+commands and recording the results in the release report — never by assuming
+a badge or a historical workflow file.

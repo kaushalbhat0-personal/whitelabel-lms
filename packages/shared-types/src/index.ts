@@ -34,6 +34,12 @@ export interface User {
 // Business Config (single-row)
 // ──────────────────────────────────────────────────────────────
 
+export interface BusinessConfigTheme {
+  primary: string;
+  sidebarBg: string;
+  accent: string;
+}
+
 export interface BusinessConfig {
   id: string;
   businessName: string;
@@ -65,14 +71,18 @@ export interface BusinessConfig {
   supportPhone?: string;
   website?: string;
   legalFooter?: string;
+  themeJson?: BusinessConfigTheme;
 }
 
 export interface BusinessConfigPublic {
   businessName: string;
   logoUrl?: string;
+  faviconUrl?: string;
   currency: string;
   locale: string;
   timezone: string;
+  themeJson: BusinessConfigTheme;
+  password_management: 'enabled' | 'disabled';
 }
 
 // ──────────────────────────────────────────────────────────────

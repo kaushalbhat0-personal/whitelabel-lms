@@ -208,3 +208,45 @@ describe('EmailService — COMM-01B-B2A Welcome/Login Branding', () => {
     expect(htmlAlert).toContain('Global Skills Academy');
   });
 });
+
+describe('EmailService sender requirements (ISOLATION-02, no resend.dev fallback)', () => {
+  async function buildService(apiKey: string | undefined, from: string | undefined) {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        EmailService,
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn((key: string) => {
+              if (key === 'RESEND_API_KEY') return apiKey;
+              if (key === 'EMAIL_FROM') return from;
+              if (key === 'FRONTEND_URL') return 'https://example.com';
+              return undefined;
+            }),
+          },
+        },
+        { provide: EmailLogsService, useValue: { createLog: jest.fn(), markSent: jest.fn(), markFailed: jest.fn() } },
+        { provide: AuditService, useValue: { log: jest.fn().mockResolvedValue(undefined) } },
+        { provide: ObservabilityService, useValue: { logEvent: jest.fn().mockResolvedValue(undefined) } },
+        { provide: EmailWebhookService, useValue: { isSuppressed: jest.fn().mockResolvedValue(false) } },
+      ],
+    }).compile();
+    return module.get(EmailService);
+  }
+
+  it('explicit EMAIL_FROM is used for real sending', async () => {
+    const svc = await buildService('re_test_123', 'noreply@example.com');
+    expect((svc as any).isStub).toBe(false);
+    expect((svc as any).fromAddress).toBe('noreply@example.com');
+  });
+
+  it('API key without EMAIL_FROM fails visibly at construction (no invented sender)', async () => {
+    await expect(buildService('re_test_123', undefined)).rejects.toThrow(/EMAIL_FROM is required/);
+  });
+
+  it('stub mode never uses a Resend-owned sender', async () => {
+    const svc = await buildService(undefined, undefined);
+    expect((svc as any).isStub).toBe(true);
+    expect((svc as any).fromAddress).not.toContain('resend.dev');
+  });
+});

@@ -15,6 +15,7 @@
 
 import { TOP_LEVEL_KEYS, OWNERSHIP_KEYS } from './types';
 import { isolationGuards } from './guards';
+import { isSupportedTimezone } from './timezones';
 
 export interface ValidationError {
   field: string;
@@ -83,16 +84,6 @@ function checkOrigin(field: string, value: unknown, errors: ValidationError[]): 
   } else if (u.pathname !== '/' && u.pathname !== '') {
     errors.push({ field, message: `${field} must be a bare origin (scheme + host, no path). Received: "${value}"` });
   }
-}
-
-function supportedTimezones(): Set<string> {
-  try {
-    const list = (Intl as unknown as { supportedValuesOf?: (x: string) => string[] }).supportedValuesOf?.('timeZone');
-    if (Array.isArray(list) && list.length > 0) return new Set(list);
-  } catch {
-    /* fall through */
-  }
-  return new Set(['UTC', 'America/New_York', 'Asia/Kolkata', 'Europe/London']);
 }
 
 /**
@@ -214,7 +205,7 @@ export function validateClientConfig(raw: unknown, opts: { knownDomains?: string
     if (typeof loc.locale !== 'string' || !LOCALE_RE.test(loc.locale)) {
       err('localization.locale', `localization.locale must look like a BCP-47 tag (e.g. "en-US", "en-IN"). Received: ${JSON.stringify(loc.locale)}`);
     }
-    if (typeof loc.timezone !== 'string' || !supportedTimezones().has(loc.timezone)) {
+    if (typeof loc.timezone !== 'string' || !isSupportedTimezone(loc.timezone)) {
       err(
         'localization.timezone',
         `localization.timezone must be a valid IANA timezone (e.g. "America/New_York"). Received: ${JSON.stringify(loc.timezone)}`,

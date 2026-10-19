@@ -9,6 +9,9 @@ dist/
 *.tsbuildinfo
 coverage/
 
+# Marketing static export (rebuilt by `next build`; never commit)
+apps/marketing/out/
+
 # Environment files
 .env
 .env.local

@@ -14,7 +14,7 @@
     "db:generate": "tsx scripts/generate-fresh-sql.ts",
     "test:marketing": "tsx --test apps/marketing/src/site.config.test.ts",
     "factory": "tsx scripts/deployment-factory/src/cli.ts",
-    "factory:test": "tsx --test scripts/deployment-factory/test/validate.test.ts scripts/deployment-factory/test/generators.test.ts scripts/deployment-factory/test/verification.test.ts scripts/deployment-factory/test/brand-compare.test.ts scripts/deployment-factory/test/push-config.test.ts scripts/deployment-factory/test/handoff-gate.test.ts"
+    "factory:test": "tsx --test scripts/deployment-factory/test/validate.test.ts scripts/deployment-factory/test/timezones.test.ts scripts/deployment-factory/test/generators.test.ts scripts/deployment-factory/test/verification.test.ts scripts/deployment-factory/test/brand-compare.test.ts scripts/deployment-factory/test/push-config.test.ts scripts/deployment-factory/test/handoff-gate.test.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",

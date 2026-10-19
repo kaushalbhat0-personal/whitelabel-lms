@@ -48,11 +48,18 @@ export class EmailController {
     @Headers('svix-signature') svixSignature?: string,
   ) {
     const webhookSecret = this.configService.get<string>('RESEND_WEBHOOK_SECRET');
-    if (webhookSecret) {
-      if (!svixId || !svixTimestamp || !svixSignature) {
-        this.logger.warn('Webhook verification failed: missing signature headers');
-        throw new UnauthorizedException('Missing webhook signature headers');
-      }
+    if (!webhookSecret) {
+      // Fail closed: an unverifiable webhook must never be accepted silently.
+      // Client deployments must set RESEND_WEBHOOK_SECRET (see .env.example).
+      this.logger.error(
+        'RESEND_WEBHOOK_SECRET is not configured — rejecting Resend webhook. Set the secret to receive delivery events.',
+      );
+      throw new UnauthorizedException('Webhook verification is not configured');
+    }
+    if (!svixId || !svixTimestamp || !svixSignature) {
+      this.logger.warn('Webhook verification failed: missing signature headers');
+      throw new UnauthorizedException('Missing webhook signature headers');
+    }
 
       const timestampInt = parseInt(svixTimestamp, 10);
       const tolerance = 300;
@@ -97,9 +104,6 @@ export class EmailController {
         this.logger.error(`Webhook signature verification error: ${err.message}`);
         throw new UnauthorizedException('Invalid webhook signature');
       }
-    } else {
-      this.logger.warn('RESEND_WEBHOOK_SECRET not configured — accepting unverified webhook');
-    }
 
     await this.emailWebhookService.handleResendWebhook(payload);
     return { received: true };

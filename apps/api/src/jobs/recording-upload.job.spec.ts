@@ -89,7 +89,9 @@ function makeJob(db: { from: any }) {
     resolve: jest.fn(() => provider),
   };
   const recordingsService = { assignToBatches: jest.fn(async () => ({ assignedCount: 1 })) };
-  const config = { get: jest.fn(() => 'cred') };
+  // ZOOM_ENABLED must resolve to a valid policy value: the fail-fast guard
+  // rejects anything else (e.g. a blanket 'cred' for every key).
+  const config = { get: jest.fn((key: string) => (key === 'ZOOM_ENABLED' ? 'enabled' : 'cred')) };
 
   const job = new RecordingUploadJob(
     { client: db } as any,

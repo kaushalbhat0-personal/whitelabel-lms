@@ -49,25 +49,25 @@ Phase 2 will migrate the first meaningful hardcodes to this pattern.
 | **Business identity** | | | | | |
 | `business_name` | Client Admin | `business_config.business_name` (DB) | DB (good) | DB | Per-client display/legal name |
 | `logo_url` | Client Admin | `business_config.logo_url` | DB (good) | DB | Header / PDF / email; fallback to text badge |
-| `favicon_url` | Client Admin | `business_config.favicon_url TEXT` (040) | DB `business_config.favicon_url` via `040-business-config-whitelabel.sql` (nullable) | DB | Was hard-coded `apps/web` static file; P2A adds column, not yet wired |
+| `favicon_url` | Client Admin | `business_config.favicon_url TEXT` (038) | DB `business_config.favicon_url` via `038-business-config-whitelabel.sql` (nullable) | DB | Was hard-coded `apps/web` static file; column added and wired |
 | `address` (`address_line_1/2, city, state, pincode, country`) | Client Admin | `business_config` 6 columns | DB (good) | DB | Invoice legal block |
 | `gstin, pan` | Client Admin | `business_config.gstin/pan` | DB (good) | DB | Nullable; invoice template conditional |
 | `email, phone` | Client Admin | `business_config.email/phone` | DB (good) | DB | Business contact |
-| `support_email, support_phone, website` | Client Admin | `business_config.support_email/phone TEXT + website TEXT` (040, nullable) | DB `business_config` via 040 | DB | Per-client support contact; website optional |
-| `website, social links` | Client Admin | *not stored* | *no column* | DB (`website TEXT, social_json JSONB`) Phase 3 if needed | Keep minimal v1; avoid noise |
+| `support_email, support_phone, website` | Client Admin | `business_config.support_email/phone TEXT + website TEXT` (038, nullable) | DB `business_config` via 038 | DB | Per-client support contact; website optional. `social_json` deferred (Phase 3 if needed) |
+| `website` | Client Admin | `business_config.website TEXT` (038, nullable) | DB (good) | DB | Optional; `social_json` deferred to Phase 3 if needed |
 | **Branding / Theme** | | | | | |
-| `theme_primary` | Client Admin | `business_config.theme_json` (new) | `tailwind.config.ts:18 #10b981` literal | DB `theme_json` → CSS vars Phase 3 | `#10b981` stays DEFAULT per `defaults.ts` |
-| `theme_sidebarBg, accent` | Client Admin | `business_config.theme_json` | `tailwind.config.ts:60 #064e3b` | DB | Same pattern |
-| `certificate_accent, seal text` | Client Admin | `business_config.certificate_json` (new) | `certificate.template.hbs:29/37 LMS Platform / LMS` literal | DB JSON Phase 3 | |
+| `theme_primary` | Client Admin | `business_config.theme_json` (039) | DB (good) | DB | `DEFAULT_THEME_*` per `defaults.ts` when unset |
+| `theme_sidebarBg, accent` | Client Admin | `business_config.theme_json` (039) | DB (good) | DB | Same pattern |
+| `certificate identity` | Client Admin | derived from `business_config` row (`business_name`, `logo_url`, `theme_json`) at render time | Code reads DB row | DB | No separate `certificate_json` column exists; seal/initials derived per render. Do not invent one |
 | **Localization** | | | | | |
-| `timezone` | Client Admin | `business_config.timezone TEXT DEFAULT 'Asia/Kolkata'` (040) | DB `business_config.timezone` via 040 | DB | Webinar scheduling; `zoom-live.provider.ts:118` uses `DEFAULT_TIMEZONE` fallback until P2B wiring |
-| `locale` | Client Admin | `business_config.locale TEXT DEFAULT 'en-IN'` (040) | DB `business_config.locale` via 040 | DB | `invoices.service.ts:351 'en-IN'` literal until P2C wiring |
-| `currency` | Client Admin | `business_config.currency TEXT DEFAULT 'INR'` (040) | DB `business_config.currency` via 040 | DB | `invoices.service.ts:360 '&#x20B9;' INR` literal until P2C wiring |
+| `timezone` | Client Admin | `business_config.timezone TEXT DEFAULT 'Asia/Kolkata'` (038) | DB `business_config.timezone` via 038 | DB | Webinar scheduling; live provider falls back to `DEFAULT_TIMEZONE` when the DTO omits it |
+| `locale` | Client Admin | `business_config.locale TEXT DEFAULT 'en-IN'` (038) | DB `business_config.locale` via 038, honored by `getBusinessConfigWithDefaults` | DB | `DEFAULT_LOCALE` fallback when unset |
+| `currency` | Client Admin | `business_config.currency TEXT DEFAULT 'INR'` (038) | DB `business_config.currency` via 038, honored by `getBusinessConfigWithDefaults` | DB | `DEFAULT_CURRENCY` fallback when unset |
 | **Financial** | | | | | |
-| `invoice_prefix, receipt_prefix` | Client Admin | `business_config.invoice_prefix/receipt_prefix` | DB columns exist but `invoices.service.ts:94` ignores prefix in primary path | DB — fix read path to honor DB Phase 2 | `INV`/`RCP` defaults |
+| `invoice_prefix, receipt_prefix` | Client Admin | `business_config.invoice_prefix/receipt_prefix` | DB (good) | DB | Prefixes honored from the DB row; `INV`/`RCP` defaults |
 | `current_financial_year` | Client Admin | `business_config.current_financial_year` | DB | DB | Snapshot; Phase 2 may add `fy_start_month` |
-| `fy_start_month, tax_mode, tax_rate` | Client Admin | `business_config.fy_start_month INT 0-11 / tax_mode inclusive/exclusive/zero / tax_rate NUMERIC 0-100` (040) | DB `business_config` via 040 (defaults `3, inclusive, 18`) | DB | `invoices.service.ts:52 month>=3` + `240 /1.18 *0.09` literals until P2C wiring |
-| `legal_footer` | Client Admin | `business_config.legal_footer TEXT` (040, nullable) | DB `business_config.legal_footer` via 040 | DB | `invoice.template.hbs:35 GST Invoice…` literal until P2C wiring |
+| `fy_start_month, tax_mode, tax_rate` | Client Admin | `business_config.fy_start_month INT 0-11 / tax_mode inclusive/exclusive/zero / tax_rate NUMERIC 0-100` (038) | DB `business_config` via 038 (defaults `3, inclusive, 18`), honored by `getBusinessConfigWithDefaults` | DB | `DEFAULT_*` fallbacks when unset |
+| `legal_footer` | Client Admin | `business_config.legal_footer TEXT` (038, nullable) | DB `business_config.legal_footer` via 038, rendered on invoices when set | DB | Omitted when unset |
 | **Features / Terminology** | | | | | |
 | `terminology.batch` (display alias) | Client Admin | *not stored* | Code `Batch` everywhere | DB `terminology_json` Phase deferred | Internal `Batch` stays canonical DB enum; display alias optional, not v1 |
 | `feature flags` (e.g., certificates, attendance) | LMS Core / Deployment Operator | *not stored* | All features always-on `app.module.ts:114-147` | `feature_flags` table or ENV deferred | No client has asked; avoid noise |
@@ -75,11 +75,17 @@ Phase 2 will migrate the first meaningful hardcodes to this pattern.
 | `JWT_SECRET, JWT_EXPIRES_IN` | Deployment Operator | `ENV JWT_*` | ENV (good) | ENV | Per-deployment; rotation via operator |
 | `SUPABASE_URL, SERVICE_ROLE_KEY, ANON_KEY` | Deployment / Infra Provider | `ENV SUPABASE_*` | ENV (good) | ENV | Client-owned Supabase project per white-label model |
 | `REDIS_HOST/PORT/PASSWORD` | Deployment Operator | `ENV REDIS_*` | ENV (good) | ENV | Upstash or local `localredis` per compose |
-| `ZOOM_* (ACCOUNT_ID, CLIENT_ID/SECRET, WEBHOOK_SECRET, SDK_KEY/SECRET)` | Deployment Operator | `ENV ZOOM_*` | ENV (good) | ENV | Client-owned Zoom S2S app |
+| `ZOOM_* (ACCOUNT_ID, CLIENT_ID/SECRET, WEBHOOK_SECRET, SDK_KEY/SECRET)` | Deployment Operator | `ENV ZOOM_*` | ENV (good) | ENV | Client-owned Zoom S2S app; required only when live classes are enabled |
+| `ZOOM_ENABLED` | Deployment Operator / LMS Core | `ENV ZOOM_ENABLED` (`enabled`|`disabled`, unset → `enabled`) | ENV + `zoom-enabled.constant.ts` | ENV | Explicit deployment intent: `disabled` = recorded-only (live operations reject with intentional 503); factory emits `enabled` for Zoom clients, `disabled` for recorded-only |
 | `BUNNY_* / MUX_* VIDEO_UPLOAD_PROVIDER` | Deployment Operator | `ENV VIDEO_UPLOAD_PROVIDER, BUNNY_*, MUX_*` | ENV (good) | ENV | Client-owned Bunny library or Mux token |
-| `RESEND_API_KEY, EMAIL_FROM, EMAIL_REPLY_TO` | Deployment Operator | `ENV RESEND_*, EMAIL_*` | ENV `EMAIL_FROM` generic per deployment | ENV | Per-deployment verified domain; brand color stays in BusinessConfig/theme |
+| `RESEND_API_KEY, EMAIL_FROM, EMAIL_REPLY_TO, RESEND_WEBHOOK_SECRET` | Deployment Operator | `ENV RESEND_*, EMAIL_*` | ENV (good) | ENV | Per-deployment verified domain; brand color stays in BusinessConfig/theme. No fallback sender: `EMAIL_FROM` is required when sending; webhook rejects when the secret is unset |
+| `LIVE_SESSION_DEFAULT_HOST_ID` | Deployment Operator | `ENV` (optional) | ENV | ENV | Default Zoom host for live sessions when no explicit host is set |
+| `PUPPETEER_CACHE_DIR, PUPPETEER_EXECUTABLE_PATH` | Deployment Operator | `ENV` | ENV | ENV | PDF rendering runtime paths; Render cache dir required, custom-host override optional |
 | `FRONTEND_URL, NEXT_PUBLIC_API_URL` | Deployment Operator | `ENV FRONTEND_URL` | ENV `http://localhost:3000` fallback (generic) | ENV | Single origin per deployment; `ALLOWED_ORIGINS` CSV if needed later |
 | `PORT, NODE_ENV` | Deployment Operator | `ENV` | ENV | ENV | Runtime |
+| `SESSION_POLICY` | LMS Core (values) / Deployment Operator (setting) | `ENV` (`single`|`multi`, unset → `single`) | Code constant + ENV | ENV | Client deployments use `single`; `multi` is demo-only and never generated by the factory |
+| `PASSWORD_MANAGEMENT` | LMS Core (values) / Deployment Operator (setting) | `ENV` (`enabled`|`disabled`, unset → `enabled`) | Code constant + ENV | ENV | Client deployments use `enabled`; surfaced read-only in public BusinessConfig |
+| `TEMP_DEMO_ACCESS` | LMS Core (values) / Deployment Operator (setting) | `ENV` (`enabled`|`disabled`, unset → `disabled`) | Code constant + ENV | ENV | `enabled` exposes `POST /demo/access` (demo only); factory never emits it; absent = 404 |
 | **LMS Core Rules** | | | | | |
 | `ROUTES (/admin, /student, /login)`, `TABLES`, `REDIS_KEYS`, `RECORDING_BATCHES entitlement` | LMS Core | Code constants `ROUTES`, `TABLES`, `REDIS_KEYS`, `playback-guard` | Code (good) | Code | Not per-client; changes only by core release |
 | `EMI cent-safe split` | LMS Core | `payments.service.ts:208-224` | Code (good) | Code | Business-neutral math |
@@ -121,7 +127,7 @@ It exists so that every future productization PR can state: **“This value’s 
 
 ## 6. Related docs
 
-- `apps/api/.env.example:1-69` — deployment ENV authoritative list (23 keys)
+- `apps/api/.env.example` — deployment ENV authoritative list (37 assignments plus commented demo-only flag; `RESEND_WEBHOOK_SECRET`, `PUPPETEER_*`, and `LIVE_SESSION_DEFAULT_HOST_ID` documented in factory templates and deployment docs)
 - `apps/api/src/common/config/defaults.ts` — central defaults (this phase)
 - `scripts/migrations/` — DB authority; `scripts/schema.sql` is deprecated reference
 - `scripts/check-supabase-schema.js` — live DB vs expected migration state checker (8 representative tables, not schema.sql)

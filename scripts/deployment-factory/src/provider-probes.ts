@@ -71,7 +71,7 @@ export function probeProviders(config: ClientConfig, evidence: ProviderEvidence 
 
   out.push({
     provider: 'zoom', state: config.providers.zoom ? 'DECLARED' : 'NOT_CONFIGURED',
-    reason: config.providers.zoom ? 'Selected in config. Endpoints throw loudly until credentials are set — test a call before handoff.' : 'Not purchased for this client. Endpoints throw only when called.',
+    reason: config.providers.zoom ? 'Selected in config. ZOOM_ENABLED=enabled emitted; endpoints throw loudly until credentials are set — test a call before handoff.' : 'Not purchased for this client (ZOOM_ENABLED=disabled emitted). Live operations reject with an intentional 503.',
   });
 
   return out;

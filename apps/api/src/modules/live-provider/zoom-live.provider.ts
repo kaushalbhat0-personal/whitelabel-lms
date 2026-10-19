@@ -26,6 +26,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { DEFAULT_TIMEZONE } from '../../common/config/defaults';
+import { resolveZoomEnabled } from '../../common/constants/zoom-enabled.constant';
 import type {
   LiveProvider,
   CreateLiveWebinarDto,
@@ -42,6 +43,13 @@ export class ZoomLiveProvider implements LiveProvider {
   constructor(private readonly configService: ConfigService) {}
 
   private async getAccessToken(): Promise<string> {
+    // Recorded-only deployments set ZOOM_ENABLED=false: reject intentionally
+    // (503) instead of failing with a generic credential error downstream.
+    if (resolveZoomEnabled(this.configService.get<string>('ZOOM_ENABLED')) !== 'enabled') {
+      throw new ServiceUnavailableException(
+        'Live classes are not enabled for this deployment (recorded-only). Enable Zoom to use live sessions.',
+      );
+    }
     const accountId = this.configService.get<string>('ZOOM_ACCOUNT_ID');
     const clientId = this.configService.get<string>('ZOOM_CLIENT_ID');
     const clientSecret = this.configService.get<string>('ZOOM_CLIENT_SECRET');

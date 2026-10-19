@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
@@ -6,6 +6,7 @@ import { SupabaseService } from '../common/services/supabase.service';
 import { RecordingsService } from '../modules/recordings/recordings.service';
 import { RecordingProviderResolver } from '../modules/video-provider/recording-provider.resolver';
 import { TABLES } from '../common/constants/tables.constant';
+import { resolveZoomEnabled } from '../common/constants/zoom-enabled.constant';
 
 /**
  * Zoom -> Bunny recording ingestion worker (Phase 8 hardening).
@@ -305,6 +306,13 @@ export class RecordingUploadJob {
   }
 
   private async getZoomAccessToken(): Promise<string> {
+    // Recorded-only deployments set ZOOM_ENABLED=false: Zoom cloud recording
+    // ingestion cannot run without a Zoom account — fail intentionally (503).
+    if (resolveZoomEnabled(this.configService.get<string>('ZOOM_ENABLED')) !== 'enabled') {
+      throw new ServiceUnavailableException(
+        'Live classes are not enabled for this deployment (recorded-only). Enable Zoom to ingest Zoom cloud recordings.',
+      );
+    }
     const accountId = this.configService.get<string>('ZOOM_ACCOUNT_ID');
     const clientId = this.configService.get<string>('ZOOM_CLIENT_ID');
     const clientSecret = this.configService.get<string>('ZOOM_CLIENT_SECRET');

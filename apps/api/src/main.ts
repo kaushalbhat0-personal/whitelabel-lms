@@ -20,18 +20,23 @@ import { AppModule } from './app.module';
 import { resolveSessionPolicy } from './common/constants/session-policy.constant';
 import { resolvePasswordPolicy } from './common/constants/password-policy.constant';
 import { resolveTempDemoAccessPolicy } from './common/constants/temp-demo-access.constant';
+import { resolveZoomEnabled } from './common/constants/zoom-enabled.constant';
 
 async function bootstrap() {
   // Fail fast on invalid deployment policies before creating the application.
   // SESSION_POLICY: 'single' | 'multi' (unset → 'single').
   // PASSWORD_MANAGEMENT: 'enabled' | 'disabled' (unset → 'enabled').
   // TEMP_DEMO_ACCESS: 'enabled' | 'disabled' (unset → 'disabled').
+  // ZOOM_ENABLED: 'enabled' | 'disabled' (unset → 'enabled', backward compatible:
+  //   every existing deployment attempts Zoom exactly as before; recorded-only
+  //   clients set 'disabled' for an intentional 503 at the live boundary).
   // Invalid values must never silently weaken clients or break the demo.
   // Constructors re-resolve the same values, so file-based misconfiguration
   // also fails during Nest DI init.
   resolveSessionPolicy(process.env.SESSION_POLICY);
   resolvePasswordPolicy(process.env.PASSWORD_MANAGEMENT);
   resolveTempDemoAccessPolicy(process.env.TEMP_DEMO_ACCESS);
+  resolveZoomEnabled(process.env.ZOOM_ENABLED);
 
   // rawBody: true tells NestJS's body-parser to preserve the exact byte
   // sequence on req.rawBody.  The Mux webhook handler needs this to verify

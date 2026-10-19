@@ -129,7 +129,11 @@ export class EmailLogsService {
       }
 
       const resend = new Resend(apiKey);
-      const from = process.env.EMAIL_FROM ?? 'onboarding@resend.dev';
+      const from = process.env.EMAIL_FROM;
+      if (!from) {
+        await this.markFailed(logId, 'No EMAIL_FROM configured — refusing to send with an invented sender');
+        return;
+      }
 
       const { data, error: sendError } = await resend.emails.send({
         from,

@@ -77,6 +77,27 @@ describe('env templates', () => {
     assert.ok(t.includes('RESEND_API_KEY=<ENTER_IN_DASHBOARD>'));
     assert.deepEqual(scanTextForSecrets(t), []);
   });
+
+  it('zoom sections follow provider selection with explicit ZOOM_ENABLED', () => {
+    // Zoom client: intent enabled + credential placeholders.
+    const zoomCfg = { ...acme(), providers: { ...acme().providers, zoom: true } };
+    const zt = buildRenderEnvTemplate(zoomCfg);
+    assert.ok(zt.includes('ZOOM_ENABLED=enabled'));
+    assert.ok(zt.includes('ZOOM_ACCOUNT_ID=<ENTER_IN_DASHBOARD>'));
+    assert.ok(!zt.includes('ZOOM_ENABLED=disabled'));
+    // Recorded-only client: intent disabled, no credential placeholders.
+    const t = buildRenderEnvTemplate(acme());
+    assert.ok(t.includes('ZOOM_ENABLED=disabled'));
+    assert.ok(!t.includes('ZOOM_ACCOUNT_ID=<ENTER_IN_DASHBOARD>'));
+    assert.ok(t.includes('SKIPPED (providers.zoom=false'));
+    // No invalid ZOOM_ENABLED value is ever emitted.
+    for (const line of t.split('\n').concat(zt.split('\n'))) {
+      if (line.startsWith('ZOOM_ENABLED=')) {
+        assert.ok(line === 'ZOOM_ENABLED=enabled' || line === 'ZOOM_ENABLED=disabled', `bad line: ${line}`);
+      }
+    }
+    assert.deepEqual(scanTextForSecrets(zt), []);
+  });
 });
 
 describe('business-config payload', () => {

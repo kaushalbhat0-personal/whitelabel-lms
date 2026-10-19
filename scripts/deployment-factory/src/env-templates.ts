@@ -94,6 +94,8 @@ export function buildRenderEnvTemplate(config: ClientConfig): string {
   if (config.providers.zoom) {
     lines.push('# ── Zoom (client account — Server-to-Server OAuth) ─────────────');
     lines.push(req('only because providers.zoom=true for this client.'));
+    lines.push('# Explicit live-class intent: enabled = live allowed (creds required).');
+    lines.push('ZOOM_ENABLED=enabled');
     for (const k of ['ZOOM_ACCOUNT_ID', 'ZOOM_CLIENT_ID', 'ZOOM_CLIENT_SECRET', 'ZOOM_WEBHOOK_SECRET', 'ZOOM_SDK_KEY', 'ZOOM_SDK_SECRET']) {
       lines.push(`${k}=${SECRET_PLACEHOLDER}`);
     }
@@ -102,6 +104,8 @@ export function buildRenderEnvTemplate(config: ClientConfig): string {
     lines.push('');
   } else {
     lines.push('# ── Zoom — SKIPPED (providers.zoom=false for this client) ───────');
+    lines.push('# Recorded-only: live operations reject with an intentional 503.');
+    lines.push('ZOOM_ENABLED=disabled');
     lines.push('# Leave all ZOOM_* unset. Endpoints throw loudly only if called.');
     lines.push('');
   }
