@@ -54,6 +54,15 @@ describe('env templates', () => {
     assert.ok(!t.includes('PASSWORD_MANAGEMENT=disabled'));
   });
 
+  it('render template never emits TEMP_DEMO_ACCESS (client-safe, demo remains manual)', () => {
+    const t = buildRenderEnvTemplate(acme());
+    assert.ok(!t.includes('TEMP_DEMO_ACCESS'));
+    const zoomCfg = { ...acme(), providers: { ...acme().providers, zoom: true } };
+    assert.ok(!buildRenderEnvTemplate(zoomCfg).includes('TEMP_DEMO_ACCESS'));
+    const resendCfg = { ...acme(), providers: { ...acme().providers, email: 'resend' as const } };
+    assert.ok(!buildRenderEnvTemplate(resendCfg).includes('TEMP_DEMO_ACCESS'));
+  });
+
   it('render template has no service-role leakage into vercel; vercel template derives API url', () => {
     const v = buildVercelEnvTemplate(acme());
     assert.ok(!v.includes('SERVICE_ROLE'));
