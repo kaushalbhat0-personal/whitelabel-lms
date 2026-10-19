@@ -1,9 +1,9 @@
 ---
 name: mct-auth-authorization
-description: MCT LMS authentication and authorization chain (JWT, httpOnly cookie, Redis single-device sessions, RolesGuard, batch isolation). Use when touching login, guards, roles, cookies, session validation, device handling, or any student/admin data access.
+description: White-Label LMS authentication and authorization chain (JWT, httpOnly cookie, deployment-scoped sessions, RolesGuard, batch isolation). Use when touching login, guards, roles, cookies, session validation, device handling, or any student/admin data access.
 ---
 
-# Skill: MCT LMS — Auth & Authorization
+# Skill: White-Label LMS — Auth & Authorization
 
 ## Purpose
 Institutional knowledge of the full auth chain and the bugs already fixed so they are never reintroduced.
@@ -12,7 +12,9 @@ Institutional knowledge of the full auth chain and the bugs already fixed so the
 ```
 Login:  POST /auth/login (rate-limited per-IP via Redis ratelimit:login:<ip>, 15-min window)
         → verify password (Supabase profiles) 
-        → SINGLE-DEVICE ENFORCEMENT: existing user_session:<userId> is invalidated
+        → SESSION POLICY ENFORCEMENT (`SESSION_POLICY`, default `single`): under `single`,
+          the existing user_session:<userId> is invalidated (new login replaces the old one);
+          under `multi` (demo deployments only), concurrent independent sessions are allowed
         → JWT signed { sub, sessionId, role } + Redis session store (24h TTL)
         → httpOnly cookie `access_token` set by API; web never stores token in JS storage
 Web:    middleware.ts reads cookie/decodes JWT for path gating (/student/* needs role=student)
@@ -37,7 +39,7 @@ API:    JwtAuthGuard (global) → request.user {id, role, sessionId}
   - Recordings → `recording_batches` ONLY (`validateAccess()` in recordings.service). `batch_recording_curriculum` is display/progress only — NEVER an auth source.
   - Tests → `test_batches`; Live sessions → `session_batches` (+ registrants).
 - Cross-user protection pattern: compare `request.user.id` to the row owner before any read/write of another user's data (attempts, results, devices, progress).
-- Single-device enforcement is intentional. Do not "fix" concurrent logins by removing it.
+- Single-session enforcement is the default deployment policy (`SESSION_POLICY=single`), and it is intentional. Do NOT "fix" concurrent logins by removing it — and do NOT "fix" legitimate `SESSION_POLICY=multi` behavior either (demo deployments): multi-session is valid only where explicitly configured. Never change session policy to mask an unrelated auth bug.
 - Logout must invalidate the Redis session, not just clear the cookie.
 - Playback/video URLs are issued only through PlaybackGuardService — see skill `mct-video-pipeline`.
 

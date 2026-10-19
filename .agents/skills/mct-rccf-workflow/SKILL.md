@@ -1,6 +1,6 @@
 ---
 name: mct-rccf-workflow
-description: The RCCF methodology for working on this repo (READ→MAP→REPRODUCE→VERIFY ROOT CAUSE→FIX MINIMALLY→TEST→DB VERIFY→BROWSER VERIFY→AUDIT→REPORT→COMMIT). Use as the default process for any non-trivial task or phase.
+description: The RCCF methodology for working on this repo (READ→MAP→REPRODUCE→VERIFY ROOT CAUSE→FIX MINIMALLY→TEST→DB VERIFY→BROWSER VERIFY→AUDIT→REPORT→FREEZE→COMMIT→PUSH→DEPLOY→PRODUCTION VERIFY). Use as the default process for any non-trivial task or phase.
 ---
 
 # Skill: MCT LMS — RCCF Workflow
@@ -19,11 +19,15 @@ The mandated development discipline for this production LMS. Every prior phase f
 8. **BROWSER VERIFY** — user-facing changes verified desktop AND mobile 375px, console clean.
 9. **AUDIT** — re-check security (skill mct-security), performance (skill mct-performance), backwards compatibility.
 10. **REPORT** — write `docs/rccf-phase<N><letter>-<topic>-report.md`: executive summary → changes → DB → tests (exact numbers) → browser → cost/perf if relevant → risks table → rollback → score → GO/CONDITIONAL GO/NO-GO. Follow the format of `docs/rccf-phase7c-bunny-verification-report.md`.
-11. **COMMIT** — only when explicitly asked; concise message matching repo style (`feat(video): …`, `fix(assessments): …`, `refactor(student): …`).
+11. **COMMIT** — only when explicitly asked; concise message matching repo style (`feat(video): …`, `fix(assessments): …`, `refactor(student): …`). Stage only intended files.
+12. **PUSH** — to `origin/main` (never force push).
+13. **DEPLOY** — through the existing pipeline (Vercel/Render auto-deploy); never invent infrastructure.
+14. **PRODUCTION VERIFY** — HTTP checks, policy behavior, and funnel verification against the live deployment; report exact results.
 
 ## Rules
 - Inspect before modifying. Never assume TS types match the DB (skill mct-schema-drift).
 - Preserve backwards compatibility unless the phase explicitly breaks it (staged migrations, feature flags like BUNNY_ENABLED).
+- Not every tiny change needs every phase at full depth — but production changes must not skip appropriate verification (tests → build → deploy → production verify).
 - If an external fact cannot be verified, STOP at that gate and report it instead of guessing.
 - Report exact files changed and remaining risks; never claim unverifiable success.
 

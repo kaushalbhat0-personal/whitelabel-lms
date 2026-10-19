@@ -15,7 +15,9 @@ Admin creates session → LiveSessionsService (transactional)
      zoom_webinar_id, zoom_webinar_join_url)
   → session_batches (batch isolation source of truth)
   → registration → session_registrants (personal_join_url, zoom_registrant_id)
-  → Zoom webinar create/register (Server-to-Server OAuth, token cached)
+  → Zoom webinar create/register (Server-to-Server OAuth; a fresh access token is fetched per call)
+  → recorded-only deployments set ZOOM_ENABLED=disabled: Zoom operations reject with an intentional
+    controlled 503 at the credential boundary — this is expected deployment behavior, NOT a bug to fix
   → student join: single-use join_tokens row + Redis active_join marker
   → Zoom signed webhook POST /zoom/webhook (@Public, rawBody!)
        → ZoomWebhookHandler verifies signature → status/attendance/recording updates
@@ -31,6 +33,7 @@ Admin creates session → LiveSessionsService (transactional)
 - `join_tokens(token)` indexed; `join_attempts(session_id)` indexed for audit.
 
 ## Rules
+- **Recorded-only vs live is a deployment decision, not a code branch.** `ZOOM_ENABLED=disabled` deployments never require Zoom credentials; Zoom configuration (account, SDK keys, webhook secret) is ENV/provider-owned. Do not "fix" a disabled-Zoom 503 by enabling Zoom, and never import Zoom into recorded-only code paths.
 - **Legacy tables must never become a second source of truth.** New writes go to the canonical trio; legacy views exist for compatibility.
 - Zoom webhook MUST be `@Public()` and MUST respond with exact unwrapped payloads via `@Res() res.json()` (bypasses ResponseTransformInterceptor) for `endpoint.url_validation` `{plainToken, encryptedToken}`. Signature verified against `req.rawBody`.
 - Host resolution: host user id comes from config/business-config (`LIVE_SESSION_DEFAULT_HOST_ID`) — never from client input.

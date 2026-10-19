@@ -17,11 +17,12 @@ Encode the vulnerabilities found and fixed across RCCF phases so they are never 
 6. **Answer leakage:** students must never receive correct-answer flags during attempts or before publish (Phase 5 fix).
 7. **Playback:** URLs ONLY via PlaybackGuard → provider minting below authorization; Redis token bindings enforced; revocation checked first.
 8. **Join security:** live-session join = single-use token + active-join duplicate detection + batch membership.
-9. **Webhooks:** @Public but signature-verified against rawBody (Mux t=/v1=, Bunny X-BunnyStream-*, Zoom signed) + provider-scoped mutations (Bunny events must not touch mux rows and vice versa).
-10. **Rate limits:** login per-IP 15-min lockout; playback URL generation 8/min violation logging.
+9. **Webhooks:** @Public() but verified per each provider's security contract against `req.rawBody`: Mux (`t=,v1=` HMAC), Bunny (`X-BunnyStream-*`, read-only key), Zoom (signed). **Resend is fail-closed**: missing `RESEND_WEBHOOK_SECRET` → reject with 401, never warn-and-continue, never accept an unverified webhook.
+10. **Sessions:** single-session enforcement is the default (`SESSION_POLICY=single`); concurrent sessions are legitimate only where `SESSION_POLICY=multi` is explicitly configured (demo deployments). Do not "fix" multi-session behavior by changing policy.
+11. **Rate limits:** login per-IP 15-min lockout; playback URL generation 8/min violation logging.
 
 ## Secrets policy
-Secrets live ONLY in env files (`apps/api/.env`, `apps/web` env, Vercel). Skills/docs/tests reference env var NAMES, never values. Never commit: SUPABASE_SERVICE_ROLE_KEY, MUX_*, BUNNY_*, ZOOM_*SECRET*, JWT_SECRET, REDIS_PASSWORD. `.env.example` documents shape. If a secret appears in output/logs/git history → rotate immediately.
+Secrets live ONLY in env files (`apps/api/.env`, `apps/web` env, Vercel) or deployment-owned secret stores — never in BusinessConfig, never in Git, never in demo/client data. Skills/docs/tests reference env var NAMES, never values. Never commit: SUPABASE_SERVICE_ROLE_KEY, MUX_*, BUNNY_*, ZOOM_*SECRET*, JWT_SECRET, REDIS_PASSWORD, RESEND_API_KEY, RESEND_WEBHOOK_SECRET. `EMAIL_FROM` must be explicitly configured wherever sending is enabled (no `onboarding@resend.dev` fallback). `.env.example` documents shape. If a secret appears in output/logs/git history → rotate immediately.
 
 ## Production logging
 Debug-level for routine events (unknown webhook types are debug, not warn); never log tokens, signatures, passwords, full personal data. Violation logging writes to playback_violations with details JSON.

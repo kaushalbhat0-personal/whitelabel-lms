@@ -11,9 +11,11 @@ Fast diagnosis using knowledge of THIS system's failure history.
 ## Playbooks
 
 **401 Unauthorized**
-1. Redis session gone (24 h TTL / single-device re-login nukes old session) → expected; client should redirect to login.
+1. Redis session gone (24 h TTL / single-policy re-login nukes old session) → expected; client should redirect to login.
 2. api-client sent no Bearer → cookie missing/expired; check `access_token` cookie + middleware.
 3. Playback token expired (`playback_token:*` 600 s sliding) → 401 with violation log row.
+4. Resend webhook without `RESEND_WEBHOOK_SECRET` → intentional fail-closed 401 ("verification is not configured"). Do NOT "fix" by accepting the webhook.
+5. `ZOOM_ENABLED=disabled` deployment attempting a live operation → intentional controlled 503 (recorded-only). Do NOT "fix" by enabling Zoom.
 
 **403 Forbidden**
 1. Missing `@Roles()` mismatch → check route decorator vs user.role.
@@ -42,6 +44,8 @@ Fast diagnosis using knowledge of THIS system's failure history.
 **Duplicate API calls** — two mounts/two effects (history: duplicate attempt POSTs); fix the mount, not the symptom with debounce.
 
 **Webhook not applying** — Mux/Bunny signature mismatch (rawBody preserved? secret correct?); Zoom url_validation must bypass interceptor; always return 2xx to Mux.
+
+**API fails at startup (invalid deployment policy)** — `SESSION_POLICY`, `PASSWORD_MANAGEMENT`, `TEMP_DEMO_ACCESS`, or `ZOOM_ENABLED` set to an unlisted value: intentional fail-fast in `main.ts`. Fix the env value; do not remove the resolver.
 
 **CORS/cookies** — FRONTEND_URL drives Mux cors_origin and cookies; localhost:3000 vs deployed domain mismatches break auth.
 

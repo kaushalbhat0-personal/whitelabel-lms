@@ -1,9 +1,9 @@
 ---
 name: mct-video-pipeline
-description: Dual-provider video architecture (Mux Batch 1 / Bunny Batch 2+), provider resolver, playback authorization chain, Bunny CDN tokens and webhooks. Use when touching recordings, uploads, playback, HLS, MuxService, BunnyProvider, or webhooks.
+description: Video pipeline architecture (Bunny default, Mux dormant rollback), provider resolver, playback authorization chain, CDN tokens and webhooks. Use when touching recordings, uploads, playback, HLS, MuxService, BunnyProvider, or webhooks.
 ---
 
-# Skill: MCT LMS — Video Pipeline (Mux + Bunny)
+# Skill: White-Label LMS — Video Pipeline (Bunny default, Mux rollback)
 
 ## Purpose
 Everything an agent must know before touching video code — including the migration strategy that forbids deleting Mux.

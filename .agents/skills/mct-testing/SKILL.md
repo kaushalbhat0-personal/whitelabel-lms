@@ -20,7 +20,7 @@ pnpm build                    # all workspaces
 Prereqs for E2E: Redis up (`docker compose up -d redis`), `tests/e2e/.env` filled (SUPABASE_URL/SERVICE_ROLE, API_URL, admin/student creds). E2E is STATEFUL against the real Supabase project and self-cleans (global afterAll removes orphans).
 
 ## Architecture
-- Playwright config: two projects — `recordings-api` (`tests/e2e/recordings/*`) and `assessments-api` (`tests/e2e/assessments/*`); webServer auto-starts API from `apps/api/dist` (build first!) + Next dev on :3000.
+- Playwright config: three projects — `recordings-api` (`tests/e2e/recordings/*`), `assessments-api` (`tests/e2e/assessments/*`), and `auth-logout`; webServer auto-starts API from `apps/api/dist` (build first!) + Next dev on :3000.
 - Fixtures: `fixtures/recordings-fixture.ts`, `assessments-fixture.ts`; helpers in `utils/` (seed, factories, db-helpers, login-helpers, assertions).
 - Known flake: `assessments/browser-ui.spec.ts` "student can complete an attempt" (fixed 800 ms wait) fails intermittently/pre-existing — verify unrelated failures against this list before blaming your change.
 

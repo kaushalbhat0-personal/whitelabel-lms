@@ -1,6 +1,6 @@
 ---
 name: mct-performance
-description: Known performance bottlenecks and budgets in this repo (N+1 patterns, Supabase query shapes, pagination, Redis caching, HLS buffering, Zoom token caching, CDN egress cost). Use when optimizing or reviewing hot paths.
+description: Known performance bottlenecks and budgets in this repo (N+1 patterns, Supabase query shapes, pagination, Redis caching, HLS buffering, provider latency, CDN egress cost). Use when optimizing or reviewing hot paths.
 ---
 
 # Skill: MCT LMS — Performance
@@ -14,7 +14,7 @@ Avoid re-introducing measured bottlenecks; know where the costs are.
 | Recordings list | N+1 batch names per row | one `.in('recording_id', ids)` fetch + in-memory Map |
 | Analytics | full-scan aggregates per request | precomputed `test_analytics_snapshots` (order by calculated_at desc) |
 | Attempts listing | joins via `!inner` on batch_students — correct but heavy | keep indexes from migration 029 (`idx_recordings_*`, etc.) |
-| Zoom API | OAuth token per call | Server-to-Server token cached until expiry in ZoomService |
+| Zoom API | OAuth token fetched fresh per call | do NOT add caching without measuring; guard with ZOOM_ENABLED (disabled = intentional 503) |
 | Playback URL issuance | provider minting latency | local-only crypto (JWT/HMAC); no extra I/O added by provider resolver (7B verified) |
 | Web video | duplicate fetches from double mounts | single-mount architecture + throttled progress events |
 | HLS playback | effect-churn teardown → buffer resets | prefs outside init effect deps (skill mct-frontend-development) |
@@ -27,7 +27,7 @@ Avoid re-introducing measured bottlenecks; know where the costs are.
 - Select explicit columns for wide tables.
 
 ## Cost dimension (video)
-CDN egress is the dominant variable cost: Mux ≈ ₹12,000/mo today; Bunny published Asia rate $0.030/GB (Standard tier), storage $0.01/GB, standard encoding free. Batch 1=Mux / Batch 2+=Bunny staged migration exists precisely to measure this — do not move batches without reading `docs/rccf-phase7c-bunny-verification-report.md` §Cost Model.
+CDN egress is the dominant variable cost: Bunny published Asia rate $0.030/GB (Standard tier), storage $0.01/GB, standard encoding free. Current policy (Phase 7E): Bunny is the default provider for ALL new uploads; Mux stays dormant/rollback-capable. There is no batch-based provider routing — do not reintroduce it, and do not move providers without reading the current video skill + deployment docs.
 
 ## Verification
 Performance E2E exists (`recordings/performance-stress.spec.ts`, docs/testing/performance-report.md). After optimization: measure before/after (query counts, p95 timing, network tab request count), record numbers in the phase report.

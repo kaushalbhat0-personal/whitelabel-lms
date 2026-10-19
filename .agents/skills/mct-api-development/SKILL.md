@@ -19,7 +19,7 @@ Write backend code that matches this repository's established patterns.
 - **Transactions:** multi-step writes use `common/utils/transaction.util.ts` (`TransactionStep[] {name, execute, rollback}`) — see `createRecordingWithUpload`. Rollback deletes child rows before parents.
 - **Pagination:** `{page, limit}` + count query (`Prefer: count=exact` pattern) returning `{items,total,page,limit}` — see recordings.findAll.
 - **N+1 avoidance:** batch-fetch related rows with `.in('fk', ids)` then map in memory (recordings list builds batchNames map this way).
-- **Webhooks:** `@Public()`, verify signature against `req.rawBody`, never throw at provider (except Bunny auth failures which 401), log-and-continue semantics per provider contract.
+- **Webhooks:** `@Public()`, verify signature against `req.rawBody`, never throw at the provider transport for routine events — but each webhook MUST follow its own security contract: Resend webhooks fail closed (missing secret or bad signature → 401, never warn-and-continue). Do not generalize this into "all webhooks must return 401".
 - **Errors:** BadRequest/NotFound/Forbidden/ServiceUnavailable from @nestjs/common; 503 = "configured-but-failing dependency" (BunnyProvider pattern), never a silent fallback.
 
 ## Database Contracts

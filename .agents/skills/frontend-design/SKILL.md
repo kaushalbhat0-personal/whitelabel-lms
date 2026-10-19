@@ -69,3 +69,7 @@ Use active voice as default. A CTA says exactly what happens when it is used: "S
 Treat failure and emptiness as moments for direction, not mood. Explain what went wrong and how to fix it, in the interface's voice rather than a person's. Errors don't apologize, and they are never vague about what happened. An empty screen is an invitation to act.
 
 Keep the tone conversational: plain verbs, sentence case, no filler, with tone matched to the brand and the audience. Let each written element do exactly one job.
+
+## Scope guard: frozen marketing brand
+
+These generic anti-default rules do NOT override the frozen marketing brand in `apps/marketing`. That surface intentionally uses a warm cream/off-white palette, Fraunces display typography with Inter body/UI, terracotta accents, numbered editorial markers, and uppercase eyebrows where designed, in a premium editorial composition. Do not "correct" those elements using this skill's generic rules. When the task touches `apps/marketing`, follow the brief and the existing brand exactly; apply this skill's divergent instincts only to new, unbranded LMS UI work.
