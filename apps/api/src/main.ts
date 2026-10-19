@@ -17,8 +17,16 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
+import { resolveSessionPolicy } from './common/constants/session-policy.constant';
 
 async function bootstrap() {
+  // Fail fast on an invalid SESSION_POLICY before creating the application.
+  // Allowed: 'single' | 'multi'. Unset defaults to 'single'. An invalid value
+  // must never silently become 'multi' (weakened client sessions) or be
+  // ignored (broken demo). Constructors re-resolve the same value, so a
+  // misconfiguration in file-based env also fails during Nest DI init.
+  resolveSessionPolicy(process.env.SESSION_POLICY);
+
   // rawBody: true tells NestJS's body-parser to preserve the exact byte
   // sequence on req.rawBody.  The Mux webhook handler needs this to verify
   // HMAC signatures — JSON.stringify(req.body) can produce a different

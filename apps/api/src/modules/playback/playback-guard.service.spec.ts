@@ -1,8 +1,9 @@
 import { UnauthorizedException, ForbiddenException } from '@nestjs/common';
 import { PlaybackGuardService } from './playback-guard.service';
 
-function build() {
+function build(policy: 'single' | 'multi' = 'single') {
   const redisStore = new Map<string, string>();
+  const sets = new Map<string, Set<string>>();
   const redis = {
     get: jest.fn(async (key: string) => redisStore.get(key) ?? null),
     setex: jest.fn(async (key: string, _ttl: number, value: string) => {
@@ -11,8 +12,24 @@ function build() {
     incr: jest.fn(async () => 1),
     expire: jest.fn(async () => 1),
     del: jest.fn(async (...keys: string[]) => { keys.forEach(k => redisStore.delete(k)); return keys.length; }),
+    sadd: jest.fn(async (key: string, ...members: string[]) => {
+      let s = sets.get(key);
+      if (!s) { s = new Set(); sets.set(key, s); }
+      let added = 0;
+      for (const m of members) if (!s.has(m)) { s.add(m); added++; }
+      return added;
+    }),
+    smembers: jest.fn(async (key: string) => [...(sets.get(key) ?? [])]),
+    srem: jest.fn(async (key: string, ...members: string[]) => {
+      const s = sets.get(key);
+      if (!s) return 0;
+      let removed = 0;
+      for (const m of members) if (s.delete(m)) removed++;
+      return removed;
+    }),
   };
   const redisService = { getOrThrow: () => redis };
+  const configService = { get: jest.fn((key: string) => key === 'SESSION_POLICY' ? policy : null) };
 
   const supabase = {
     client: {
@@ -45,6 +62,7 @@ function build() {
     redisService as any,
     supabase as any,
     resolver as any,
+    configService as any,
   );
 
   async function issueToken(payload: Record<string, unknown>) {
@@ -332,5 +350,61 @@ describe('PlaybackGuardService — provider-aware URL issuance', () => {
     await expect(
       ctx.guard.getSignedUrl(auth.playbackToken, { playbackId: 'pb', provider: 'mux' }, 'user-1', 'other-rec'),
     ).rejects.toThrow(ForbiddenException);
+  });
+});
+
+describe('PlaybackGuardService — SESSION_POLICY=multi (per-session binding)', () => {
+  const seedAuthSession = async (ctx: ReturnType<typeof build>, sid: string) =>
+    ctx.redis.setex(`session:${sid}`, 86400, JSON.stringify({ userId: 'user-1' }));
+
+  it('M-P1: playback A works while A exists, playback B works while B exists', async () => {
+    const ctx = build('multi');
+    await seedAuthSession(ctx, 'auth-sess-A');
+    await seedAuthSession(ctx, 'auth-sess-B');
+    const authA = await ctx.guard.authorize('user-1', 'rec-1', 'auth-sess-A');
+    const authB = await ctx.guard.authorize('user-1', 'rec-1', 'auth-sess-B');
+    await expect(ctx.guard.getSignedUrl(authA.playbackToken, { playbackId: 'pb', provider: 'mux' }, 'user-1', 'rec-1'))
+      .resolves.toMatchObject({ url: ctx.muxUrls.url });
+    await expect(ctx.guard.getSignedUrl(authB.playbackToken, { playbackId: 'pb', provider: 'mux' }, 'user-1', 'rec-1'))
+      .resolves.toMatchObject({ url: ctx.muxUrls.url });
+    // pointer is ignored — a stale/missing pointer must not matter
+    expect(ctx.redis.get).not.toHaveBeenCalledWith('user_session:user-1');
+  });
+
+  it('M-P2: logout A (session key deleted) breaks A playback, B remains valid', async () => {
+    const ctx = build('multi');
+    await seedAuthSession(ctx, 'auth-sess-A');
+    await seedAuthSession(ctx, 'auth-sess-B');
+    const authA = await ctx.guard.authorize('user-1', 'rec-1', 'auth-sess-A');
+    const authB = await ctx.guard.authorize('user-1', 'rec-1', 'auth-sess-B');
+    ctx.redisStore.delete('session:auth-sess-A');
+    await expect(ctx.guard.getSignedUrl(authA.playbackToken, { playbackId: 'pb', provider: 'mux' }, 'user-1', 'rec-1'))
+      .rejects.toThrow(/Session expired or signed in on another device/);
+    await expect(ctx.guard.getSignedUrl(authB.playbackToken, { playbackId: 'pb', provider: 'mux' }, 'user-1', 'rec-1'))
+      .resolves.toMatchObject({ url: ctx.muxUrls.url });
+    expect(ctx.muxProvider.getPlaybackUrls).toHaveBeenCalled();
+  });
+
+  it('M-P3: per-session key belonging to another user cannot authorize playback', async () => {
+    const ctx = build('multi');
+    await ctx.redis.setex('session:auth-sess-X', 86400, JSON.stringify({ userId: 'attacker' }));
+    const auth = await ctx.guard.authorize('user-1', 'rec-1', 'auth-sess-X');
+    await expect(ctx.guard.getSignedUrl(auth.playbackToken, { playbackId: 'pb', provider: 'mux' }, 'user-1', 'rec-1'))
+      .rejects.toThrow(UnauthorizedException);
+    expect(ctx.muxProvider.getPlaybackUrls).not.toHaveBeenCalled();
+  });
+
+  it('M-P4: legacy token without authSessionId still accepted in multi mode', async () => {
+    const ctx = build('multi');
+    await ctx.issueToken({
+      token: 'tok-legacy',
+      userId: 'user-1',
+      recordingId: 'rec-1',
+      deviceId: null,
+      sessionId: 'sess-1',
+      ip: '127.0.0.1',
+    });
+    const result = await ctx.guard.getSignedUrl('tok-legacy', { playbackId: 'pb', provider: 'mux' }, 'user-1', 'rec-1');
+    expect(result.url).toBe(ctx.muxUrls.url);
   });
 });

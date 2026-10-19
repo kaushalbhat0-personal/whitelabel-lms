@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { RedisService } from '@liaoliaots/nestjs-redis';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { ObservabilityService } from '../../modules/observability/observability.service';
@@ -41,6 +42,7 @@ describe('JwtAuthGuard - SESSION_EXPIRED observability', () => {
         { provide: JwtService, useValue: jwtMock },
         { provide: RedisService, useValue: redisServiceMock },
         { provide: ObservabilityService, useValue: observabilityMock },
+        { provide: ConfigService, useValue: { get: jest.fn(() => undefined) } },
       ],
     }).compile();
     guard = module.get<JwtAuthGuard>(JwtAuthGuard);
@@ -184,5 +186,90 @@ describe('JwtAuthGuard - SESSION_EXPIRED observability', () => {
     // Already tested above, just verify messages are exact
     expect('Missing or malformed Authorization header').toBe('Missing or malformed Authorization header');
     expect('Session expired — please log in again').toBe('Session expired — please log in again');
+  });
+});
+
+describe('JwtAuthGuard - SESSION_POLICY=multi (per-session validation)', () => {
+  const mockMultiContext = (token: string) => ({
+    getHandler: () => ({}),
+    getClass: () => ({}),
+    switchToHttp: () => ({
+      getRequest: () => ({
+        headers: { authorization: `Bearer ${token}` },
+        url: '/auth/me',
+        method: 'GET',
+        ip: '127.0.0.1',
+      }),
+    }),
+  }) as any;
+
+  async function buildMulti(redisMock: any) {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        JwtAuthGuard,
+        { provide: Reflector, useValue: { getAllAndOverride: jest.fn().mockReturnValue(false) } },
+        { provide: JwtService, useValue: { verifyAsync: jest.fn().mockResolvedValue({ sub: 'user-1', role: 'student', sessionId: 'sess-A' }) } },
+        { provide: RedisService, useValue: { getOrThrow: jest.fn().mockReturnValue(redisMock) } },
+        { provide: ObservabilityService, useValue: { logEvent: jest.fn().mockResolvedValue(undefined) } },
+        { provide: ConfigService, useValue: { get: jest.fn((k: string) => k === 'SESSION_POLICY' ? 'multi' : null) } },
+      ],
+    }).compile();
+    return module.get<JwtAuthGuard>(JwtAuthGuard);
+  }
+
+  it('valid per-session key passes WITHOUT the single pointer', async () => {
+    const redisMock = {
+      get: jest.fn(async (k: string) => k === 'session:sess-A' ? JSON.stringify({ userId: 'user-1' }) : null),
+      expire: jest.fn().mockResolvedValue(1),
+    };
+    const guard = await buildMulti(redisMock);
+    await expect(guard.canActivate(mockMultiContext('t'))).resolves.toBe(true);
+    // pointer never consulted
+    expect(redisMock.get).not.toHaveBeenCalledWith('user_session:user-1');
+    expect(redisMock.expire).toHaveBeenCalledWith('session:sess-A', expect.any(Number));
+  });
+
+  it('missing per-session key returns 401 even if a pointer exists', async () => {
+    const redisMock = {
+      get: jest.fn(async (k: string) => k === 'user_session:user-1' ? 'sess-OTHER' : null),
+      expire: jest.fn().mockResolvedValue(1),
+    };
+    const guard = await buildMulti(redisMock);
+    await expect(guard.canActivate(mockMultiContext('t'))).rejects.toThrow('Session expired — please log in again');
+  });
+
+  it('per-session key belonging to another user returns 401', async () => {
+    const redisMock = {
+      get: jest.fn(async () => JSON.stringify({ userId: 'user-2' })),
+      expire: jest.fn().mockResolvedValue(1),
+    };
+    const guard = await buildMulti(redisMock);
+    await expect(guard.canActivate(mockMultiContext('t'))).rejects.toThrow('Session expired or signed in on another device');
+  });
+
+  it('malformed per-session JSON returns 401', async () => {
+    const redisMock = {
+      get: jest.fn(async () => 'not-json{{{'),
+      expire: jest.fn().mockResolvedValue(1),
+    };
+    const guard = await buildMulti(redisMock);
+    await expect(guard.canActivate(mockMultiContext('t'))).rejects.toThrow('Session expired — please log in again');
+  });
+
+  it('two concurrent per-session keys both validate independently', async () => {
+    const store = new Map<string, string>([
+      ['session:sess-A', JSON.stringify({ userId: 'user-1' })],
+      ['session:sess-B', JSON.stringify({ userId: 'user-1' })],
+    ]);
+    const redisMock = {
+      get: jest.fn(async (k: string) => store.get(k) ?? null),
+      expire: jest.fn().mockResolvedValue(1),
+    };
+    const guard = await buildMulti(redisMock);
+    // token sessionId sess-A
+    await expect(guard.canActivate(mockMultiContext('t'))).resolves.toBe(true);
+    // pointer (had it been consulted) holds sess-B — must not matter
+    store.set('user_session:user-1', 'sess-B');
+    await expect(guard.canActivate(mockMultiContext('t'))).resolves.toBe(true);
   });
 });

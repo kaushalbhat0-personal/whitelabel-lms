@@ -30,6 +30,7 @@ import * as crypto from 'crypto';
 import { LoginDto } from './dto/login.dto';
 import { SupabaseService } from '../../common/services/supabase.service';
 import { REDIS_KEYS, REDIS_TTL } from '../../common/constants/redis-keys.constant';
+import { resolveSessionPolicy, SessionPolicy } from '../../common/constants/session-policy.constant';
 import { TABLES } from '../../common/constants/tables.constant';
 import { DeviceService } from '../devices/device.service';
 import { EmailService } from '../email/email.service';
@@ -54,9 +55,14 @@ export class AuthService {
     redisService: RedisService,
   ) {
     this.redis = redisService.getOrThrow();
+    // Fail fast at startup on an invalid SESSION_POLICY. Unset → 'single'.
+    this.sessionPolicy = resolveSessionPolicy(
+      configService.get<string>('SESSION_POLICY'),
+    );
   }
 
   private readonly redis: Redis;
+  private readonly sessionPolicy: SessionPolicy;
 
   // ────────────────────────────────────────────────────────────────
   //  login
@@ -141,30 +147,34 @@ export class AuthService {
       );
     }
 
-    // ── Step 5: Single-device enforcement (graceful) ────────────
+    // ── Step 5: Single-session enforcement (graceful) ─────────────
+    // SESSION_POLICY=single only. Under 'multi' this block is skipped
+    // entirely: concurrent logins each receive an independent session.
     // If the user already has a session somewhere, revoke it and
     // require the current login to be retried. This prevents two
     // active devices and gives the user a clear message instead of
     // a raw client-side exception.
-    const existingSessionId = await this.redis.get(
-      REDIS_KEYS.userSession(userId),
-    );
-    if (existingSessionId) {
-      await this.redis.del(REDIS_KEYS.session(existingSessionId));
-      await this.redis.del(REDIS_KEYS.userSession(userId));
-      this.logger.log(
-        `Invalidated old session ${existingSessionId} for user ${userId} — session replacement, requiring re-login`,
+    if (this.sessionPolicy === 'single') {
+      const existingSessionId = await this.redis.get(
+        REDIS_KEYS.userSession(userId),
       );
-      // Do NOT create a new session yet. Tell the client to show
-      // the graceful session-replaced message and retry.
-      // Wording is intentionally neutral — the existing user_session may be
-      // stale (browser closed, network drop, cookie cleared) rather than
-      // proof of a second physical device.
-      throw new ConflictException({
-        code: 'SESSION_REPLACED',
-        message:
-          'An active session was found for this account. For security, the previous session has been signed out. Please log in again.',
-      });
+      if (existingSessionId) {
+        await this.redis.del(REDIS_KEYS.session(existingSessionId));
+        await this.redis.del(REDIS_KEYS.userSession(userId));
+        this.logger.log(
+          `Invalidated old session ${existingSessionId} for user ${userId} — session replacement, requiring re-login`,
+        );
+        // Do NOT create a new session yet. Tell the client to show
+        // the graceful session-replaced message and retry.
+        // Wording is intentionally neutral — the existing user_session may be
+        // stale (browser closed, network drop, cookie cleared) rather than
+        // proof of a second physical device.
+        throw new ConflictException({
+          code: 'SESSION_REPLACED',
+          message:
+            'An active session was found for this account. For security, the previous session has been signed out. Please log in again.',
+        });
+      }
     }
 
     // ── Step 6: Generate new session and sign JWT ─────────────
@@ -194,6 +204,14 @@ export class AuthService {
       REDIS_TTL.SESSION,
       sessionId,
     );
+
+    // ── Step 8b: Track the session in the per-user session set ───
+    // Maintained in BOTH modes so revoke-all (suspend/deactivate/delete)
+    // is correct regardless of policy. Set membership alone never proves
+    // validity — session:{sessionId} is authoritative. Stale member IDs
+    // (expired keys) are tolerated and cleaned on logout/revoke.
+    await this.redis.sadd(REDIS_KEYS.userSessions(userId), sessionId);
+    await this.redis.expire(REDIS_KEYS.userSessions(userId), REDIS_TTL.SESSION);
 
     // ── Step 9: Clear rate-limit on success ───────────────────
     await this.redis.del(rateLimitKey);
@@ -253,18 +271,26 @@ export class AuthService {
   // ────────────────────────────────────────────────────────────────
 
   /**
-   * End the current session by removing both Redis keys.
+   * End the current session.
    *
-   * Steps:
-   *   1. Delete the session metadata key (`session:{sessionId}`)
-   *   2. Delete the user → session mapping (`user_session:{userId}`)
-   *   3. Return a success message
+   * SESSION_POLICY=single: removes the session metadata key and the
+   *   single-session pointer (existing behavior, unchanged).
+   * SESSION_POLICY=multi: removes ONLY the current session metadata key
+   *   and its set membership — other concurrent sessions are untouched.
+   * Both modes are idempotent.
    */
   async logout(userId: string, sessionId: string) {
-    await Promise.all([
-      this.redis.del(REDIS_KEYS.session(sessionId)),
-      this.redis.del(REDIS_KEYS.userSession(userId)),
-    ]);
+    if (this.sessionPolicy === 'single') {
+      await Promise.all([
+        this.redis.del(REDIS_KEYS.session(sessionId)),
+        this.redis.del(REDIS_KEYS.userSession(userId)),
+      ]);
+    } else {
+      await Promise.all([
+        this.redis.del(REDIS_KEYS.session(sessionId)),
+        this.redis.srem(REDIS_KEYS.userSessions(userId), sessionId),
+      ]);
+    }
 
     this.logger.log(`User ${userId} logged out (session ${sessionId})`);
 
@@ -278,28 +304,54 @@ export class AuthService {
   /**
    * Check whether a session is still valid (used by JwtAuthGuard).
    *
-   * Steps:
-   *   1. Look up the active session ID for the user from Redis
-   *   2. If nothing stored → session has expired or never existed → return false
-   *   3. If the stored session ID doesn't match → user logged in elsewhere → return false
-   *   4. If valid → refresh TTL on both keys (sliding expiry) → return true
+   * SESSION_POLICY=single: the session is valid iff the single-session
+   *   pointer equals the token's sessionId (existing behavior, unchanged).
+   * SESSION_POLICY=multi: the pointer is ignored; the per-session key
+   *   session:{sessionId} is authoritative and must exist and belong to
+   *   the token's user. Set membership alone never proves validity.
    */
   async validateSession(
     userId: string,
     sessionId: string,
   ): Promise<boolean> {
-    const storedSessionId = await this.redis.get(
-      REDIS_KEYS.userSession(userId),
-    );
+    if (this.sessionPolicy === 'single') {
+      const storedSessionId = await this.redis.get(
+        REDIS_KEYS.userSession(userId),
+      );
 
-    if (!storedSessionId || storedSessionId !== sessionId) {
+      if (!storedSessionId || storedSessionId !== sessionId) {
+        return false;
+      }
+
+      // Refresh TTL on both keys — the user made a valid request
+      await Promise.all([
+        this.redis.expire(REDIS_KEYS.session(sessionId), REDIS_TTL.SESSION),
+        this.redis.expire(REDIS_KEYS.userSession(userId), REDIS_TTL.SESSION),
+      ]);
+
+      return true;
+    }
+
+    const raw = await this.redis.get(REDIS_KEYS.session(sessionId));
+    if (!raw) {
       return false;
     }
 
-    // Refresh TTL on both keys — the user made a valid request
+    let storedUserId: unknown;
+    try {
+      storedUserId = (JSON.parse(raw) as { userId?: unknown }).userId;
+    } catch {
+      return false;
+    }
+
+    if (storedUserId !== userId) {
+      return false;
+    }
+
+    // Refresh TTL on the session key and the index — the user made a valid request
     await Promise.all([
       this.redis.expire(REDIS_KEYS.session(sessionId), REDIS_TTL.SESSION),
-      this.redis.expire(REDIS_KEYS.userSession(userId), REDIS_TTL.SESSION),
+      this.redis.expire(REDIS_KEYS.userSessions(userId), REDIS_TTL.SESSION),
     ]);
 
     return true;
@@ -375,25 +427,33 @@ export class AuthService {
   // ────────────────────────────────────────────────────────────────
 
   /**
-   * Force-invalidate a user's session (admin action).
+   * Force-invalidate a user's session(s) (admin action).
    *
    * Use case: when an admin suspends a user, call this to kick them out immediately.
-   *
-   * Steps:
-   *   1. Look up the active session ID for the user
-   *   2. Delete the session metadata key if it exists
-   *   3. Delete the user → session mapping key
+   * Revokes ALL sessions: the single-session pointer, every per-session key
+   * listed in the user_sessions:{userId} set, and the set itself. Correct in
+   * both policies because login maintains the set in both modes.
    */
   async forceLogoutUser(userId: string) {
-    const sessionId = await this.redis.get(REDIS_KEYS.userSession(userId));
+    const [pointerSessionId, memberSessionIds] = await Promise.all([
+      this.redis.get(REDIS_KEYS.userSession(userId)),
+      this.redis.smembers(REDIS_KEYS.userSessions(userId)),
+    ]);
 
-    if (sessionId) {
-      await Promise.all([
-        this.redis.del(REDIS_KEYS.session(sessionId)),
-        this.redis.del(REDIS_KEYS.userSession(userId)),
-      ]);
-
-      this.logger.log(`User ${userId} force-logged out (admin action)`);
+    const sessionIds = new Set<string>();
+    if (pointerSessionId) sessionIds.add(pointerSessionId);
+    for (const id of memberSessionIds ?? []) {
+      if (id) sessionIds.add(id);
     }
+
+    const keys = [
+      ...[...sessionIds].map((id) => REDIS_KEYS.session(id)),
+      REDIS_KEYS.userSession(userId),
+      REDIS_KEYS.userSessions(userId),
+    ];
+
+    await this.redis.del(...keys);
+
+    this.logger.log(`User ${userId} force-logged out (admin action)`);
   }
 }

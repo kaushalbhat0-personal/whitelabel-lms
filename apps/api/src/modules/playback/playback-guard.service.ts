@@ -6,11 +6,13 @@ import {
 } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { RedisService } from '@liaoliaots/nestjs-redis';
+import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 import { SupabaseService } from '../../common/services/supabase.service';
 import { RecordingProviderResolver } from '../video-provider/recording-provider.resolver';
 import { TABLES } from '../../common/constants/tables.constant';
 import { REDIS_KEYS, REDIS_TTL } from '../../common/constants/redis-keys.constant';
+import { resolveSessionPolicy, SessionPolicy } from '../../common/constants/session-policy.constant';
 
 const SEEK_THRESHOLD = 15;
 const URL_GEN_THRESHOLD = 8;
@@ -40,13 +42,19 @@ export interface PlaybackTokenPayload {
 export class PlaybackGuardService {
   private readonly logger = new Logger(PlaybackGuardService.name);
   private readonly redis: Redis;
+  private readonly sessionPolicy: SessionPolicy;
 
   constructor(
     redisService: RedisService,
     private readonly supabaseService: SupabaseService,
     private readonly providerResolver: RecordingProviderResolver,
+    configService: ConfigService,
   ) {
     this.redis = redisService.getOrThrow();
+    // Fail fast at startup on an invalid SESSION_POLICY. Unset → 'single'.
+    this.sessionPolicy = resolveSessionPolicy(
+      configService.get<string>('SESSION_POLICY'),
+    );
   }
 
   async authorize(
@@ -124,16 +132,33 @@ export class PlaybackGuardService {
 
     // ── Phase 28.2 session-bound playback enforcement ─────────────────────
     // Legacy tokens without authSessionId are allowed until natural 600s expiry (safe rollout).
-    // All newly minted tokens contain authSessionId; mismatched or missing user_session is rejected.
+    // SESSION_POLICY=single: all newly minted tokens contain authSessionId and it must
+    //   equal the single-session pointer; mismatched or missing pointer is rejected.
+    // SESSION_POLICY=multi: the per-session key session:{authSessionId} is authoritative —
+    //   it must exist and belong to this user. Concurrent sessions each pass independently.
     if (payload.authSessionId !== null && payload.authSessionId !== undefined) {
-      const currentAuthSession = await this.redis.get(REDIS_KEYS.userSession(expectedUserId));
-      if (!currentAuthSession) {
-        await this.logViolation(expectedUserId, expectedRecordingId, 'session_replaced_token_use', { reason: 'no_active_session', tokenAuthSessionId: payload.authSessionId }, ip);
-        throw new UnauthorizedException('Session expired or signed in on another device');
-      }
-      if (payload.authSessionId !== currentAuthSession) {
-        await this.logViolation(expectedUserId, expectedRecordingId, 'session_replaced_token_use', { reason: 'authSessionId_mismatch', tokenAuthSessionId: payload.authSessionId, currentAuthSessionId: currentAuthSession }, ip);
-        throw new UnauthorizedException('Session expired or signed in on another device');
+      if (this.sessionPolicy === 'single') {
+        const currentAuthSession = await this.redis.get(REDIS_KEYS.userSession(expectedUserId));
+        if (!currentAuthSession) {
+          await this.logViolation(expectedUserId, expectedRecordingId, 'session_replaced_token_use', { reason: 'no_active_session', tokenAuthSessionId: payload.authSessionId }, ip);
+          throw new UnauthorizedException('Session expired or signed in on another device');
+        }
+        if (payload.authSessionId !== currentAuthSession) {
+          await this.logViolation(expectedUserId, expectedRecordingId, 'session_replaced_token_use', { reason: 'authSessionId_mismatch', tokenAuthSessionId: payload.authSessionId, currentAuthSessionId: currentAuthSession }, ip);
+          throw new UnauthorizedException('Session expired or signed in on another device');
+        }
+      } else {
+        const rawSession = await this.redis.get(REDIS_KEYS.session(payload.authSessionId));
+        let sessionOwner: unknown;
+        try {
+          sessionOwner = rawSession ? (JSON.parse(rawSession) as { userId?: unknown }).userId : undefined;
+        } catch {
+          sessionOwner = undefined;
+        }
+        if (sessionOwner !== expectedUserId) {
+          await this.logViolation(expectedUserId, expectedRecordingId, 'session_replaced_token_use', { reason: rawSession ? 'authSessionId_user_mismatch' : 'no_active_session', tokenAuthSessionId: payload.authSessionId }, ip);
+          throw new UnauthorizedException('Session expired or signed in on another device');
+        }
       }
     }
 

@@ -42,6 +42,12 @@ describe('env templates', () => {
     assert.ok(t.includes('STUB MODE'));
   });
 
+  it('render template pins SESSION_POLICY=single and never multi', () => {
+    const t = buildRenderEnvTemplate(acme());
+    assert.ok(t.includes('SESSION_POLICY=single'));
+    assert.ok(!t.includes('SESSION_POLICY=multi'));
+  });
+
   it('render template has no service-role leakage into vercel; vercel template derives API url', () => {
     const v = buildVercelEnvTemplate(acme());
     assert.ok(!v.includes('SERVICE_ROLE'));

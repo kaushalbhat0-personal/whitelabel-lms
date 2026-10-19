@@ -12,6 +12,8 @@
 export const REDIS_KEYS = {
   /** Stores the active session for a logged-in user → used to force-logout on multi-device */
   userSession: (userId: string) => `user_session:${userId}`,
+  /** Set of ALL active session IDs for a user → revoke-all on suspend/deactivate (required for multi-session mode) */
+  userSessions: (userId: string) => `user_sessions:${userId}`,
   /** Caches live-session metadata so we don't hit Supabase on every Zoom webhook */
   session: (sessionId: string) => `session:${sessionId}`,
   /** Rate-limit key per IP address for the login endpoint */

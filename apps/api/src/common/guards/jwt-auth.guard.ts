@@ -10,8 +10,11 @@
  *   1. Check if the route has @Public() → skip everything if true
  *   2. Extract Bearer token from the Authorization header
  *   3. Verify the JWT signature and decode the payload using JwtService
- *   4. Look up the session in Redis (key: user_session:{userId})
- *   5. If Redis session doesn't match token's sessionId → reject (logged out elsewhere)
+ *   4. SESSION_POLICY=single: look up the single session in Redis (key:
+ *      user_session:{userId}) and require equality with token sessionId.
+ *      SESSION_POLICY=multi: the per-session key session:{sessionId} is
+ *      authoritative — it must exist and belong to the token's user.
+ *   5. If Redis session doesn't validate → reject (logged out elsewhere)
  *   6. Attach user info (id, role, sessionId) to request.user
  *   7. Refresh Redis TTL to implement sliding session expiry
  *
@@ -28,23 +31,32 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { RedisService } from '@liaoliaots/nestjs-redis';
 import Redis from 'ioredis';
 import { Request } from 'express';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { REDIS_KEYS, REDIS_TTL } from '../constants/redis-keys.constant';
+import { resolveSessionPolicy, SessionPolicy } from '../constants/session-policy.constant';
 import { ObservabilityService } from '../../modules/observability/observability.service';
 
 @Injectable()
 export class JwtAuthGuard {
   private readonly logger = new Logger(JwtAuthGuard.name);
+  private readonly sessionPolicy: SessionPolicy;
 
   constructor(
     private readonly reflector: Reflector,
     private readonly jwtService: JwtService,
     private readonly redisService: RedisService,
     private readonly observabilityService: ObservabilityService,
-  ) {}
+    configService: ConfigService,
+  ) {
+    // Fail fast at startup on an invalid SESSION_POLICY. Unset → 'single'.
+    this.sessionPolicy = resolveSessionPolicy(
+      configService.get<string>('SESSION_POLICY'),
+    );
+  }
 
   private logSessionExpired(request: Request, message: string, userId?: string) {
     try {
@@ -100,16 +112,57 @@ export class JwtAuthGuard {
 
     // ── Step 4: Check Redis for active session ──────────────────────────
     const redis = this.redisService.getOrThrow();
-    const storedSessionId = await redis.get(
-      REDIS_KEYS.userSession(payload.sub),
-    );
 
-    if (!storedSessionId) {
+    if (this.sessionPolicy === 'single') {
+      const storedSessionId = await redis.get(
+        REDIS_KEYS.userSession(payload.sub),
+      );
+
+      if (!storedSessionId) {
+        this.logSessionExpired(request, 'Session expired — please log in again', payload.sub);
+        throw new UnauthorizedException('Session expired — please log in again');
+      }
+
+      if (storedSessionId !== payload.sessionId) {
+        this.logSessionExpired(request, 'Session expired or signed in on another device', payload.sub);
+        throw new UnauthorizedException(
+          'Session expired or signed in on another device',
+        );
+      }
+
+      // ── Step 6: Attach user to request ──────────────────────────────────
+      (request as any).user = {
+        id: payload.sub,
+        role: payload.role,
+        sessionId: payload.sessionId,
+      };
+
+      // ── Step 7: Refresh Redis TTL (sliding expiry) ──────────────────────
+      await redis.expire(
+        REDIS_KEYS.userSession(payload.sub),
+        REDIS_TTL.SESSION,
+      );
+
+      return true;
+    }
+
+    // Multi-session mode: the per-session key is authoritative. The single
+    // pointer is ignored so concurrent sessions for the same user coexist.
+    const raw = await redis.get(REDIS_KEYS.session(payload.sessionId));
+    if (!raw) {
       this.logSessionExpired(request, 'Session expired — please log in again', payload.sub);
       throw new UnauthorizedException('Session expired — please log in again');
     }
 
-    if (storedSessionId !== payload.sessionId) {
+    let storedUserId: unknown;
+    try {
+      storedUserId = (JSON.parse(raw) as { userId?: unknown }).userId;
+    } catch {
+      this.logSessionExpired(request, 'Session expired — please log in again', payload.sub);
+      throw new UnauthorizedException('Session expired — please log in again');
+    }
+
+    if (storedUserId !== payload.sub) {
       this.logSessionExpired(request, 'Session expired or signed in on another device', payload.sub);
       throw new UnauthorizedException(
         'Session expired or signed in on another device',
@@ -124,10 +177,12 @@ export class JwtAuthGuard {
     };
 
     // ── Step 7: Refresh Redis TTL (sliding expiry) ──────────────────────
-    await redis.expire(
-      REDIS_KEYS.userSession(payload.sub),
-      REDIS_TTL.SESSION,
-    );
+    // The per-session key is authoritative in multi mode; the index is
+    // refreshed alongside so it does not expire while sessions are live.
+    await Promise.all([
+      redis.expire(REDIS_KEYS.session(payload.sessionId), REDIS_TTL.SESSION),
+      redis.expire(REDIS_KEYS.userSessions(payload.sub), REDIS_TTL.SESSION),
+    ]);
 
     return true;
   }
