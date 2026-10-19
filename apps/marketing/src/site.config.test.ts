@@ -39,6 +39,18 @@ describe('normalizeDemoUrl — demo launch URL contract', () => {
     }
   });
 
+  it('instant-access construction never yields /demo-access/demo-access', () => {
+    for (const raw of [
+      'https://whitelabel-lms-opal.vercel.app',
+      'https://whitelabel-lms-opal.vercel.app/',
+      'https://whitelabel-lms-opal.vercel.app/demo-access',
+    ]) {
+      const base = normalizeDemoUrl(raw);
+      assert.ok(base, `expected a usable base for ${raw}`);
+      assert.equal(`${base}/demo-access`, 'https://whitelabel-lms-opal.vercel.app/demo-access');
+    }
+  });
+
   it('surrounding whitespace is ignored', () => {
     assert.equal(normalizeDemoUrl('  https://whitelabel-lms-opal.vercel.app/login  '), 'https://whitelabel-lms-opal.vercel.app');
   });

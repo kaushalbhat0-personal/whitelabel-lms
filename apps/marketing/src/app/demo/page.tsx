@@ -34,18 +34,23 @@ export default function DemoPage() {
       </PageShell>
 
       <Section aria-label="Launch the live demo" className="border-t border-line">
-        {siteConfig.demoLoginUrl ? (
+        {siteConfig.demoAccessUrl ? (
           <div className="rounded-card border border-line bg-paper p-6 shadow-card sm:p-8">
-            <h2 className="text-2xl font-bold text-ink sm:text-3xl">Try the live demo now</h2>
+            <h2 className="text-2xl font-bold text-ink sm:text-3xl">Get instant demo access</h2>
             <p className="mt-3 max-w-2xl text-lg leading-relaxed text-ink-soft">
-              The demo LMS opens on its own address with the demo login screen. Request demo access and
-              we will share the sign-in details privately — then explore courses, video lessons, tests,
-              and results as a student. Admin walkthroughs are available as a guided demo.
+              Generate a temporary demo account and explore the live demo yourself. Access lasts
+              about 30 minutes, credentials are shown once on the demo site, and nothing is
+              published here. Admin walkthroughs are available as a guided demo.
             </p>
-            <div className="mt-6">
-              <Button href={siteConfig.demoLoginUrl} size="lg">
-                Launch Live Demo
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <Button href={siteConfig.demoAccessUrl} size="lg">
+                Get Instant Demo Access
               </Button>
+              {siteConfig.demoLoginUrl && (
+                <Button href={siteConfig.demoLoginUrl} variant="secondary" size="lg">
+                  Already have demo credentials? Open Live Demo
+                </Button>
+              )}
             </div>
           </div>
         ) : (
@@ -77,10 +82,10 @@ export default function DemoPage() {
         <div className="mt-8 rounded-card border border-line bg-sand/60 p-6 sm:p-8">
           <h2 className="text-xl font-bold text-ink">Want access to the demo?</h2>
           <p className="mt-2 max-w-2xl text-base leading-relaxed text-ink-soft">
-            Launch the live demo, then sign in with the demo access details we share with you privately —
-            credentials are never published on this site. Clicking Launch Live Demo opens the login screen;
-            it does not sign you in automatically. For an admin walkthrough, send us a request and we will
-            arrange a guided demo personally.
+            Get instant demo access to generate a temporary account — credentials are shown once
+            on the demo site and are never published here. Clicking Get Instant Demo Access opens
+            the demo site&apos;s access page; it does not sign you in automatically. For an admin
+            walkthrough, send us a request and we will arrange a guided demo personally.
           </p>
           <div className="mt-5">
             <Button href="/contact">Request Demo Access</Button>

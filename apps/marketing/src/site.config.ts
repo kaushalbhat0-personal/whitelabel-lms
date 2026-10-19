@@ -82,6 +82,8 @@ export const siteConfig = {
   demoUrl,
   /** Demo LMS login entry point, or undefined when demo is not configured. */
   demoLoginUrl: demoUrl ? `${demoUrl}/login` : undefined,
+  /** LMS-hosted instant demo-access page (issues temporary credentials), or undefined when demo is not configured. */
+  demoAccessUrl: demoUrl ? `${demoUrl}/demo-access` : undefined,
   nav: [
     { label: 'Product', href: '/#product' },
     { label: 'Features', href: '/#features' },
