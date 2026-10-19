@@ -18,6 +18,10 @@ export const REDIS_KEYS = {
   session: (sessionId: string) => `session:${sessionId}`,
   /** Rate-limit key per IP address for the login endpoint */
   loginRateLimit: (ip: string) => `ratelimit:login:${ip}`,
+  /** Per-IP issuance counter for POST /demo/access (successful creations only) */
+  demoAccessIp: (ip: string) => `demo_access:ip:${ip}`,
+  /** Global daily issuance counter for POST /demo/access (successful creations only) */
+  demoAccessGlobal: (day: string) => `demo_access:global:${day}`,
   /** Tracks active playback sessions for video access audit */
   playbackSession: (sessionId: string) => `playback_session:${sessionId}`,
   /** Single-use join token bound to userId + sessionId */
@@ -47,6 +51,10 @@ export const REDIS_TTL = {
   SESSION: 60 * 60 * 24,
   /** 15 minutes in seconds — lockout window for login attempts */
   RATE_LIMIT: 60 * 15,
+  /** 1 hour — per-IP temporary demo-account issuance window */
+  DEMO_ACCESS_IP_WINDOW: 60 * 60,
+  /** 24 hours + 1 hour skew — global daily temporary demo-account issuance window */
+  DEMO_ACCESS_GLOBAL_WINDOW: 60 * 60 * 25,
   /** 2 minutes — playback session key TTL (double the 60s URL expiry for safety margin) */
   PLAYBACK_SESSION: 120,
   /** 15 minutes — join token lifetime before it auto-expires */

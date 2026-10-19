@@ -148,7 +148,7 @@ export class AuthService {
     const { data: profile, error: profileError } = await this.supabaseService
       .client
       .from(TABLES.PROFILES)
-      .select('id, name, email, role, is_active, must_change_password')
+      .select('id, name, email, role, is_active, must_change_password, expires_at')
       .eq('id', userId)
       .single();
 
@@ -162,6 +162,18 @@ export class AuthService {
       this.logger.warn(`Suspended user ${userId} attempted login`);
       throw new ForbiddenException(
         'Your account has been suspended. Contact admin.',
+      );
+    }
+
+    // ── Step 4b: Temporary demo accounts stop working at expires_at ──
+    // Defense in depth alongside the expiry sweeper (which revokes live
+    // sessions and flips is_active). Permanent accounts have expires_at NULL
+    // and are unaffected. This closes the window between expiry and the next
+    // sweeper tick for NEW logins; existing sessions are killed by the sweeper.
+    if (profile.expires_at && new Date(profile.expires_at).getTime() <= Date.now()) {
+      this.logger.warn(`Expired temporary account ${userId} attempted login`);
+      throw new ForbiddenException(
+        'Your demo access has expired. Request a new demo account to continue.',
       );
     }
 

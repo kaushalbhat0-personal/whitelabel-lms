@@ -218,6 +218,59 @@ describe('AuthService — one-device graceful replacement', () => {
     expect(await redis.get(`session:${sid}`)).toBeNull();
     expect(await redis.smembers('user_sessions:u1')).toEqual([]);
   });
+
+  it('TEST 13: expired temporary account (expires_at past) cannot log in', async () => {
+    supabase.client.from.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      single: jest.fn(async () => ({
+        data: {
+          id: 'u1', name: 'Demo Guest', email: 'demo-abc@demo.invalid', role: 'student',
+          is_active: true, must_change_password: false,
+          expires_at: new Date(Date.now() - 60_000).toISOString(),
+        },
+        error: null,
+      })),
+    } as any);
+    await expect(
+      service.login({ email: 'demo-abc@demo.invalid', password: 'x' } as any, '1.1.1.1', 'UA'),
+    ).rejects.toThrow('Your demo access has expired');
+    // No session created for the expired account.
+    expect(await redis.get('user_session:u1')).toBeNull();
+  });
+
+  it('TEST 14: unexpired temporary account (expires_at future) logs in normally', async () => {
+    supabase.client.from.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      single: jest.fn(async () => ({
+        data: {
+          id: 'u1', name: 'Demo Guest', email: 'demo-abc@demo.invalid', role: 'student',
+          is_active: true, must_change_password: false,
+          expires_at: new Date(Date.now() + 29 * 60_000).toISOString(),
+        },
+        error: null,
+      })),
+    } as any);
+    const result = await service.login({ email: 'demo-abc@demo.invalid', password: 'x' } as any, '1.1.1.1', 'UA');
+    expect(result.token).toBe('jwt-token');
+  });
+
+  it('TEST 15: permanent account (expires_at NULL) logs in normally', async () => {
+    supabase.client.from.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      single: jest.fn(async () => ({
+        data: {
+          id: 'u1', name: 'Student', email: 's@example.com', role: 'student',
+          is_active: true, must_change_password: false, expires_at: null,
+        },
+        error: null,
+      })),
+    } as any);
+    const result = await service.login({ email: 's@example.com', password: 'pass123' } as any, '1.1.1.1', 'UA');
+    expect(result.token).toBe('jwt-token');
+  });
 });
 
 describe('AuthService — SESSION_POLICY=multi (concurrent sessions)', () => {

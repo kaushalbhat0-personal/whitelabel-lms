@@ -55,6 +55,7 @@ import { ObservabilityModule } from './modules/observability/observability.modul
 import { RecordingCurriculumReconciliationModule } from './modules/recordings/reconciliation/recording-curriculum-reconciliation.module';
 import { ResultsModule } from './modules/results/results.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
+import { DemoAccessModule } from './modules/demo-access/demo-access.module';
 
 // ── Root controller ──────────────────────────────────────────
 import { AppController } from './app.controller';
@@ -145,6 +146,7 @@ import { RecordingCleanupJob } from './jobs/recording-cleanup.job';
     ObservabilityModule,
     ResultsModule,
     UploadsModule,
+    DemoAccessModule,
   ],
   controllers: [AppController],
   exports: [
