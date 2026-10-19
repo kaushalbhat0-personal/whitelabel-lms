@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3002",
+    "prebuild": "node scripts/check-marketing-env.mjs",
     "build": "next build",
     "start": "next start -p 3002",
     "typecheck": "tsc --noEmit"

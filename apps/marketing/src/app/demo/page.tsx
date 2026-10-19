@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { siteConfig } from '@/site.config';
 import { Button, PageShell, Section } from '@/components/primitives';
 
 export const metadata: Metadata = {
@@ -31,6 +32,36 @@ export default function DemoPage() {
           </Button>
         </div>
       </PageShell>
+
+      <Section aria-label="Launch the live demo" className="border-t border-line">
+        {siteConfig.demoLoginUrl ? (
+          <div className="rounded-card border border-line bg-paper p-6 shadow-card sm:p-8">
+            <h2 className="text-2xl font-bold text-ink sm:text-3xl">Try the live demo now</h2>
+            <p className="mt-3 max-w-2xl text-lg leading-relaxed text-ink-soft">
+              The demo LMS opens on its own address with the demo login screen. Demo access is issued on request —
+              use the logins we provide to explore the student and admin experience.
+            </p>
+            <div className="mt-6">
+              <Button href={siteConfig.demoLoginUrl} size="lg">
+                Launch Live Demo
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-card border border-line bg-paper p-6 shadow-card sm:p-8">
+            <h2 className="text-2xl font-bold text-ink sm:text-3xl">Guided demo access</h2>
+            <p className="mt-3 max-w-2xl text-lg leading-relaxed text-ink-soft">
+              The hosted demo opens for real enquiries. Send us a request and we will provide access personally —
+              there is no instant automated access, by design.
+            </p>
+            <div className="mt-6">
+              <Button href="/contact" size="lg">
+                Request Demo Access
+              </Button>
+            </div>
+          </div>
+        )}
+      </Section>
 
       <Section aria-label="What the demo covers" className="border-t border-line">
         <h2 className="text-2xl font-bold text-ink sm:text-3xl">What you can explore</h2>
