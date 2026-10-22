@@ -42,12 +42,12 @@ export function Pricing() {
           <p className="mt-3 text-base font-medium text-ink-soft">
             A white-label LMS for your academy · First 10 deployments · hosting and provider costs separate
           </p>
-          <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
+          <div className="mt-7 flex flex-col items-center justify-center gap-3 lg:flex-row">
             <Button href="/demo" size="lg">
-              Get Instant Demo Access
+              Launch Instant Student Demo
             </Button>
             <Button href="/contact" variant="secondary" size="lg">
-              Talk to Us
+              Reserve 1 of 10 Founding Slots (Get Admin Access)
             </Button>
           </div>
         </div>

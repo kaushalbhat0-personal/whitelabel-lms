@@ -1,4 +1,4 @@
-import { Check } from 'lucide-react';
+import { Check, ShieldAlert } from 'lucide-react';
 
 /**
  * Security & access section (MKT-02A).
@@ -32,6 +32,25 @@ export function Security() {
           </li>
         ))}
       </ul>
+      {/* Product callout: what a student sees when the same account is already
+          active elsewhere. Genuine text (never color-only), LMS-styled card. */}
+      <div className="mt-8 max-w-md animate-fade-in-up rounded-card border border-line bg-cream p-6 shadow-card">
+        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-teal">
+          What students see
+        </p>
+        <div className="mt-3 flex items-start gap-3">
+          <ShieldAlert size={22} className="mt-0.5 shrink-0 text-teal" aria-hidden="true" />
+          <div>
+            <p className="text-lg font-bold text-ink">Login Denied</p>
+            <p className="mt-1 text-base leading-relaxed text-ink-soft">
+              Account already active on another device.
+            </p>
+            <p className="mt-2 text-sm leading-relaxed text-ink-soft">
+              Please sign out from the other device before continuing.
+            </p>
+          </div>
+        </div>
+      </div>
       <p className="mt-6 max-w-3xl text-sm leading-relaxed text-ink-soft">
         Security controls are designed to reduce unauthorized access; no system can guarantee absolute protection.
       </p>

@@ -125,12 +125,16 @@ export default function HomePage() {
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Button href="/demo" size="lg" className="sm:min-h-[44px]">
-                Get Instant Demo Access
+                Try Student Journey Instantly (No Signup)
               </Button>
               <Button href="/contact" variant="secondary" size="lg" className="sm:min-h-[44px]">
-                Talk to Us
+                Book Admin Live Walkthrough
               </Button>
             </div>
+            <p className="mt-3 flex items-center gap-1.5 text-sm text-ink-soft">
+              <KeyRound size={14} className="shrink-0" aria-hidden="true" />
+              Click to instantly generate temporary student login credentials.
+            </p>
             <ul aria-label="What you own" className="mt-7 flex flex-wrap gap-2">
               {ownershipChips.map((chip) => (
                 <li key={chip}>
@@ -309,7 +313,7 @@ export default function HomePage() {
             </ul>
             <div className="mt-7">
               <Button href="/contact" variant="secondary" className="border-cream/25 bg-cream text-ink">
-                Talk to Us
+                Book Admin Live Walkthrough
               </Button>
             </div>
           </div>
@@ -358,10 +362,10 @@ export default function HomePage() {
           </p>
           <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Button href="/demo" size="lg">
-              Get Instant Demo Access
+              Try the Student Demo
             </Button>
             <Button href="/contact" variant="secondary" size="lg">
-              Talk to Us
+              Book Admin Live Walkthrough
             </Button>
           </div>
         </div>
