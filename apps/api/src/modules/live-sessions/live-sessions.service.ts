@@ -120,9 +120,16 @@ export class LiveSessionsService {
     });
 
     // ── Step 4: Insert session into database ───────────────────
+    // RCCF-LIVE-GMEET-03: dual-write. provider_* columns are the canonical
+    // provider-neutral seam (any LiveProvider writes them via webinar.* +
+    // liveProvider.name); zoom_* columns stay as compatibility mirrors.
     const { data: session, error: sessionError } = await this.supabaseService.client
       .from(TABLES.LIVE_SESSIONS)
       .insert({
+        provider: this.liveProvider.name,
+        provider_session_id: webinar.webinarId,
+        provider_join_url: webinar.joinUrl,
+        provider_start_url: webinar.startUrl ?? null,
         zoom_webinar_id: webinar.webinarId,
         zoom_webinar_join_url: webinar.joinUrl,
         topic: dto.topic,
@@ -198,6 +205,7 @@ export class LiveSessionsService {
           session_id: sessionId,
           user_id: student.id,
           personal_join_url: joinUrl,
+          provider_registrant_id: null,
           zoom_registrant_id: null,
         });
         registrantCount++;
@@ -574,17 +582,21 @@ export class LiveSessionsService {
       return { joinUrl: registrant.personal_join_url, sessionId };
     }
 
-    // Fallback: generic webinar join URL (still entitled via batch intersection)
+    // Fallback: generic provider join URL (still entitled via batch intersection).
+    // Canonical read is provider_join_url; zoom_webinar_join_url stays as a
+    // compatibility fallback for rows predating the 042 backfill.
     const { data: fallbackSession } = await this.supabaseService.client
       .from(TABLES.LIVE_SESSIONS)
-      .select('zoom_webinar_join_url')
+      .select('provider_join_url, zoom_webinar_join_url')
       .eq('id', sessionId)
       .single();
 
-    if (fallbackSession?.zoom_webinar_join_url) {
+    const genericJoinUrl =
+      fallbackSession?.provider_join_url ?? fallbackSession?.zoom_webinar_join_url;
+    if (genericJoinUrl) {
       this.logger.warn(`getStudentJoinUrl fallback to generic join URL for ${userId} session ${sessionId} (no personal_join_url)`);
       await this.logJoinAttempt(sessionId, userId, token, ip, userAgent, 'granted');
-      return { joinUrl: fallbackSession.zoom_webinar_join_url, sessionId };
+      return { joinUrl: genericJoinUrl, sessionId };
     }
 
     await this.logJoinAttempt(sessionId, userId, null, ip, userAgent, 'rejected_not_enrolled');
@@ -877,14 +889,15 @@ export class LiveSessionsService {
 
     // Backfill: student is batch-enrolled but has no registrant (added after session creation)
     // Create a minimal registrant so getStudentJoinUrl can return a personal_join_url.
-    // If Zoom webinar still exists, try to register; otherwise store without URL and let join still proceed via fallback.
+    // If the provider session still exists, try to register; otherwise store without URL and let join still proceed via fallback.
     const { data: session } = await this.supabaseService.client
       .from(TABLES.LIVE_SESSIONS)
-      .select('zoom_webinar_id')
+      .select('provider_session_id, zoom_webinar_id')
       .eq('id', sessionId)
       .single();
+    const providerSessionId = session?.provider_session_id ?? session?.zoom_webinar_id;
     let personalJoinUrl: string | null = null;
-    if (session?.zoom_webinar_id) {
+    if (providerSessionId) {
       try {
         const { data: profile } = await this.supabaseService.client
           .from(TABLES.PROFILES)
@@ -892,13 +905,13 @@ export class LiveSessionsService {
           .eq('id', userId)
           .single();
         if (profile?.email) {
-          personalJoinUrl = await this.liveProvider.registerAttendee(session.zoom_webinar_id, {
+          personalJoinUrl = await this.liveProvider.registerAttendee(providerSessionId, {
             name: profile.name ?? 'Student',
             email: profile.email,
           });
         }
       } catch (e) {
-        this.logger.warn(`ensureRegistrant: Zoom register failed for ${userId} session ${sessionId}: ${(e as Error).message}`);
+        this.logger.warn(`ensureRegistrant: provider register failed for ${userId} session ${sessionId}: ${(e as Error).message}`);
       }
     }
     try {
@@ -906,6 +919,7 @@ export class LiveSessionsService {
         session_id: sessionId,
         user_id: userId,
         personal_join_url: personalJoinUrl,
+        provider_registrant_id: null,
         zoom_registrant_id: null,
       });
     } catch (e) {
@@ -1150,18 +1164,20 @@ export class LiveSessionsService {
       throw new BadRequestException(`Invalid status: ${status}`);
     }
 
-    // If cancelling, delete Zoom webinar best-effort but keep row for audit
+    // If cancelling, delete the provider session best-effort but keep row for audit.
+    // Canonical id is provider_session_id; zoom_webinar_id stays as fallback.
     if (status === 'cancelled') {
       const { data: existing } = await this.supabaseService.client
         .from(TABLES.LIVE_SESSIONS)
-        .select('zoom_webinar_id')
+        .select('provider_session_id, zoom_webinar_id')
         .eq('id', id)
         .single();
-      if (existing?.zoom_webinar_id) {
+      const providerSessionId = existing?.provider_session_id ?? existing?.zoom_webinar_id;
+      if (providerSessionId) {
         try {
-          await this.liveProvider.deleteWebinar(existing.zoom_webinar_id);
+          await this.liveProvider.deleteWebinar(providerSessionId);
         } catch (e) {
-          this.logger.warn(`Failed to delete Zoom webinar on cancel ${existing.zoom_webinar_id}: ${(e as Error).message}`);
+          this.logger.warn(`Failed to delete provider session on cancel ${providerSessionId}: ${(e as Error).message}`);
         }
       }
     }
@@ -1199,7 +1215,7 @@ export class LiveSessionsService {
   // ──────────────────────────────────────────────────────────────
 
   /**
-   * Delete a session: cancel the Zoom webinar (best-effort), then remove the
+   * Delete a session: cancel the provider session (best-effort), then remove the
    * session row (cascades to session_batches/session_registrants/attendance).
    *
    * Used by the legacy compatibility layer (DELETE /admin/sessions/:id).
@@ -1207,7 +1223,7 @@ export class LiveSessionsService {
   async deleteSession(id: string): Promise<{ deleted: boolean }> {
     const { data: session, error: fetchError } = await this.supabaseService.client
       .from(TABLES.LIVE_SESSIONS)
-      .select('zoom_webinar_id')
+      .select('provider_session_id, zoom_webinar_id')
       .eq('id', id)
       .single();
 
@@ -1215,13 +1231,14 @@ export class LiveSessionsService {
       throw new NotFoundException(`Session ${id} not found`);
     }
 
-    // Cancel the live webinar best-effort; proceed with DB cleanup regardless.
-    if (session.zoom_webinar_id) {
+    // Cancel the live provider session best-effort; proceed with DB cleanup regardless.
+    const providerSessionId = session.provider_session_id ?? session.zoom_webinar_id;
+    if (providerSessionId) {
       try {
-        await this.liveProvider.deleteWebinar(session.zoom_webinar_id);
+        await this.liveProvider.deleteWebinar(providerSessionId);
       } catch (err) {
         this.logger.warn(
-          `Failed to delete Zoom webinar ${session.zoom_webinar_id}: ${(err as Error).message}`,
+          `Failed to delete provider session ${providerSessionId}: ${(err as Error).message}`,
         );
       }
     }

@@ -53,6 +53,7 @@ describe('LiveSessionsService', () => {
   beforeEach(async () => {
     client = { from: jest.fn() };
     zoom = {
+      name: 'zoom',
       createWebinar: jest.fn().mockResolvedValue({ webinarId: 'w1', joinUrl: 'https://zoom/j/w1', startUrl: 'https://zoom/s/w1' }),
       registerAttendee: jest.fn().mockResolvedValue('https://zoom/j/w1/personal'),
       deleteWebinar: jest.fn().mockResolvedValue(undefined),
