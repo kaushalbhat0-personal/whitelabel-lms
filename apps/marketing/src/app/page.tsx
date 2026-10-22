@@ -342,12 +342,16 @@ export default function HomePage() {
         </Container>
       </div>
 
-      {/* ── Pricing (full section, MKT-01D) ────────────── */}
+      {/* ── Pricing (dual-card, RCCF-MKT-05) ────────────── */}
       <Section id="pricing" aria-label="Pricing">
         <p className="text-sm font-bold uppercase tracking-[0.18em] text-teal">Pricing</p>
         <h2 className="mt-3 max-w-2xl text-3xl font-display font-semibold tracking-tight text-ink sm:text-4xl">
-          A finished LMS, configured for your academy.
+          Choose how much control you need.
         </h2>
+        <p className="mt-4 max-w-2xl text-lg leading-relaxed text-ink-soft">
+          A finished LMS, configured for your academy — launched by us, or handed over with the source code
+          for your developers.
+        </p>
         <div className="mt-10">
           <Pricing />
         </div>
