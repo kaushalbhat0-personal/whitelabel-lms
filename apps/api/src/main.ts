@@ -21,6 +21,7 @@ import { resolveSessionPolicy } from './common/constants/session-policy.constant
 import { resolvePasswordPolicy } from './common/constants/password-policy.constant';
 import { resolveTempDemoAccessPolicy } from './common/constants/temp-demo-access.constant';
 import { resolveZoomEnabled } from './common/constants/zoom-enabled.constant';
+import { resolveLiveProvider } from './common/constants/live-provider.constant';
 
 async function bootstrap() {
   // Fail fast on invalid deployment policies before creating the application.
@@ -30,6 +31,11 @@ async function bootstrap() {
   // ZOOM_ENABLED: 'enabled' | 'disabled' (unset → 'enabled', backward compatible:
   //   every existing deployment attempts Zoom exactly as before; recorded-only
   //   clients set 'disabled' for an intentional 503 at the live boundary).
+  // LIVE_PROVIDER: 'zoom' | 'google-meet' | 'none' (unset → 'zoom', or 'none'
+  //   when ZOOM_ENABLED=disabled for existing recorded-only deployments).
+  //   An explicitly set LIVE_PROVIDER takes precedence over ZOOM_ENABLED.
+  //   'google-meet' is reserved for the future adapter phase and fails fast
+  //   until that phase lands — never silently falls back to Zoom.
   // Invalid values must never silently weaken clients or break the demo.
   // Constructors re-resolve the same values, so file-based misconfiguration
   // also fails during Nest DI init.
@@ -37,6 +43,9 @@ async function bootstrap() {
   resolvePasswordPolicy(process.env.PASSWORD_MANAGEMENT);
   resolveTempDemoAccessPolicy(process.env.TEMP_DEMO_ACCESS);
   resolveZoomEnabled(process.env.ZOOM_ENABLED);
+  resolveLiveProvider(process.env.LIVE_PROVIDER, {
+    zoomEnabled: process.env.ZOOM_ENABLED,
+  });
 
   // rawBody: true tells NestJS's body-parser to preserve the exact byte
   // sequence on req.rawBody.  The Mux webhook handler needs this to verify
