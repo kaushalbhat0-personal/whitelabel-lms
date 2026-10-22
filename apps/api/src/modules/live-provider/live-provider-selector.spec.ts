@@ -1,12 +1,14 @@
 /*
- * LiveProvider selection — zoom / none / google-meet (not installed).
+ * LiveProvider selection — zoom / google-meet / none.
  *
- * Covers RCCF-LIVE-GMEET-02:
+ * Covers RCCF-LIVE-GMEET-02 + GMEET-04:
  *   - LIVE_PROVIDER=zoom   → ZoomLiveProvider (existing behavior preserved).
  *   - LIVE_PROVIDER unset  → ZoomLiveProvider (backward compatible).
  *   - ZOOM_ENABLED=disabled (no LIVE_PROVIDER) → DisabledLiveProvider (recorded-only).
  *   - LIVE_PROVIDER=none   → DisabledLiveProvider with provider-neutral 503s.
- *   - LIVE_PROVIDER=google-meet → intentional not-installed failure (no silent Zoom fallback).
+ *   - LIVE_PROVIDER=google-meet + valid Google config → GoogleMeetLiveProvider.
+ *   - LIVE_PROVIDER=google-meet without Google config → startup failure
+ *     (never silent Zoom fallback; Zoom/recorded-only boots unaffected).
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigModule } from '@nestjs/config';
@@ -18,6 +20,17 @@ import {
 } from './live-provider.module';
 import { ZoomLiveProvider } from './zoom-live.provider';
 import { DisabledLiveProvider } from './disabled-live.provider';
+import { GoogleMeetLiveProvider } from './google-meet-live.provider';
+
+const GOOGLE_ENV = {
+  GOOGLE_MEET_SERVICE_ACCOUNT_JSON: JSON.stringify({
+    type: 'service_account',
+    client_email: 'test@proj.iam.gserviceaccount.com',
+    private_key: '-----BEGIN PRIVATE KEY-----\nFAKE\n-----END PRIVATE KEY-----\n',
+  }),
+  GOOGLE_MEET_ORGANIZER_EMAIL: 'teacher@example.com',
+  GOOGLE_MEET_CALENDAR_ID: 'primary',
+};
 
 function buildModule(env: Record<string, string | undefined>): Promise<TestingModule> {
   // Mirror production: ConfigModule is global (app.module.ts), so the
@@ -39,12 +52,16 @@ function buildModule(env: Record<string, string | undefined>): Promise<TestingMo
 afterEach(() => {
   delete process.env.LIVE_PROVIDER;
   delete process.env.ZOOM_ENABLED;
+  delete process.env.GOOGLE_MEET_SERVICE_ACCOUNT_JSON;
+  delete process.env.GOOGLE_MEET_ORGANIZER_EMAIL;
+  delete process.env.GOOGLE_MEET_CALENDAR_ID;
 });
 
 describe('LiveProvider selection (RCCF-LIVE-GMEET-02)', () => {
   describe('selectLiveProvider (pure helper)', () => {
     const deps = {
       zoom: { name: 'zoom' } as ZoomLiveProvider,
+      meet: { name: 'google-meet' } as GoogleMeetLiveProvider,
       disabled: { name: 'none' } as DisabledLiveProvider,
     };
 
@@ -56,8 +73,8 @@ describe('LiveProvider selection (RCCF-LIVE-GMEET-02)', () => {
       expect(selectLiveProvider('none', deps)).toBe(deps.disabled);
     });
 
-    it('google-meet → intentional not-installed failure (never silent Zoom)', () => {
-      expect(() => selectLiveProvider('google-meet', deps)).toThrow(/not installed/i);
+    it('google-meet → GoogleMeetLiveProvider (no silent Zoom fallback)', () => {
+      expect(selectLiveProvider('google-meet', deps)).toBe(deps.meet);
     });
   });
 
@@ -86,10 +103,16 @@ describe('LiveProvider selection (RCCF-LIVE-GMEET-02)', () => {
       await mod.close();
     });
 
-    it('LIVE_PROVIDER=google-meet → module fails fast (provider not installed)', async () => {
+    it('LIVE_PROVIDER=google-meet without Google config → module fails fast', async () => {
       await expect(buildModule({ LIVE_PROVIDER: 'google-meet' })).rejects.toThrow(
-        /not installed/i,
+        /GOOGLE_MEET_SERVICE_ACCOUNT_JSON/,
       );
+    });
+
+    it('LIVE_PROVIDER=google-meet with valid Google config → GoogleMeetLiveProvider', async () => {
+      const mod = await buildModule({ LIVE_PROVIDER: 'google-meet', ...GOOGLE_ENV });
+      expect(mod.get(LIVE_PROVIDER)).toBeInstanceOf(GoogleMeetLiveProvider);
+      await mod.close();
     });
 
     it('LIVE_PROVIDER=invalid → module fails fast (unknown provider)', async () => {
